@@ -558,8 +558,16 @@
           hlgOETFInverse(signal.b)
         );
         // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ≈ 1.2
+        // Below OOTF_THRESH, use a linear ramp to avoid extreme gain for
+        // near-black values (BT.2100 does not define special handling, but
+        // pow(ys, 0.2) amplifies noise in shadows; a linear extension from
+        // the origin to the threshold keeps the curve C0-continuous).
+        const float OOTF_THRESH = 0.01;
+        const float OOTF_SLOPE  = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
         float ys = dot(scene, LUMA);
-        float ootfGain = pow(max(ys, 1e-6), 0.2); // gamma - 1 = 0.2
+        float ootfGain = (ys < OOTF_THRESH)
+          ? ys * OOTF_SLOPE   // linear ramp: ys * T^(0.2-1)
+          : pow(ys, 0.2);     // normal power curve
         return scene * ootfGain;
       }
 
@@ -1088,6 +1096,10 @@
 
         // 3. Brightness (simple offset)
         color.rgb += u_brightness;
+
+        // 3a. Clamp after brightness: negative values are physically meaningless
+        // and would be amplified by contrast multiplication, producing artifacts.
+        color.rgb = max(color.rgb, vec3(0.0));
 
         // 4. Contrast (pivot at 0.5, per-channel)
         color.rgb = (color.rgb - 0.5) * u_contrastRGB + 0.5;

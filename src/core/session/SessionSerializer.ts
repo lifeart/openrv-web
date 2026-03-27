@@ -39,6 +39,7 @@ import { serializeRepresentation } from '../types/representation';
 import type { AddRepresentationConfig } from '../types/representation';
 import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../types/effects';
 import { DEFAULT_STEREO_STATE } from '../types/stereo';
+import type { StereoInputFormat } from '../types/stereo';
 import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
 import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMatteControl';
@@ -392,6 +393,10 @@ export class SessionSerializer {
         ...(needsReload && { requiresReload: true }),
         // Mark decoder-backed images so restore uses the FileSourceNode pipeline
         ...(source.fileSourceNode && { decoderBacked: true }),
+        // Preserve stereo input format from source metadata or file source node
+        ...((source.stereoInputFormat || source.fileSourceNode?.stereoInputFormat) ? {
+          stereoInputFormat: source.stereoInputFormat ?? source.fileSourceNode?.stereoInputFormat ?? undefined,
+        } : {}),
       };
 
       // Include OPFS cache key when the cache entry is stable (write complete)
@@ -629,6 +634,27 @@ export class SessionSerializer {
           }
         } catch (_err) {
           warnings.push(`Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`);
+        }
+      }
+    }
+
+    // Restore stereo input format metadata on loaded sources
+    const VALID_STEREO_INPUT_FORMATS: StereoInputFormat[] = ['side-by-side', 'over-under', 'separate'];
+    for (let refIndex = 0; refIndex < migrated.media.length; refIndex++) {
+      const ref = migrated.media[refIndex]!;
+      const sourceIndex = mediaIndexMap.get(refIndex);
+      if (sourceIndex === undefined) continue;
+      if (!ref.stereoInputFormat) continue;
+
+      // Validate the deserialized value before applying
+      if (VALID_STEREO_INPUT_FORMATS.includes(ref.stereoInputFormat as StereoInputFormat)) {
+        const source = session.getSourceByIndex(sourceIndex);
+        if (source) {
+          source.stereoInputFormat = ref.stereoInputFormat as StereoInputFormat;
+          // Also propagate to the file source node if present
+          if (source.fileSourceNode) {
+            source.fileSourceNode.stereoInputFormat = ref.stereoInputFormat as StereoInputFormat;
+          }
         }
       }
     }

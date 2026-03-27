@@ -4860,3 +4860,173 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/audio/AudioCoordinator.test.ts`
 - `src/core/session/SessionPlayback.ts`
 - `src/core/session/Session.ts`
+
+## Issue #360: MED-18 — WebSocketClient malformed message flood not rate-limited
+
+**Root cause**: `WebSocketClient.emitMalformedMessageWarning()` had a basic rate limit that silently stopped emitting warnings after 5 per window, with no indication to the caller that messages were being suppressed. A flood of malformed messages could exhaust the warning budget silently.
+
+**Fix**: Enhanced the rate limiter with proper notification:
+- When threshold (5 per 10s window) is exceeded, a single `MALFORMED_RATE_LIMITED` warning event is emitted once per window
+- When a new window starts after suppression, a summary warning reports the exact suppressed count from the previous window
+- All counters (`_malformedSuppressedCount`, `_rateLimitNotified`) properly reset on connection open, cleanup, and window reset
+- Valid messages are never affected by the rate limiter
+
+**Tests added**: 8 tests (WSC-031 through WSC-037 plus WSC-034a, WSC-034b, WSC-035a-d) — malformed message detection, diagnostic info, preview truncation, rate limiting at threshold, boundary behavior at exactly threshold, rate-limit notification uniqueness, window reset with suppressed count summary, multi-window accumulation verification, no false summaries, valid messages unaffected during flood, reconnect counter reset.
+
+**Files changed**:
+- `src/network/WebSocketClient.ts`
+- `src/network/WebSocketClient.test.ts`
+
+## Issue #361: MED-49 — Brightness unclamped in SDR path before contrast
+
+**Root cause**: In the color grading pipeline, brightness is applied as an additive offset. When brightness pushes values negative (e.g., brightness=-0.8 on a dark pixel at 0.1), the subsequent contrast multiplication around pivot 0.5 amplifies these negative values, producing visual artifacts.
+
+**Fix**: Added `max(color, 0.0)` clamp after brightness and before contrast in all three backends:
+- GLSL: `viewer.frag.glsl` line 1094 — `color.rgb = max(color.rgb, vec3(0.0))`
+- WGSL: `primary_grade.wgsl` line 138 — `color = vec4f(max(color.rgb, vec3f(0.0)), color.a)`
+- CPU/LUT: `CacheLUTNode.ts` lines 146-148 — `Math.max(r/g/b, 0)`
+The lower-only clamp is safe for both SDR and HDR (negative light is physically meaningless; values > 1.0 are preserved for HDR headroom).
+
+**Tests added**: 5 CPU regression tests (ACT-013 through ACT-017) + 1 GPU integration test in `primary-grade.gpu-test.ts` — negative brightness with contrast, maximum darkness, positive brightness unaffected, contrast amplification prevention, brightness=0 identity, and GPU shader clamp verification.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/primary_grade.wgsl`
+- `src/nodes/CacheLUTNode.ts`
+- `src/nodes/CacheLUTNode.test.ts`
+- `src/render/__gpu__/primary-grade.gpu-test.ts`
+
+## Issue #362: MED-50 — HLG OOTF gain extremely high for near-black
+
+**Root cause**: The HLG OOTF (BT.2100) used `pow(max(ys, 1e-6), 0.2)` for computing scene luminance gain. For near-black pixels (`ys` → 0), the power function produces disproportionately high gain (e.g., `ys=0.001` → gain 0.251, a 251× amplification of shadow noise). The `max(ys, 1e-6)` guard also created a plateau where sub-epsilon pixels all got identical non-zero gain, brightening pure black.
+
+**Fix**: Replaced the bare power function with a **linear ramp below threshold** (`OOTF_THRESH = 0.01`):
+- Below threshold: `ootfGain = ys * OOTF_SLOPE` (where `OOTF_SLOPE = 39.810717 = THRESH^(-0.8)`)
+- Above threshold: `ootfGain = pow(ys, 0.2)` (standard BT.2100)
+- C0-continuous at boundary: both expressions evaluate to `THRESH^0.2` at `ys = THRESH`
+- Black (`ys=0`) produces exactly zero gain (not epsilon)
+- Applied consistently across all 4 backends: GLSL, WGSL, TS reference, GPU test reference
+
+**Tests added**: 6 CPU regression tests (XE-082 through XE-087) + 2 GPU integration tests — near-black gain bounds, extreme near-black, gain bounded for small luminance, C0-continuity at threshold, normal values unaffected, monotonicity, GPU near-black shader verification.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/__tests__/shaderMathReference.ts`
+- `src/render/__tests__/shaderMathCrossEcosystem.test.ts`
+- `src/render/__gpu__/linearize.gpu-test.ts`
+
+## Issue #363: MED-23 — DisplayProfileControl slider range not validated on load
+
+**Root cause**: `DisplayProfileControl` did not validate slider values when loading from localStorage or when receiving external state via `setState()`. Out-of-range, NaN, or non-finite values could be stored and used, causing undefined behavior in the display gamma/brightness pipeline.
+
+**Fix**: Added a `SLIDER_RANGES` constant defining min/max/default for each slider property (`displayGamma: [0.1, 4.0]`, `displayBrightness: [0.0, 2.0]`, `customGamma: [0.1, 10.0]`) and a `clampSliderValue()` helper that:
+- Returns the default for NaN, undefined, or non-finite inputs (with console.warn)
+- Clamps out-of-range values to [min, max] (with console.warn)
+- Passes through valid in-range values silently
+Applied in both the constructor (localStorage load path) and `setState()` (external state path).
+
+**Tests added**: 20 tests (DPC-120 through DPC-139) — valid pass-through, above-max/below-min clamping for all 3 sliders, NaN/Infinity/-Infinity fallback to defaults, UI slider sync after clamp, constructor localStorage validation, event emission with clamped values, boundary min/max acceptance, duplicate setState deduplication, non-number fallback.
+
+**Files changed**:
+- `src/ui/components/DisplayProfileControl.ts`
+- `src/ui/components/DisplayProfileControl.test.ts`
+
+## Issue #364: LOW-09 — Stereo input format not serializable
+
+**Root cause**: `FileSourceNode.stereoInputFormat` property was not included in session serialization. When a user set a stereo input format (side-by-side, over-under, separate) and saved/loaded a session, the stereo format was lost.
+
+**Fix**:
+- Added `stereoInputFormat?: StereoInputFormat` to the `MediaReference` interface in `SessionState.ts`
+- Added serialization in `SessionSerializer.serializeMedia()` — reads from source or fileSourceNode
+- Added deserialization in `SessionSerializer.fromJSON()` — validates against valid format values before applying to both source and fileSourceNode
+- Added a validated setter on `FileSourceNode` that rejects invalid format values
+- Updated `FileSourceNode.toJSON()` to include stereoInputFormat when set
+- Backwards compatible: old sessions without the field load normally
+
+**Tests added**: 11 serializer tests (LOW09-001 through LOW09-011) + 7 node tests (FSN-221 through FSN-227) — serialization from source/fileSourceNode, omission when absent, deserialization with validation, invalid value rejection, backwards compatibility, null source safety, round-trip for all 3 valid formats.
+
+**Files changed**:
+- `src/core/session/SessionState.ts`
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.stereoFormat.test.ts` (new)
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #365: LOW-10 — BaseSourceNode.connectInput warns instead of throwing
+
+**Root cause**: `BaseSourceNode.connectInput()` logged a `console.warn` when called, but source nodes by definition cannot accept inputs. A warning allowed callers to silently build incorrect graph topologies without detecting the programming error.
+
+**Fix**: Changed `console.warn('Source nodes cannot have inputs')` to `throw new Error(...)` with a descriptive message including the node name and type (e.g., `Source node "my-source" (type: FileSource) cannot accept inputs`). No production code calls `connectInput` on source nodes, so this is a safe invariant enforcement.
+
+**Tests added**: 10 tests in `BaseSourceNode.test.ts` — throws Error, message contains "cannot accept inputs"/node name/type, no side effects after throw, getMetadata defaults and defensive copy, constructor correctness.
+
+**Files changed**:
+- `src/nodes/sources/BaseSourceNode.ts`
+- `src/nodes/sources/BaseSourceNode.test.ts` (new)
+
+## Issue #366: LOW-11 — StackGroupNode chosenAudioInput not range-validated
+
+**Root cause**: `StackGroupNode.chosenAudioInput` property accepted any value without validation. Out-of-range values (negative, NaN, beyond inputs count) were stored and could cause undefined behavior when used to select audio sources.
+
+**Fix**: Two-layer validation approach:
+- **Write-time transform**: Sanitizes input (NaN/Infinity → 0, negative → 0, fractional → truncated integer) but stores the raw sanitized value without clamping to `inputs.length`
+- **Read-time getter** `getChosenAudioInput()`: Returns `Math.min(stored, Math.max(0, inputs.length - 1))`, ensuring consumers always get a valid index even after inputs are disconnected
+
+This design solves both the validation problem AND two subtle issues found in review:
+1. Stale values after input disconnection (read-time clamping handles it automatically)
+2. Serialization order dependency (stored value preserved even when deserialized before inputs reconnected)
+
+**Tests added**: 10 tests — valid values, above-max clamping (stored vs effective), negative, NaN, Infinity, fractional truncation, getter auto-clamps after disconnect, multi-disconnect, serialization round-trip with late input reconnection.
+
+**Files changed**:
+- `src/nodes/groups/StackGroupNode.ts`
+- `src/nodes/groups/StackGroupNode.test.ts`
+
+## Issue #367: LOW-14 — Stereo eye offset not bounds-validated
+
+**Root cause**: `StereoRenderer` passed raw `state.offset` to `applyHorizontalOffset()` without validation. NaN, Infinity, or extreme values would cause incorrect pixel shifts or unexpected rendering behavior.
+
+**Fix**: Added exported `validateStereoOffset()` function that:
+- Returns 0 for NaN or non-number values (with warning)
+- Clamps to [-50, 50] range (matching the documented percentage-of-width range)
+- Clamps Infinity/-Infinity to 50/-50 (with warning)
+- Passes valid values unchanged
+Applied at both entry points: `applyStereoMode()` and `applyStereoModeWithEyeTransforms()`.
+
+**Tests added**: 16 tests — valid values, boundary values, above/below range clamping, NaN, Infinity/-Infinity, -0 behavior, non-number input, default state validity, and 3 integration tests exercising full rendering path with invalid offsets.
+
+**Files changed**:
+- `src/stereo/StereoRenderer.ts`
+- `src/stereo/StereoRenderer.test.ts`
+
+## Issue #368: LOW-15 — Stereo side-by-side odd width asymmetry
+
+**Root cause**: In `extractStereoEyes()`, both left and right eye images were allocated with `Math.floor(width/2)` for side-by-side mode (and `Math.floor(height/2)` for over-under). For odd dimensions, this dropped the middle pixel/row — e.g., a 1921px wide image extracted two 960px eyes, losing 1 column of source data.
+
+**Fix**:
+- Side-by-side: left eye gets `Math.floor(width/2)`, right eye gets `width - Math.floor(width/2)` (extra pixel to right)
+- Over-under: top eye gets `Math.floor(height/2)`, bottom eye gets `height - Math.floor(height/2)` (extra row to bottom)
+- Invariant: `leftWidth + rightWidth === width` and `topHeight + bottomHeight === height` always hold
+- Same fix applied consistently in extraction, rendering (renderSideBySide, renderOverUnder, renderMirror)
+
+**Tests added**: 15 tests — even/odd width extraction, even/odd height extraction, edge cases (width=2,3,1921; height=2,3), pixel-level data verification, dimension sum assertions, integration rendering tests with odd dimensions verifying no uninitialized pixels.
+
+**Files changed**:
+- `src/stereo/StereoRenderer.ts`
+- `src/stereo/StereoRenderer.test.ts`
+
+## Issue #369: LOW-22 — ImageBitmap close error handling incomplete
+
+**Root cause**: In `renderWorker.worker.ts`, `ImageBitmap.close()` calls were partially unprotected. On the success path, `msg.bitmap.close()` was called without a try-catch. If the bitmap had already been transferred or closed (e.g., due to a race condition), this would throw an unhandled DOMException in the worker.
+
+**Fix**: Added `safeCloseBitmap()` helper that:
+- Pre-checks `width === 0 && height === 0` to detect already-closed/transferred bitmaps (skips close, logs debug)
+- Wraps `bitmap.close()` in try-catch, logging failures at debug level (not warn/error — double-close is expected in some race conditions)
+- Replaces all raw `bitmap.close()` calls in the renderSDR handler (both success and error paths)
+
+**Tests added**: 7 tests (RW-SCB-001 through RW-SCB-007) — normal close, already-closed bitmap, close throws (transferred), multiple sequential closes, zero-dimension skip, partial-zero-dimension boundary, and integration test for error-path bitmap cleanup.
+
+**Files changed**:
+- `src/workers/renderWorker.worker.ts`
+- `src/workers/renderWorker.worker.test.ts`

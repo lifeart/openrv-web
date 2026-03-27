@@ -255,6 +255,25 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
     });
   });
 
+  // --- Brightness + Contrast combined ---
+
+  describe('Brightness + Contrast combined', () => {
+    it('MED-49: negative brightness + high contrast clamps before contrast', () => {
+      setup();
+      // Input: 0.3, brightness = -0.8, contrast = 2
+      // After brightness: 0.3 - 0.8 = -0.5, clamped to 0
+      // After contrast: (0 - 0.5) * 2 + 0.5 = -0.5
+      // Shader should clamp negative brightness result before contrast stage
+      const pixels = renderWith(0.3, 0.3, 0.3, (gl, prog) => {
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_brightness'), -0.8);
+        gl.uniform3f(gl.getUniformLocation(prog, 'u_contrastRGB'), 2, 2, 2);
+      });
+      // After brightness clamp: 0, contrast: (0-0.5)*2+0.5 = -0.5
+      // Final output after gamma clamp: 0
+      expectPixel(pixels, W, 0, 0, { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, EPSILON.HDR_HALF);
+    });
+  });
+
   // --- Temperature/Tint ---
 
   describe('Temperature and Tint', () => {

@@ -94,6 +94,25 @@ function validateHDRImageData(msg: RenderHDRMessage): string | null {
 }
 
 /**
+ * Safely close an ImageBitmap, handling cases where it may already be
+ * closed or transferred.  Logs at debug level rather than throwing,
+ * because double-close / post-transfer close is expected in some flows.
+ */
+function safeCloseBitmap(bitmap: ImageBitmap): void {
+  try {
+    // A closed or transferred ImageBitmap has width and height of 0.
+    // Attempting close() on it may throw in some browsers.
+    if (bitmap.width === 0 && bitmap.height === 0) {
+      log.debug('Skipping close on already-closed/transferred ImageBitmap');
+      return;
+    }
+    bitmap.close();
+  } catch (e) {
+    log.debug('ImageBitmap.close() failed (bitmap may have been closed or transferred):', e);
+  }
+}
+
+/**
  * Validate the bitmap in a renderSDR message.
  * Returns an error string if invalid, or null if valid.
  */
@@ -284,15 +303,11 @@ function handleMessage(msg: RenderWorkerMessage): void {
         // Use the ImageBitmap directly as texture source
         renderer.renderSDRFrame(msg.bitmap as unknown as HTMLCanvasElement);
         // Close the bitmap after use to prevent memory leaks
-        msg.bitmap.close();
+        safeCloseBitmap(msg.bitmap);
         post({ type: 'renderDone', id: msg.id });
       } catch (error) {
         // Attempt to close bitmap even on error
-        try {
-          msg.bitmap.close();
-        } catch (e) {
-          log.warn('Failed to close bitmap after render error:', e);
-        }
+        safeCloseBitmap(msg.bitmap);
         post({
           type: 'renderError',
           id: msg.id,
@@ -461,4 +476,5 @@ export const __test__ = {
   isArrayBufferDetached,
   validateHDRImageData,
   validateSDRBitmap,
+  safeCloseBitmap,
 };

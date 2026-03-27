@@ -2132,6 +2132,21 @@ export class FileSourceNode extends BaseSourceNode {
     return this._stereoInputFormat;
   }
 
+  /**
+   * Set the stereo input format explicitly (e.g. when restoring from serialized state).
+   * Only accepts valid StereoInputFormat values; invalid values are ignored.
+   */
+  set stereoInputFormat(value: StereoInputFormat | null) {
+    if (value === null) {
+      this._stereoInputFormat = null;
+      return;
+    }
+    const validFormats: StereoInputFormat[] = ['side-by-side', 'over-under', 'separate'];
+    if (validFormats.includes(value)) {
+      this._stereoInputFormat = value;
+    }
+  }
+
   getElement(_frame: number): HTMLImageElement | null {
     return this.image;
   }
@@ -2293,6 +2308,8 @@ export class FileSourceNode extends BaseSourceNode {
       metadata: this.metadata,
       properties: this.properties.toJSON(),
       isHDR: this._isHDRFormat || this.isEXR,
+      // Include stereo input format when detected (e.g. multi-view EXR)
+      ...(this._stereoInputFormat && { stereoInputFormat: this._stereoInputFormat }),
     };
   }
 }

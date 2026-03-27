@@ -94,13 +94,39 @@ export class StackGroupNode extends BaseGroupNode {
     // Per-layer stencil boxes (array of StencilBox indexed by input)
     this.properties.add({ name: 'layerStencilBoxes', defaultValue: [] });
 
-    // Output configuration
-    this.properties.add({ name: 'chosenAudioInput', defaultValue: 0 });
+    // Output configuration — chosenAudioInput selects which input provides audio.
+    // The transform sanitizes the value (NaN / non-finite → 0, negative → 0,
+    // fractional → truncated) but does NOT clamp to inputs.length so that
+    // serialization round-trips preserve the value even before inputs reconnect.
+    // Use getChosenAudioInput() to read the effective (clamped) value.
+    this.properties.add({
+      name: 'chosenAudioInput',
+      defaultValue: 0,
+      min: 0,
+      transform: (v: number) => {
+        if (!Number.isFinite(v)) return 0;
+        const intVal = Math.trunc(v);
+        if (intVal < 0) return 0;
+        return intVal;
+      },
+    });
     this.properties.add({ name: 'outOfRangePolicy', defaultValue: 'hold' });
 
     // Mode flags
     this.properties.add({ name: 'alignStartFrames', defaultValue: false });
     this.properties.add({ name: 'strictFrameRanges', defaultValue: false });
+  }
+
+  /**
+   * Get the effective chosenAudioInput value, clamped to the current valid
+   * input range.  This ensures consumers always get a valid index even if
+   * inputs were disconnected after the value was set, or if the value was
+   * deserialized before inputs were reconnected.
+   */
+  getChosenAudioInput(): number {
+    const raw = this.properties.getValue('chosenAudioInput') as number;
+    const maxIndex = Math.max(0, this.inputs.length - 1);
+    return Math.min(raw, maxIndex);
   }
 
   /**

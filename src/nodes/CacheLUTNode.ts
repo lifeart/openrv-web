@@ -141,6 +141,12 @@ export function applyColorTransform(
   g = applyBrightness(g, params.brightness);
   b = applyBrightness(b, params.brightness);
 
+  // 3a. Clamp after brightness: negative values are physically meaningless
+  // and would be amplified by contrast multiplication, producing artifacts.
+  r = Math.max(r, 0);
+  g = Math.max(g, 0);
+  b = Math.max(b, 0);
+
   // 4. Contrast
   r = applyContrast(r, params.contrast);
   g = applyContrast(g, params.contrast);

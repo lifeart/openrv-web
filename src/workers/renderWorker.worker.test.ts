@@ -23,6 +23,7 @@ const {
   isArrayBufferDetached,
   validateHDRImageData,
   validateSDRBitmap,
+  safeCloseBitmap,
 } = __test__;
 
 describe('renderWorker', () => {
@@ -891,6 +892,117 @@ describe('renderWorker', () => {
         expect(sentMsg.id).toBe(57);
         expect(sentMsg.error).toContain('unsupported channel count');
       });
+    });
+  });
+
+  // ==========================================================================
+  // safeCloseBitmap (LOW-22)
+  // ==========================================================================
+
+  describe('safeCloseBitmap', () => {
+    function makeMockBitmap(opts?: { width?: number; height?: number; closeThrows?: boolean }): ImageBitmap {
+      const w = opts?.width ?? 100;
+      const h = opts?.height ?? 100;
+      let closed = false;
+      return {
+        get width() {
+          return closed ? 0 : w;
+        },
+        get height() {
+          return closed ? 0 : h;
+        },
+        close() {
+          if (opts?.closeThrows) {
+            throw new DOMException('ImageBitmap is detached', 'InvalidStateError');
+          }
+          closed = true;
+        },
+      } as unknown as ImageBitmap;
+    }
+
+    it('RW-SCB-001: closes a normal bitmap without error', () => {
+      const bitmap = makeMockBitmap();
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+      // After close, width/height should be 0
+      expect(bitmap.width).toBe(0);
+      expect(bitmap.height).toBe(0);
+    });
+
+    it('RW-SCB-002: does not throw on already-closed bitmap (width/height 0)', () => {
+      const bitmap = makeMockBitmap();
+      // Close it first
+      bitmap.close();
+      expect(bitmap.width).toBe(0);
+      expect(bitmap.height).toBe(0);
+      // Second close via safeCloseBitmap should not throw
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+    });
+
+    it('RW-SCB-003: does not throw when close() itself throws (transferred bitmap)', () => {
+      const bitmap = makeMockBitmap({ closeThrows: true });
+      // close() will throw, but safeCloseBitmap catches it
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+    });
+
+    it('RW-SCB-004: multiple sequential close calls do not throw', () => {
+      const bitmap = makeMockBitmap();
+      expect(() => {
+        safeCloseBitmap(bitmap);
+        safeCloseBitmap(bitmap);
+        safeCloseBitmap(bitmap);
+      }).not.toThrow();
+    });
+
+    it('RW-SCB-005: skips close on zero-dimension bitmap and logs debug', () => {
+      // Bitmap that already has 0x0 dimensions (simulates transferred/closed state)
+      const bitmap = makeMockBitmap({ width: 0, height: 0 });
+      const closeSpy = vi.spyOn(bitmap, 'close');
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+      // Should not call close() since dimensions are 0
+      expect(closeSpy).not.toHaveBeenCalled();
+    });
+
+    it('RW-SCB-006: partial zero dimension (width=0, height=100) still calls close()', () => {
+      // Only one dimension is zero — does NOT match the `width === 0 && height === 0` guard,
+      // so close() should still be called.
+      const bitmap = makeMockBitmap({ width: 0, height: 100 });
+      const closeSpy = vi.spyOn(bitmap, 'close');
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+      expect(closeSpy).toHaveBeenCalledOnce();
+    });
+
+    it('RW-SCB-007: error path integration — renderSDR exception triggers safeCloseBitmap and renderError', () => {
+      const postMessageSpy = vi.spyOn(self, 'postMessage').mockImplementation(() => {});
+      const renderError = new Error('GL context lost');
+      __test__.setRenderer({
+        renderSDRFrame: vi.fn().mockImplementation(() => {
+          throw renderError;
+        }),
+      } as any);
+
+      const bitmap = makeMockBitmap();
+      const closeSpy = vi.spyOn(bitmap, 'close');
+
+      handleMessage({
+        type: 'renderSDR',
+        id: 700,
+        bitmap: bitmap as unknown as ImageBitmap,
+        width: 100,
+        height: 100,
+      });
+
+      // Bitmap should have been closed in the catch path (not leaked)
+      expect(closeSpy).toHaveBeenCalled();
+      expect(bitmap.width).toBe(0);
+
+      // A renderError message should have been sent back
+      expect(postMessageSpy).toHaveBeenCalled();
+      const sentMsg = postMessageSpy.mock.calls[0]![0] as any;
+      expect(sentMsg.type).toBe('renderError');
+      expect(sentMsg.id).toBe(700);
+      expect(sentMsg.error).toBe('GL context lost');
+
+      postMessageSpy.mockRestore();
     });
   });
 });

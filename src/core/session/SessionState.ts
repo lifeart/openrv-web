@@ -69,6 +69,8 @@ export interface MediaReference {
   activeRepresentationId?: string;
   /** True if the image was loaded through the decoder-backed pipeline (FileSourceNode) */
   decoderBacked?: boolean;
+  /** Stereo input format detected for this source (e.g. 'side-by-side', 'over-under', 'separate') */
+  stereoInputFormat?: import('../../core/types/stereo').StereoInputFormat;
 }
 
 /** Playback state */

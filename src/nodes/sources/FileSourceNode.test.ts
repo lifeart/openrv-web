@@ -2162,4 +2162,57 @@ describe('FileSourceNode', () => {
       expect(urlValues.length).toBe(1);
     });
   });
+
+  describe('stereoInputFormat serialization (LOW-09)', () => {
+    it('FSN-221: stereoInputFormat getter returns null by default', () => {
+      expect(node.stereoInputFormat).toBeNull();
+    });
+
+    it('FSN-222: stereoInputFormat setter accepts valid values', () => {
+      node.stereoInputFormat = 'separate';
+      expect(node.stereoInputFormat).toBe('separate');
+
+      node.stereoInputFormat = 'side-by-side';
+      expect(node.stereoInputFormat).toBe('side-by-side');
+
+      node.stereoInputFormat = 'over-under';
+      expect(node.stereoInputFormat).toBe('over-under');
+    });
+
+    it('FSN-223: stereoInputFormat setter accepts null', () => {
+      node.stereoInputFormat = 'separate';
+      expect(node.stereoInputFormat).toBe('separate');
+
+      node.stereoInputFormat = null;
+      expect(node.stereoInputFormat).toBeNull();
+    });
+
+    it('FSN-224: stereoInputFormat setter ignores invalid values', () => {
+      node.stereoInputFormat = 'separate';
+      node.stereoInputFormat = 'bogus' as any;
+      // Should remain 'separate' since 'bogus' is invalid
+      expect(node.stereoInputFormat).toBe('separate');
+    });
+
+    it('FSN-225: toJSON includes stereoInputFormat when set', () => {
+      node.stereoInputFormat = 'separate';
+      const json = node.toJSON() as Record<string, unknown>;
+      expect(json.stereoInputFormat).toBe('separate');
+    });
+
+    it('FSN-226: toJSON omits stereoInputFormat when null', () => {
+      expect(node.stereoInputFormat).toBeNull();
+      const json = node.toJSON() as Record<string, unknown>;
+      expect(json.stereoInputFormat).toBeUndefined();
+    });
+
+    it('FSN-227: toJSON stereoInputFormat round-trips for all valid formats', () => {
+      const formats = ['side-by-side', 'over-under', 'separate'] as const;
+      for (const format of formats) {
+        node.stereoInputFormat = format;
+        const json = node.toJSON() as Record<string, unknown>;
+        expect(json.stereoInputFormat).toBe(format);
+      }
+    });
+  });
 });

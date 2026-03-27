@@ -81,8 +81,8 @@ These issues were found and fixed during the audit:
 These findings were not yet verified against actual source code:
 
 #### Render/Shader
-- **MED-49**: Brightness unclamped in SDR path before contrast — `viewer.frag.glsl` ~line 1087
-- **MED-50**: HLG OOTF gain extremely high for near-black — `viewer.frag.glsl` ~line 560
+- ~~**MED-49**~~: Brightness unclamped in SDR path before contrast — **FIXED** (see FIXED_ISSUES.md #361)
+- ~~**MED-50**~~: HLG OOTF gain extremely high for near-black — **FIXED** (see FIXED_ISSUES.md #362)
 - **MED-51**: Color primaries metadata lost through LUT stages — `src/color/pipeline/LUTPipeline.ts`
 - **MED-52**: Tone mapping headroom inconsistent across operators — `viewer.frag.glsl` ~lines 253-296
 - **MED-54**: Gamut mapping matrix working space undocumented — `viewer.frag.glsl` ~lines 1069, 1367
@@ -90,17 +90,17 @@ These findings were not yet verified against actual source code:
 
 #### Node System
 - ~~**MED-10**~~: FileSourceNode properties inconsistent with defineNodeProperty — **FIXED** (see FIXED_ISSUES.md #355)
-- **LOW-09**: Stereo input format not serializable — `FileSourceNode.ts` ~lines 574, 2104
-- **LOW-10**: BaseSourceNode.connectInput warns instead of throwing — `BaseSourceNode.ts` ~lines 38-40
-- **LOW-11**: StackGroupNode chosenAudioInput not range-validated — `StackGroupNode.ts` ~lines 93-94
+- ~~**LOW-09**~~: Stereo input format not serializable — **FIXED** (see FIXED_ISSUES.md #364)
+- ~~**LOW-10**~~: BaseSourceNode.connectInput warns instead of throwing — **FIXED** (see FIXED_ISSUES.md #365)
+- ~~**LOW-11**~~: StackGroupNode chosenAudioInput not range-validated — **FIXED** (see FIXED_ISSUES.md #366)
 - ~~**LOW-12**~~: Canvas dirty flag not reset after load failures — **FIXED** (see FIXED_ISSUES.md #356)
 
 #### UI Controls
-- **MED-23**: DisplayProfileControl slider range not validated on load — `DisplayProfileControl.ts`
+- ~~**MED-23**~~: DisplayProfileControl slider range not validated on load — **FIXED** (see FIXED_ISSUES.md #363)
 - **MED-25**: Multiple global document click listeners without delegation — Multiple UI components
 
 #### Workers
-- **LOW-22**: ImageBitmap close error handling incomplete — `renderWorker.worker.ts` ~lines 211-226
+- ~~**LOW-22**~~: ImageBitmap close error handling incomplete — **FIXED** (see FIXED_ISSUES.md #369)
 - **LOW-23**: Effect processor error stack unavailable in production — `effectProcessor.worker.ts` ~lines 1088-1099
 - **LOW-24**: Midtone mask integer rounding precision — `effectProcessor.worker.ts` ~lines 124-134
 
@@ -113,10 +113,10 @@ These findings were not yet verified against actual source code:
 - ~~**LOW-19**~~: TIFF bits-per-sample not validated for float format — **FIXED** (see FIXED_ISSUES.md #354)
 
 #### Misc
-- **MED-18**: WebSocketClient malformed message flood not rate-limited — `WebSocketClient.ts` ~lines 32-38
+- ~~**MED-18**~~: WebSocketClient malformed message flood not rate-limited — **FIXED** (see FIXED_ISSUES.md #360)
 - **LOW-07**: Clarity/sharpen sample raw texture (known trade-off) — `viewer.frag.glsl`
-- **LOW-14**: Stereo eye offset not bounds-validated — `StereoRenderer.ts` ~lines 278-300
-- **LOW-15**: Stereo side-by-side odd width asymmetry — `StereoRenderer.ts` ~lines 310-311
+- ~~**LOW-14**~~: Stereo eye offset not bounds-validated — **FIXED** (see FIXED_ISSUES.md #367)
+- ~~**LOW-15**~~: Stereo side-by-side odd width asymmetry — **FIXED** (see FIXED_ISSUES.md #368)
 - ~~**LOW-20**~~: Frame accumulator overflow on speed changes — **FIXED** (see FIXED_ISSUES.md #357)
 - ~~**LOW-21**~~: Dropped frame counter never reset — **FIXED** (see FIXED_ISSUES.md #358)
 
