@@ -382,10 +382,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
     let depth = 0;
     while (c >= 256) {
       if (++depth > MAX_CHAIN_DEPTH) {
-        throw new DecoderError(
-          'TIFF',
-          `LZW chain corruption detected: prefix chain cycle at code ${code}`,
-        );
+        throw new DecoderError('TIFF', `LZW chain corruption detected: prefix chain cycle at code ${code}`);
       }
       output[idx--] = tableSuffix[c]!;
       c = tablePrefix[c]!;
@@ -398,10 +395,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
     let depth = 0;
     while (c >= 256) {
       if (++depth > MAX_CHAIN_DEPTH) {
-        throw new DecoderError(
-          'TIFF',
-          `LZW chain corruption detected: prefix chain cycle at code ${code}`,
-        );
+        throw new DecoderError('TIFF', `LZW chain corruption detected: prefix chain cycle at code ${code}`);
       }
       c = tablePrefix[c]!;
     }
@@ -467,10 +461,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       outputString(code);
     } else {
       // code > nextCode: invalid, indicates corrupted LZW data
-      throw new DecoderError(
-        'TIFF',
-        `LZW corruption: received code ${code} but next expected code is ${nextCode}`,
-      );
+      throw new DecoderError('TIFF', `LZW corruption: received code ${code} but next expected code is ${nextCode}`);
     }
 
     // Increase code size when needed

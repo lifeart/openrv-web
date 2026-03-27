@@ -80,8 +80,7 @@ export function hlgToLinear(r: number, g: number, b: number): [number, number, n
   // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ≈ 1.2
   // Linear ramp below threshold to bound near-black gain.
   const ys = sr * LUMA_R + sg * LUMA_G + sb * LUMA_B;
-  const ootfGain =
-    ys < OOTF_THRESH ? ys * OOTF_SLOPE : Math.pow(ys, 0.2);
+  const ootfGain = ys < OOTF_THRESH ? ys * OOTF_SLOPE : Math.pow(ys, 0.2);
   return [sr * ootfGain, sg * ootfGain, sb * ootfGain];
 }
 

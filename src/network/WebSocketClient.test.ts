@@ -330,12 +330,10 @@ describe('WebSocketClient', () => {
       mockWSInstances[0]!.simulateMessage('bad-next-window');
 
       // Find the suppressed summary
-      const summaryCalls = warningHandler.mock.calls.filter(
-        (c: unknown[]) => {
-          const w = c[0] as { code: string; message: string };
-          return w.code === 'MALFORMED_RATE_LIMITED' && w.message.includes('suppressed in the previous window');
-        },
-      );
+      const summaryCalls = warningHandler.mock.calls.filter((c: unknown[]) => {
+        const w = c[0] as { code: string; message: string };
+        return w.code === 'MALFORMED_RATE_LIMITED' && w.message.includes('suppressed in the previous window');
+      });
       expect(summaryCalls.length).toBe(1);
       expect(summaryCalls[0]![0].message).toMatch(/\b3\b/); // exactly 3 suppressed
     });
@@ -358,12 +356,10 @@ describe('WebSocketClient', () => {
       mockWSInstances[0]!.simulateMessage('bad-next-window');
 
       // Should NOT have a suppressed summary
-      const summaryCalls = warningHandler.mock.calls.filter(
-        (c: unknown[]) => {
-          const w = c[0] as { code: string; message: string };
-          return w.code === 'MALFORMED_RATE_LIMITED' && w.message.includes('suppressed in the previous window');
-        },
-      );
+      const summaryCalls = warningHandler.mock.calls.filter((c: unknown[]) => {
+        const w = c[0] as { code: string; message: string };
+        return w.code === 'MALFORMED_RATE_LIMITED' && w.message.includes('suppressed in the previous window');
+      });
       expect(summaryCalls.length).toBe(0);
     });
 

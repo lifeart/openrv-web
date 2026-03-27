@@ -667,9 +667,7 @@ describe('TIFFFloatDecoder', () => {
             break;
           }
         }
-        await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
-          `Unsupported float bits per sample: ${bps}`,
-        );
+        await expect(decodeTIFFFloat(buffer)).rejects.toThrow(`Unsupported float bits per sample: ${bps}`);
       }
     });
 
@@ -1882,10 +1880,7 @@ describe('TIFFFloatDecoder', () => {
       const expectedView = new DataView(rawBytes.buffer);
       for (let i = 0; i < width * height; i++) {
         for (let c = 0; c < channels; c++) {
-          expect(result.data[i * 4 + c]).toBeCloseTo(
-            expectedView.getFloat32((i * channels + c) * 4, true),
-            4,
-          );
+          expect(result.data[i * 4 + c]).toBeCloseTo(expectedView.getFloat32((i * channels + c) * 4, true), 4);
         }
       }
     });
@@ -1982,10 +1977,7 @@ describe('TIFFFloatDecoder', () => {
       const expectedView = new DataView(rawBytes.buffer);
       for (let i = 0; i < width * height; i++) {
         for (let c = 0; c < channels; c++) {
-          expect(result.data[i * 4 + c]).toBeCloseTo(
-            expectedView.getFloat32((i * channels + c) * 4, true),
-            4,
-          );
+          expect(result.data[i * 4 + c]).toBeCloseTo(expectedView.getFloat32((i * channels + c) * 4, true), 4);
         }
       }
     });
@@ -2039,10 +2031,7 @@ describe('TIFFFloatDecoder', () => {
       const expectedView = new DataView(rawBytes.buffer);
       for (let i = 0; i < width * height; i++) {
         for (let c = 0; c < channels; c++) {
-          expect(result.data[i * 4 + c]).toBeCloseTo(
-            expectedView.getFloat32((i * channels + c) * 4, true),
-            4,
-          );
+          expect(result.data[i * 4 + c]).toBeCloseTo(expectedView.getFloat32((i * channels + c) * 4, true), 4);
         }
       }
     });

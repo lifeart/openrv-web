@@ -394,9 +394,11 @@ export class SessionSerializer {
         // Mark decoder-backed images so restore uses the FileSourceNode pipeline
         ...(source.fileSourceNode && { decoderBacked: true }),
         // Preserve stereo input format from source metadata or file source node
-        ...((source.stereoInputFormat || source.fileSourceNode?.stereoInputFormat) ? {
-          stereoInputFormat: source.stereoInputFormat ?? source.fileSourceNode?.stereoInputFormat ?? undefined,
-        } : {}),
+        ...(source.stereoInputFormat || source.fileSourceNode?.stereoInputFormat
+          ? {
+              stereoInputFormat: source.stereoInputFormat ?? source.fileSourceNode?.stereoInputFormat ?? undefined,
+            }
+          : {}),
       };
 
       // Include OPFS cache key when the cache entry is stable (write complete)

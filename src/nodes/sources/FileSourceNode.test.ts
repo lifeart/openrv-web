@@ -672,9 +672,7 @@ describe('FileSourceNode', () => {
 
       // Call loadFromEXR with an invalid buffer (not a valid EXR)
       const invalidBuffer = new ArrayBuffer(8);
-      await expect(
-        node.loadFromEXR(invalidBuffer, 'bad.exr', 'http://example.com/bad.exr'),
-      ).rejects.toThrow();
+      await expect(node.loadFromEXR(invalidBuffer, 'bad.exr', 'http://example.com/bad.exr')).rejects.toThrow();
 
       // canvasDirty should be true after the failed loadFromEXR call
       expect((node as any).canvasDirty).toBe(true);

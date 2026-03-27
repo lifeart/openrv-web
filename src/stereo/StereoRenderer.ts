@@ -46,9 +46,7 @@ export function validateStereoOffset(offset: number): number {
   }
   if (!Number.isFinite(offset)) {
     const clamped = offset > 0 ? MAX_STEREO_OFFSET : MIN_STEREO_OFFSET;
-    console.warn(
-      `StereoRenderer: eye offset is Infinity, clamping to ${clamped}`,
-    );
+    console.warn(`StereoRenderer: eye offset is Infinity, clamping to ${clamped}`);
     return clamped;
   }
   if (offset < MIN_STEREO_OFFSET || offset > MAX_STEREO_OFFSET) {

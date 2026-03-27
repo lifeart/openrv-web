@@ -32,12 +32,7 @@ function createMPFJPEGBuffer(options?: {
   gainmapOffset?: number;
   padToFit?: boolean;
 }): ArrayBuffer {
-  const {
-    baseSize = 1000,
-    gainmapSize = 500,
-    gainmapOffset: rawGainmapOffset,
-    padToFit = true,
-  } = options ?? {};
+  const { baseSize = 1000, gainmapSize = 500, gainmapOffset: rawGainmapOffset, padToFit = true } = options ?? {};
 
   // Build a minimal JPEG with MPF marker
   // SOI + APP2(MPF) + EOI
@@ -96,12 +91,7 @@ function createMPFJPEGBuffer(options?: {
   // MP Entry 2: Gainmap image (16 bytes)
   const gainmapOffset = rawGainmapOffset ?? baseSize; // right after base by default
   parts.push(0x00, 0x00, 0x00, 0x00); // attributes
-  parts.push(
-    gainmapSize & 0xff,
-    (gainmapSize >> 8) & 0xff,
-    (gainmapSize >> 16) & 0xff,
-    (gainmapSize >> 24) & 0xff,
-  ); // size LE
+  parts.push(gainmapSize & 0xff, (gainmapSize >> 8) & 0xff, (gainmapSize >> 16) & 0xff, (gainmapSize >> 24) & 0xff); // size LE
   parts.push(
     gainmapOffset & 0xff,
     (gainmapOffset >> 8) & 0xff,
