@@ -26,6 +26,7 @@ import {
   reconstructHDR,
   defaultGainMapMetadata,
 } from './GainMapMetadata';
+import { DecoderError } from '../core/errors';
 
 export interface GainmapInfo {
   baseImageOffset: number;
@@ -73,6 +74,17 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
   // First image is the base (SDR), second is the gainmap
   const baseImage = images[0]!;
   const gainmapImage = images[1]!;
+
+  // Validate gainmap entry bounds against actual buffer.
+  // Note: offset + size is safe from integer overflow in JS because both are
+  // Uint32 values (max 2^32 - 1 each), so their sum is at most ~8.6e9, well
+  // below Number.MAX_SAFE_INTEGER (2^53 - 1).
+  if (gainmapImage.offset + gainmapImage.size > buffer.byteLength) {
+    throw new DecoderError(
+      'JPEG Gainmap',
+      `Gainmap image exceeds buffer: offset(${gainmapImage.offset}) + size(${gainmapImage.size}) = ${gainmapImage.offset + gainmapImage.size} > buffer length(${buffer.byteLength})`,
+    );
+  }
 
   // Extract headroom and full metadata from XMP
   // First try the primary image's XMP (Apple format)
@@ -130,6 +142,20 @@ export async function decodeGainmapToFloat32(
   data: Float32Array;
   channels: number;
 }> {
+  // Validate that the gainmap region is within buffer bounds
+  if (info.gainmapOffset + info.gainmapLength > buffer.byteLength) {
+    throw new DecoderError(
+      'JPEG Gainmap',
+      `Gainmap slice exceeds buffer: offset(${info.gainmapOffset}) + length(${info.gainmapLength}) = ${info.gainmapOffset + info.gainmapLength} > buffer length(${buffer.byteLength})`,
+    );
+  }
+  if (info.baseImageOffset + info.baseImageLength > buffer.byteLength) {
+    throw new DecoderError(
+      'JPEG Gainmap',
+      `Base image slice exceeds buffer: offset(${info.baseImageOffset}) + length(${info.baseImageLength}) = ${info.baseImageOffset + info.baseImageLength} > buffer length(${buffer.byteLength})`,
+    );
+  }
+
   // Slice out the base JPEG and gainmap JPEG blobs
   // For the first image (offset 0), use gainmap offset as the end boundary.
   // MPF size fields can underreport the first image's actual size (missing EOI marker),

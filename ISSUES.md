@@ -68,9 +68,7 @@ These issues were found and fixed during the audit:
 - **File**: `src/audio/AudioPlaybackManager.ts` ~lines 280-308
 - **Status**: Gap exists, but AudioCoordinator already works around it with its own `_isPlaying` flag.
 
-#### MED-39: AudioCoordinator dispose doesn't stop playback first
-- **File**: `src/audio/AudioCoordinator.ts` ~lines 272-277
-- **Status**: `_manager.dispose()` called without pause. Whether this matters depends on AudioPlaybackManager.dispose() handling active playback internally.
+#### ~~MED-39~~: AudioCoordinator dispose doesn't stop playback first — **FIXED** (see FIXED_ISSUES.md #359)
 
 #### MED-42: Detected FPS calculation flawed for edge case
 - **File**: `src/utils/media/MediabunnyFrameExtractor.ts` ~lines 434-448
@@ -91,11 +89,11 @@ These findings were not yet verified against actual source code:
 - **MED-55**: WebGPU extended tone mapping not verified at runtime — `hdr-acceptance-criteria.test.ts`
 
 #### Node System
-- **MED-10**: FileSourceNode properties inconsistent with defineNodeProperty — `FileSourceNode.ts` ~lines 584-590
+- ~~**MED-10**~~: FileSourceNode properties inconsistent with defineNodeProperty — **FIXED** (see FIXED_ISSUES.md #355)
 - **LOW-09**: Stereo input format not serializable — `FileSourceNode.ts` ~lines 574, 2104
 - **LOW-10**: BaseSourceNode.connectInput warns instead of throwing — `BaseSourceNode.ts` ~lines 38-40
 - **LOW-11**: StackGroupNode chosenAudioInput not range-validated — `StackGroupNode.ts` ~lines 93-94
-- **LOW-12**: Canvas dirty flag not reset after load failures — `FileSourceNode.ts` ~lines 1047-1049
+- ~~**LOW-12**~~: Canvas dirty flag not reset after load failures — **FIXED** (see FIXED_ISSUES.md #356)
 
 #### UI Controls
 - **MED-23**: DisplayProfileControl slider range not validated on load — `DisplayProfileControl.ts`
@@ -108,19 +106,19 @@ These findings were not yet verified against actual source code:
 
 #### Format Decoders
 - **MED-29**: HDR RLE scanline validation — `HDRDecoder.ts` ~lines 414-446 (verified: throws on mismatch — likely FP)
-- **MED-33**: TIFF LZW chain corruption — `TIFFFloatDecoder.ts` ~lines 323-324
-- **MED-34**: JPEG Gainmap MPF offset+size overflow — `JPEGGainmapDecoder.ts` ~lines 82, 101
-- **LOW-17**: TIFF LZW string length overflow in Uint16Array — `TIFFFloatDecoder.ts` ~lines 316, 371
-- **LOW-18**: TIFF unknown tag type returns 1 silently — `TIFFFloatDecoder.ts` ~lines 166-180
-- **LOW-19**: TIFF bits-per-sample not validated for float format — `TIFFFloatDecoder.ts` ~lines 766-771
+- ~~**MED-33**~~: TIFF LZW chain corruption — **FIXED** (see FIXED_ISSUES.md #350)
+- ~~**MED-34**~~: JPEG Gainmap MPF offset+size overflow — **FIXED** (see FIXED_ISSUES.md #351)
+- ~~**LOW-17**~~: TIFF LZW string length overflow in Uint16Array — **FIXED** (see FIXED_ISSUES.md #352)
+- ~~**LOW-18**~~: TIFF unknown tag type returns 1 silently — **FIXED** (see FIXED_ISSUES.md #353)
+- ~~**LOW-19**~~: TIFF bits-per-sample not validated for float format — **FIXED** (see FIXED_ISSUES.md #354)
 
 #### Misc
 - **MED-18**: WebSocketClient malformed message flood not rate-limited — `WebSocketClient.ts` ~lines 32-38
 - **LOW-07**: Clarity/sharpen sample raw texture (known trade-off) — `viewer.frag.glsl`
 - **LOW-14**: Stereo eye offset not bounds-validated — `StereoRenderer.ts` ~lines 278-300
 - **LOW-15**: Stereo side-by-side odd width asymmetry — `StereoRenderer.ts` ~lines 310-311
-- **LOW-20**: Frame accumulator overflow on speed changes — `PlaybackEngine.ts` ~lines 312-329
-- **LOW-21**: Dropped frame counter never reset — `PlaybackEngine.ts` ~lines 814-879
+- ~~**LOW-20**~~: Frame accumulator overflow on speed changes — **FIXED** (see FIXED_ISSUES.md #357)
+- ~~**LOW-21**~~: Dropped frame counter never reset — **FIXED** (see FIXED_ISSUES.md #358)
 
 ---
 

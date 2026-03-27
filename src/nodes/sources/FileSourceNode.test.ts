@@ -570,6 +570,140 @@ describe('FileSourceNode', () => {
       node.dispose();
       expect(node.getCanvas()).toBeNull();
     });
+
+    it('FSN-044: canvasDirty is reset after successful load', async () => {
+      const exrBuffer = createTestEXR({ width: 2, height: 2 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      // After successful load, getCanvas() should return a canvas
+      const canvas1 = node.getCanvas();
+      expect(canvas1).not.toBeNull();
+
+      // Second call should return the same cached canvas (dirty flag was cleared)
+      const canvas2 = node.getCanvas();
+      expect(canvas2).toBe(canvas1);
+    });
+
+    it('FSN-045: canvasDirty is set on failed load so stale canvas is not returned', async () => {
+      // First: successfully load an EXR
+      const exrBuffer = createTestEXR({ width: 2, height: 2 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      // Render the canvas to clear the dirty flag
+      const canvas1 = node.getCanvas();
+      expect(canvas1).not.toBeNull();
+
+      // Verify canvasDirty is false after rendering
+      expect((node as any).canvasDirty).toBe(false);
+
+      // Now attempt to load an invalid EXR file (should fail)
+      const invalidBuffer = new ArrayBuffer(8); // too small, not a valid EXR
+      const invalidFile = new File([invalidBuffer], 'bad.exr', { type: 'image/x-exr' });
+
+      await expect(node.loadFile(invalidFile)).rejects.toThrow();
+
+      // After the failed load, canvasDirty should have been set to true
+      // at the start of loadFile, ensuring the stale cached canvas is not
+      // returned without re-rendering.
+      expect((node as any).canvasDirty).toBe(true);
+    });
+
+    it('FSN-046: canvasDirty is set on failed URL load so stale canvas is not returned', async () => {
+      // Successfully load via loadFile first
+      const exrBuffer = createTestEXR({ width: 2, height: 2 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      // Render and clear dirty
+      const canvas1 = node.getCanvas();
+      expect(canvas1).not.toBeNull();
+
+      // Verify canvasDirty is false after rendering
+      expect((node as any).canvasDirty).toBe(false);
+
+      // Try to load a non-existent URL (will fail)
+      await expect(node.load('http://localhost:0/nonexistent.exr')).rejects.toThrow();
+
+      // The canvas dirty flag should have been set at the start of load(),
+      // preventing the stale canvas from being served without re-checking.
+      expect((node as any).canvasDirty).toBe(true);
+    });
+
+    it('FSN-047: canvasDirty still works correctly for valid re-render requests', async () => {
+      // Load first EXR
+      const exrBuffer1 = createTestEXR({ width: 2, height: 2 });
+      const file1 = new File([exrBuffer1], 'test1.exr', { type: 'image/x-exr' });
+      await node.loadFile(file1);
+
+      // Get canvas - should render and clear dirty
+      const canvas1 = node.getCanvas();
+      expect(canvas1).not.toBeNull();
+
+      // Second getCanvas should return cached (dirty is false)
+      const canvas2 = node.getCanvas();
+      expect(canvas2).toBe(canvas1);
+
+      // Load second EXR - should set dirty
+      const exrBuffer2 = createTestEXR({ width: 4, height: 4 });
+      const file2 = new File([exrBuffer2], 'test2.exr', { type: 'image/x-exr' });
+      await node.loadFile(file2);
+
+      // Get canvas - should re-render (dirty was set by successful load)
+      const canvas3 = node.getCanvas();
+      expect(canvas3).not.toBeNull();
+      // Canvas dimensions should match new image
+      expect(canvas3!.width).toBe(4);
+      expect(canvas3!.height).toBe(4);
+    });
+
+    it('FSN-048: loadFromEXR failure path sets canvasDirty', async () => {
+      // First: successfully load an EXR
+      const exrBuffer = createTestEXR({ width: 2, height: 2 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      // Render canvas to clear dirty flag
+      const canvas1 = node.getCanvas();
+      expect(canvas1).not.toBeNull();
+      expect((node as any).canvasDirty).toBe(false);
+
+      // Call loadFromEXR with an invalid buffer (not a valid EXR)
+      const invalidBuffer = new ArrayBuffer(8);
+      await expect(
+        node.loadFromEXR(invalidBuffer, 'bad.exr', 'http://example.com/bad.exr'),
+      ).rejects.toThrow();
+
+      // canvasDirty should be true after the failed loadFromEXR call
+      expect((node as any).canvasDirty).toBe(true);
+    });
+
+    it('FSN-049: setEXRLayer failure path sets canvasDirty', async () => {
+      // First: successfully load a multi-layer EXR
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      // Render canvas to clear dirty flag
+      const canvas1 = node.getCanvas();
+      expect(canvas1).not.toBeNull();
+      expect((node as any).canvasDirty).toBe(false);
+
+      // Corrupt the stored EXR buffer so re-decode will fail
+      (node as any).exrBuffer = new ArrayBuffer(8);
+
+      // setEXRLayer should fail because the buffer is now invalid
+      await expect(node.setEXRLayer('diffuse')).rejects.toThrow();
+
+      // canvasDirty should be true after the failed setEXRLayer call
+      expect((node as any).canvasDirty).toBe(true);
+    });
   });
 
   describe('EXR layer support', () => {
@@ -1862,6 +1996,170 @@ describe('FileSourceNode', () => {
       expect(image!.metadata.colorPrimaries).toBe('bt2020');
       expect(image!.metadata.colorSpace).toBe('rec2020');
       expect(image!.metadata.sourcePath).toBeDefined();
+    });
+  });
+
+  describe('defineNodeProperty consistency (MED-10)', () => {
+    it('FSN-200: url property is registered in property container', () => {
+      expect(node.properties.has('url')).toBe(true);
+    });
+
+    it('FSN-201: url getter/setter wired through property container', () => {
+      // Setting via instance property should update property container
+      node.url = 'test://image.png';
+      expect(node.properties.getValue('url')).toBe('test://image.png');
+
+      // Setting via property container should update instance property
+      node.properties.setValue('url', 'test://other.png');
+      expect(node.url).toBe('test://other.png');
+    });
+
+    it('FSN-202: originalUrl getter/setter wired through property container', () => {
+      node.originalUrl = '/path/to/original.exr';
+      expect(node.properties.getValue('originalUrl')).toBe('/path/to/original.exr');
+
+      node.properties.setValue('originalUrl', '/path/to/other.exr');
+      expect(node.originalUrl).toBe('/path/to/other.exr');
+    });
+
+    it('FSN-203: exrLayer getter/setter wired through property container', () => {
+      node.exrLayer = 'diffuse';
+      expect(node.properties.getValue('exrLayer')).toBe('diffuse');
+
+      node.properties.setValue('exrLayer', 'beauty');
+      expect(node.exrLayer).toBe('beauty');
+    });
+
+    it('FSN-204: url property fires change notification', () => {
+      const changes: { name: string; value: unknown }[] = [];
+      node.propertyChanged.connect((data) => {
+        changes.push(data);
+      });
+
+      node.url = 'test://notify.png';
+
+      const urlChange = changes.find((c) => c.name === 'url');
+      expect(urlChange).toBeDefined();
+      expect(urlChange!.value).toBe('test://notify.png');
+    });
+
+    it('FSN-205: originalUrl property fires change notification', () => {
+      const changes: { name: string; value: unknown }[] = [];
+      node.propertyChanged.connect((data) => {
+        changes.push(data);
+      });
+
+      node.originalUrl = '/new/path.exr';
+
+      const change = changes.find((c) => c.name === 'originalUrl');
+      expect(change).toBeDefined();
+      expect(change!.value).toBe('/new/path.exr');
+    });
+
+    it('FSN-206: exrLayer property fires change notification', () => {
+      const changes: { name: string; value: unknown }[] = [];
+      node.propertyChanged.connect((data) => {
+        changes.push(data);
+      });
+
+      node.exrLayer = 'specular';
+
+      const change = changes.find((c) => c.name === 'exrLayer');
+      expect(change).toBeDefined();
+      expect(change!.value).toBe('specular');
+    });
+
+    it('FSN-207: all expected properties are registered', () => {
+      const propertyNames = [...node.properties.names()];
+      expect(propertyNames).toContain('url');
+      expect(propertyNames).toContain('width');
+      expect(propertyNames).toContain('height');
+      expect(propertyNames).toContain('originalUrl');
+      expect(propertyNames).toContain('isHDR');
+      expect(propertyNames).toContain('exrLayer');
+    });
+
+    it('FSN-208: properties have correct default values', () => {
+      expect(node.url).toBe('');
+      expect(node.properties.getValue('width')).toBe(0);
+      expect(node.properties.getValue('height')).toBe(0);
+      expect(node.originalUrl).toBe('');
+      expect(node.properties.getValue('isHDR')).toBe(false);
+      expect(node.exrLayer).toBeNull();
+    });
+
+    it('FSN-209: url property serialized in toJSON', async () => {
+      const exrBuffer = createTestEXR({ width: 4, height: 4 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      const json = node.toJSON() as Record<string, unknown>;
+      const props = json.properties as Record<string, unknown>;
+      expect(props.url).toBeDefined();
+      expect(typeof props.url).toBe('string');
+    });
+
+    it('FSN-210: originalUrl property serialized in toJSON', async () => {
+      const exrBuffer = createTestEXR({ width: 4, height: 4 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      const json = node.toJSON() as Record<string, unknown>;
+      const props = json.properties as Record<string, unknown>;
+      expect(props).toHaveProperty('originalUrl');
+      expect(props.originalUrl).toBe('');
+    });
+
+    it('FSN-211: properties.fromJSON restores url and originalUrl', () => {
+      node.properties.fromJSON({
+        url: 'restored://test.exr',
+        originalUrl: '/restored/path.exr',
+        exrLayer: 'beauty',
+      });
+
+      expect(node.url).toBe('restored://test.exr');
+      expect(node.originalUrl).toBe('/restored/path.exr');
+      expect(node.exrLayer).toBe('beauty');
+    });
+
+    it('FSN-212: url does not duplicate state after load', async () => {
+      const exrBuffer = createTestEXR({ width: 4, height: 4 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      // After load, this.url and properties.getValue('url') must be identical
+      expect(node.url).toBe(node.properties.getValue('url'));
+    });
+
+    it('FSN-214: cold-sync exrLayer when no EXR is loaded', () => {
+      // No EXR loaded (no exrBuffer), setting exrLayer should sync currentExrLayer
+      node.exrLayer = 'diffuse';
+      expect(node.getCurrentEXRLayer()).toBe('diffuse');
+
+      node.exrLayer = null;
+      expect(node.getCurrentEXRLayer()).toBeNull();
+    });
+
+    it('FSN-215: fromJSON triggers exrLayer listener and syncs getCurrentEXRLayer', () => {
+      node.properties.fromJSON({
+        exrLayer: 'beauty',
+      });
+      expect(node.getCurrentEXRLayer()).toBe('beauty');
+    });
+
+    it('FSN-213: no duplicate change notification for url during load', async () => {
+      const changes: string[] = [];
+      node.propertyChanged.connect((data) => {
+        if (data.name === 'url') changes.push(data.value as string);
+      });
+
+      const exrBuffer = createTestEXR({ width: 4, height: 4 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+      await node.loadFile(file);
+
+      // url should only be set once (not once for field + once for property container)
+      const urlValues = changes.filter((v) => v.startsWith('blob:'));
+      expect(urlValues.length).toBe(1);
     });
   });
 });

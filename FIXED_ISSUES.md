@@ -4712,3 +4712,151 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 **Files changed**:
 - `src/AppTransformWiring.ts`
 - `src/AppTransformWiring.test.ts`
+
+## Issue #350: MED-33 — TIFF LZW chain corruption
+
+**Root cause**: Three issues in `decompressLZW()`:
+1. **bitBuffer integer overflow**: Signed right shift (`>>`) corrupted extracted codes when `bitBuffer` exceeded 31 bits. Fixed by using unsigned right shift (`>>>`) and trimming `bitBuffer` after each read.
+2. **No validation of out-of-range codes**: `code > nextCode` was handled identically to `code === nextCode` (the valid KwKwK special case), silently producing garbage from uninitialized table entries. Fixed by splitting into explicit `code === nextCode` and `code > nextCode` (throws `DecoderError`).
+3. **No chain cycle detection**: Circular prefix chains in corrupted data could infinite-loop `outputString()` and `firstChar()`. Fixed with `MAX_CHAIN_DEPTH` (4096) guard. Also added validation that the first code after CLEAR must be a literal (0-255).
+
+**Tests added**: 8 regression tests in `TIFFFloatDecoder.test.ts` — valid round-trips, corruption detection (`code > nextCode`, non-literal after CLEAR), KwKwK special case, code size transitions, large data, table-full boundary (4096 entries).
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #351: MED-34 — JPEG Gainmap MPF offset+size overflow
+
+**Root cause**: MPF offset and size values read from binary data were not validated against buffer bounds before use. In `parseGainmapJPEG()`, `offset + size` could exceed `buffer.byteLength`, leading to truncated/incorrect XMP extraction. In `decodeGainmapToFloat32()`, out-of-bounds `buffer.slice()` produced empty or truncated blobs with unhelpful errors.
+
+**Fix**: Added bounds validation in both `parseGainmapJPEG()` (gainmap entry) and `decodeGainmapToFloat32()` (both gainmap and base image slices). Throws descriptive `DecoderError` with offset, size, sum, and buffer length. Added JS integer safety comment documenting that `Uint32 + Uint32 < Number.MAX_SAFE_INTEGER`.
+
+**Tests added**: 10 new tests — 7 for `parseGainmapJPEG` (overflow, boundary, exact-fit, large offset/size, zero-size, valid parse, MPF fix-up overflow) and 3 for `decodeGainmapToFloat32` (gainmap slice overflow, base image slice overflow).
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+## Issue #352: LOW-17 — TIFF LZW string length overflow in Uint16Array
+
+**Root cause**: `tableLength` in `decompressLZW()` used `Uint16Array` (max 65535). Analysis showed max string length under valid LZW with 12-bit codes is ~3838, so overflow was theoretically impossible. However, corrupted data could potentially exploit this.
+
+**Fix**: Upgraded `tableLength` from `Uint16Array` to `Uint32Array` as defense-in-depth (16KB vs 8KB, negligible cost). Added detailed comment documenting the safety analysis.
+
+**Tests added**: 2 regression tests — CHAIN009 (deep chains via KwKwK special case, 200 entries, pixel-exact verification) and CHAIN010 (CLEAR resets with three table rebuilds, verifies no length accumulation across boundaries, pixel-exact verification).
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #353: LOW-18 — TIFF unknown tag type returns 1 silently
+
+**Root cause**: `getTypeSize()` only handled TIFF types 1-5 and returned 1 for all others. This caused incorrect IFD entry size calculations for types 6-12 (silently misparsed) and would misinterpret any unknown/extended types.
+
+**Fix**: 
+- Added all TIFF 6.0 standard types 6-12 (SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE) with correct byte sizes
+- Unknown types now return 0 (per TIFF 6.0 Section 7: "skip over fields containing an unexpected field type")
+- `parseIFD()` skips IFD entries with typeSize=0 instead of misinterpreting them
+- Real-world TIFFs with extended types (13/IFD, 16/LONG8) now parse correctly instead of being rejected
+
+**Tests added**: 9 tests — type 0/13/16/42/99 skip gracefully, unknown tag among valid tags still decodes with pixel verification, all types 1-12 size verification, LE/BE regression tests, required-tag-with-unknown-type handling.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #354: LOW-19 — TIFF bits-per-sample not validated for float format
+
+**Root cause**: `readFloatSample()` had a catch-all `else` branch that silently treated ANY `bytesPerSample` value (including invalid ones like 1, 3, etc.) as 16-bit half-float. While `decodeTIFFFloat` had BPS validation, the internal function lacked defense-in-depth.
+
+**Fix**:
+- Made `readFloatSample` explicit: `if (===4)` → `else if (===8)` → `else if (===2)` → `else throw DecoderError`
+- Removed redundant `console.warn` before throws in both BPS and compression rejection paths
+- Added `isFloatTIFF` guard for invalid BPS values (returns false for non-16/32/64)
+
+**Tests added**: 7 tests — BPS=24/8/1/4/12 rejection, valid 32/64/16-bit round-trips with pixel verification, `isFloatTIFF` returns false for float-with-invalid-BPS.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #355: MED-10 — FileSourceNode properties inconsistent with defineNodeProperty
+
+**Root cause**: `url`, `originalUrl`, and `exrLayer` properties were defined via raw `properties.add()` with manual field management, requiring duplicate writes (`this.url = x; this.properties.setValue('url', x)`) at every call site. This was error-prone and could lead to state divergence (field vs property container out of sync).
+
+**Fix**:
+- Converted `url`, `originalUrl`, `exrLayer` to `defineNodeProperty` — eliminates dual state, getters/setters auto-sync with property container
+- Removed all 16+ duplicate `properties.setValue()` calls
+- Added `propertyChanged` listener for `exrLayer` to sync `currentExrLayer` and trigger re-decode when set externally (e.g., deserialization)
+- Made `_syncingExrLayer` guard exception-safe with try/finally
+- Kept `width`, `height`, `isHDR` as `properties.add()` (getter/method conflicts)
+
+**Tests added**: 16 tests (FSN-200–FSN-215) — property registration, getter/setter wiring, change notifications, default values, serialization round-trip, fromJSON listener trigger, cold-sync path, no duplicate state/notifications.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #356: LOW-12 — Canvas dirty flag not reset after load failures
+
+**Root cause**: `canvasDirty` was only set to `true` at the end of successful loads. When a load failed (threw), the flag stayed `false`, causing `getCanvas()` to return a stale cached canvas from a previous successful load.
+
+**Fix**: Added `this.canvasDirty = true` at the START of all 4 public load entry points (`load()`, `loadFromEXR()`, `setEXRLayer()`, `loadFile()`), before any async work. This ensures that even on failure, the stale canvas cache is invalidated.
+
+**Tests added**: 6 tests (FSN-044 through FSN-049) — dirty flag cleared after success, dirty flag set on `loadFile` failure, `load()` failure, `loadFromEXR()` failure, `setEXRLayer()` failure, and correct behavior across sequential loads.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #357: LOW-20 — Frame accumulator overflow on speed changes
+
+**Root cause**: `accumulateFrames` and `accumulateDelta` in `PlaybackTimingController` had no upper bounds on delta time or frames-per-tick. Large timing gaps (tab backgrounding, GC pauses) produced unbounded frame bursts and visual glitches.
+
+**Fix**:
+- Added `MAX_FRAME_DELTA_MS = 500` — clamps raw delta to prevent multi-second bursts
+- Added `MAX_FRAMES_PER_TICK = 4` — caps frame advances in realtime mode
+- Negative deltas (clock regression) clamped to 0
+- Accumulator reset after overflow cap to prevent continued overflow
+- Same clamping applied to `accumulateDelta` (mediabunny path)
+
+**Tests added**: 13 tests (PTC-LOW20-001 through PTC-LOW20-013) — large delta clamping, pre-loaded accumulator cap, accumulator reset, negative deltas, rapid speed changes, normal playback unaffected, playAllFrames mode overflow, boundary at MAX_FRAMES_PER_TICK, high-speed 60fps/8x natural cap.
+
+**Files changed**:
+- `src/core/session/PlaybackTimingController.ts`
+- `src/core/session/PlaybackTimingController.test.ts`
+
+## Issue #358: LOW-21 — Dropped frame counter never reset
+
+**Root cause**: `droppedFrameCount` only reset when `play()` was called. It accumulated indefinitely across pause/seek/range-change cycles with no way to reset.
+
+**Fix**: 
+- Added `resetDroppedFrames()` public method through `PlaybackEngine` → `SessionPlayback` → `Session`
+- Counter auto-resets ONLY on `play()` (via existing `resetFpsTracking()`) — matching `HTMLVideoElement.getVideoPlaybackQuality()` pattern
+- Counter is PRESERVED on `pause()`, `goToFrame()`, `setInOutRange()` so consumers can read post-playback metrics
+- Manual `resetDroppedFrames()` available for explicit reset
+
+**Design rationale**: Domain expert review identified that resetting on `pause()` destroys the metric at the exact moment consumers need it. Standard video engines keep counters across pause/resume; only new playback segments start fresh.
+
+**Tests added**: 8 tests (PE-168 through PE-169g) — counter preserved after pause, seek, range change; manual reset; post-reset increment; play-pause-play cycle; play() as sole auto-reset; readability between pause and play.
+
+**Files changed**:
+- `src/core/session/PlaybackEngine.ts`
+- `src/core/session/SessionPlayback.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/PlaybackEngine.test.ts`
+
+## Issue #359: MED-39 — AudioCoordinator dispose doesn't stop playback first
+
+**Root cause**: `AudioCoordinator.dispose()` called `_manager.dispose()` without first stopping playback at the coordinator level. The `_isPlaying` flag was never reset, and the host was never notified via `onAudioPathChanged()`. This left `isWebAudioActive` returning true after dispose and could leave HTMLVideoElement permanently muted.
+
+**Fix**: `dispose()` now checks `_isPlaying` and, if true, stops playback (`_isPlaying = false`, `_manager.pause()`) and notifies the host via `onAudioPathChanged()` BEFORE tearing down resources. When nothing is playing, dispose proceeds as before.
+
+**Tests added**: 7 tests (AC-073 through AC-079) — active playback dispose with ordering verification (callback fires before manager.dispose()), no-op dispose, double dispose, resource release verification, isWebAudioActive state verification, dispose during in-flight loadFromVideo, video-fallback mode dispose.
+
+**Files changed**:
+- `src/audio/AudioCoordinator.ts`
+- `src/audio/AudioCoordinator.test.ts`
+- `src/core/session/SessionPlayback.ts`
+- `src/core/session/Session.ts`

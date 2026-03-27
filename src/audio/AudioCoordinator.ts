@@ -270,6 +270,14 @@ export class AudioCoordinator implements ManagerBase {
   // ---- Cleanup ----
 
   dispose(): void {
+    // Stop active playback first so the host can react (e.g. un-mute the
+    // video element) before resources are torn down.
+    if (this._isPlaying) {
+      this._isPlaying = false;
+      this._manager.pause();
+      this._callbacks?.onAudioPathChanged();
+    }
+
     this._errorUnsub?.();
     this._errorUnsub = null;
     this._manager.dispose();

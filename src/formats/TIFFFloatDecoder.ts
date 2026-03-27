@@ -165,6 +165,13 @@ function parseIFD(view: DataView, ifdOffset: number, le: boolean): Map<number, T
     const count = view.getUint32(pos + 4, le);
 
     const typeSize = getTypeSize(type);
+
+    // TIFF 6.0 Section 7: skip fields with unknown/unsupported type
+    if (typeSize === 0) {
+      pos += 12;
+      continue;
+    }
+
     const totalSize = typeSize * count;
 
     // If value fits in 4 bytes, it's stored inline at pos+8
@@ -180,7 +187,11 @@ function parseIFD(view: DataView, ifdOffset: number, le: boolean): Map<number, T
 }
 
 /**
- * Get the byte size of a TIFF data type
+ * Get the byte size of a TIFF data type.
+ * Covers all standard TIFF 6.0 types (1–12).
+ * Returns 0 for unknown types so that callers can skip the entry
+ * (TIFF 6.0 Section 7: "Readers should skip over fields containing
+ * an unexpected field type.").
  */
 function getTypeSize(type: number): number {
   switch (type) {
@@ -193,9 +204,23 @@ function getTypeSize(type: number): number {
     case 4:
       return 4; // LONG
     case 5:
-      return 8; // RATIONAL
+      return 8; // RATIONAL (two LONGs)
+    case 6:
+      return 1; // SBYTE
+    case 7:
+      return 1; // UNDEFINED
+    case 8:
+      return 2; // SSHORT
+    case 9:
+      return 4; // SLONG
+    case 10:
+      return 8; // SRATIONAL (two SLONGs)
+    case 11:
+      return 4; // FLOAT (IEEE 32-bit)
+    case 12:
+      return 8; // DOUBLE (IEEE 64-bit)
     default:
-      return 1;
+      return 0; // Unknown type — caller should skip this entry
   }
 }
 
@@ -295,6 +320,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
   const CLEAR_CODE = 256;
   const EOI_CODE = 257;
   const MAX_CODE = 4095; // 12-bit max
+  const MAX_CHAIN_DEPTH = 4096; // Maximum prefix chain depth to detect cycles
 
   // Output buffer - grow as needed
   const output: number[] = [];
@@ -303,13 +329,20 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
   // Using typed arrays for performance
   const tablePrefix = new Int32Array(4096);
   const tableSuffix = new Uint8Array(4096);
-  const tableLength = new Uint16Array(4096); // length of string for each code
+  // Use Uint32Array instead of Uint16Array to prevent any possibility of overflow.
+  // With 12-bit codes (max 4096 entries), the theoretical max string length is ~3838,
+  // well within Uint16Array's 65535 limit for valid data. However, Uint32Array provides
+  // defense-in-depth against corrupted data that might cause unexpected length accumulation,
+  // at negligible cost (4096 entries = 16KB vs 8KB).
+  const tableLength = new Uint32Array(4096);
 
   let codeSize = 9;
   let nextCode = 258;
   let oldCode = -1;
 
   // Bit reader state (MSB-first for TIFF)
+  // Use separate high/low parts to avoid JavaScript's 32-bit integer overflow
+  // during bitwise operations when accumulating bits.
   let bitBuffer = 0;
   let bitsInBuffer = 0;
   let bytePos = 0;
@@ -321,11 +354,19 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       bitsInBuffer += 8;
     }
     bitsInBuffer -= codeSize;
-    const code = (bitBuffer >> bitsInBuffer) & ((1 << codeSize) - 1);
+    // Mask bitBuffer to keep only the relevant bits, preventing overflow
+    // from accumulating beyond 32 bits across multiple readCode() calls.
+    const code = (bitBuffer >>> bitsInBuffer) & ((1 << codeSize) - 1);
+    // Trim bitBuffer to only retain the remaining valid bits.
+    // After subtraction, bitsInBuffer is always in [0, 11] (max: we entered
+    // the loop needing 12 bits with 11 already buffered, added 8 → 19, then
+    // subtracted 12 → 7; the theoretical max is 11 = 12 - 1). So the mask
+    // (1 << bitsInBuffer) - 1 is always safe — no 32-bit overflow concern.
+    bitBuffer = bitBuffer & ((1 << bitsInBuffer) - 1);
     return code;
   }
 
-  // Helper to output the string for a code
+  // Helper to output the string for a code, with chain integrity validation
   function outputString(code: number): void {
     if (code < 256) {
       output.push(code);
@@ -338,7 +379,14 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
     output.length += len;
     let c = code;
     let idx = startIdx + len - 1;
+    let depth = 0;
     while (c >= 256) {
+      if (++depth > MAX_CHAIN_DEPTH) {
+        throw new DecoderError(
+          'TIFF',
+          `LZW chain corruption detected: prefix chain cycle at code ${code}`,
+        );
+      }
       output[idx--] = tableSuffix[c]!;
       c = tablePrefix[c]!;
     }
@@ -347,7 +395,14 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
 
   function firstChar(code: number): number {
     let c = code;
+    let depth = 0;
     while (c >= 256) {
+      if (++depth > MAX_CHAIN_DEPTH) {
+        throw new DecoderError(
+          'TIFF',
+          `LZW chain corruption detected: prefix chain cycle at code ${code}`,
+        );
+      }
       c = tablePrefix[c]!;
     }
     return c;
@@ -374,6 +429,12 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
 
     if (oldCode === -1) {
       // First code after clear
+      if (code >= 256) {
+        throw new DecoderError(
+          'TIFF',
+          `LZW corruption: first code after clear must be a literal byte (0-255), got ${code}`,
+        );
+      }
       outputString(code);
       oldCode = code;
       continue;
@@ -390,8 +451,8 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
         tableLength[nextCode] = (oldCode < 256 ? 1 : tableLength[oldCode]!) + 1;
         nextCode++;
       }
-    } else {
-      // code === nextCode (special case)
+    } else if (code === nextCode) {
+      // Special case: code === nextCode (string not yet in table)
       const fc = firstChar(oldCode);
 
       // Add new entry first
@@ -404,6 +465,12 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
 
       // Output the new entry
       outputString(code);
+    } else {
+      // code > nextCode: invalid, indicates corrupted LZW data
+      throw new DecoderError(
+        'TIFF',
+        `LZW corruption: received code ${code} but next expected code is ${nextCode}`,
+      );
     }
 
     // Increase code size when needed
@@ -690,10 +757,15 @@ function readFloatSample(srcView: DataView, byteOffset: number, bytesPerSample: 
   } else if (bytesPerSample === 8) {
     // Read float64 and truncate to float32 precision
     return srcView.getFloat64(byteOffset, le);
-  } else {
+  } else if (bytesPerSample === 2) {
     // 2 bytes = 16-bit half float
     const bits = srcView.getUint16(byteOffset, le);
     return float16ToFloat32(bits);
+  } else {
+    throw new DecoderError(
+      'TIFF',
+      `Unsupported bytes per sample: ${bytesPerSample}. Supported: 2 (half-float), 4 (float32), 8 (float64).`,
+    );
   }
 }
 
@@ -790,9 +862,6 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   }
 
   if (bitsPerSample !== 16 && bitsPerSample !== 32 && bitsPerSample !== 64) {
-    console.warn(
-      `TIFF: Unsupported float bits per sample: ${bitsPerSample}. Supported: 16-bit half-float, 32-bit float, 64-bit double.`,
-    );
     throw new DecoderError(
       'TIFF',
       `Unsupported float bits per sample: ${bitsPerSample}. Supported: 16-bit half-float, 32-bit float, 64-bit double.`,
@@ -813,7 +882,6 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
     const msg =
       `Unsupported TIFF compression: ${compression} (${compressionName}). ` +
       `Supported modes: Uncompressed (1), LZW (5), Deflate (8, 32946), PackBits (32773).`;
-    console.warn(`TIFF: ${msg}`);
     throw new DecoderError('TIFF', msg);
   }
 

@@ -3,7 +3,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isGainmapJPEG, parseGainmapJPEG, extractJPEGOrientation } from './JPEGGainmapDecoder';
+import {
+  isGainmapJPEG,
+  parseGainmapJPEG,
+  extractJPEGOrientation,
+  decodeGainmapToFloat32,
+  type GainmapInfo,
+} from './JPEGGainmapDecoder';
+import { DecoderError } from '../core/errors';
 
 // Helper to create a minimal JPEG buffer with SOI marker
 function createJPEGBuffer(): ArrayBuffer {
@@ -15,8 +22,23 @@ function createJPEGBuffer(): ArrayBuffer {
   return buf;
 }
 
-// Helper to create a JPEG buffer with MPF APP2 marker
-function createMPFJPEGBuffer(): ArrayBuffer {
+// Helper to create a JPEG buffer with MPF APP2 marker.
+// When `padToFit` is true (default), the buffer is padded so that MPF offset+size
+// values fit within the buffer. When false, the buffer is minimal and the MPF
+// offset+size values will exceed the buffer length.
+function createMPFJPEGBuffer(options?: {
+  baseSize?: number;
+  gainmapSize?: number;
+  gainmapOffset?: number;
+  padToFit?: boolean;
+}): ArrayBuffer {
+  const {
+    baseSize = 1000,
+    gainmapSize = 500,
+    gainmapOffset: rawGainmapOffset,
+    padToFit = true,
+  } = options ?? {};
+
   // Build a minimal JPEG with MPF marker
   // SOI + APP2(MPF) + EOI
   const parts: number[] = [];
@@ -65,24 +87,47 @@ function createMPFJPEGBuffer(): ArrayBuffer {
 
   // MP Entry 1: Base image (16 bytes)
   // Attributes(4) + Size(4) + Offset(4) + Dep1(2) + Dep2(2)
-  const baseSize = 1000; // dummy
   parts.push(0x00, 0x00, 0x00, 0x00); // attributes
-  parts.push(baseSize & 0xff, (baseSize >> 8) & 0xff, 0x00, 0x00); // size LE
+  parts.push(baseSize & 0xff, (baseSize >> 8) & 0xff, (baseSize >> 16) & 0xff, (baseSize >> 24) & 0xff); // size LE
   parts.push(0x00, 0x00, 0x00, 0x00); // offset (0 for first image)
   parts.push(0x00, 0x00); // dep1
   parts.push(0x00, 0x00); // dep2
 
   // MP Entry 2: Gainmap image (16 bytes)
-  const gainmapSize = 500; // dummy
-  const gainmapOffset = baseSize; // right after base
+  const gainmapOffset = rawGainmapOffset ?? baseSize; // right after base by default
   parts.push(0x00, 0x00, 0x00, 0x00); // attributes
-  parts.push(gainmapSize & 0xff, (gainmapSize >> 8) & 0xff, 0x00, 0x00); // size LE
-  parts.push(gainmapOffset & 0xff, (gainmapOffset >> 8) & 0xff, 0x00, 0x00); // offset LE
+  parts.push(
+    gainmapSize & 0xff,
+    (gainmapSize >> 8) & 0xff,
+    (gainmapSize >> 16) & 0xff,
+    (gainmapSize >> 24) & 0xff,
+  ); // size LE
+  parts.push(
+    gainmapOffset & 0xff,
+    (gainmapOffset >> 8) & 0xff,
+    (gainmapOffset >> 16) & 0xff,
+    (gainmapOffset >> 24) & 0xff,
+  ); // offset LE
   parts.push(0x00, 0x00); // dep1
   parts.push(0x00, 0x00); // dep2
 
   // EOI
   parts.push(0xff, 0xd9);
+
+  // mpfDataStart = 2 (SOI) + 2 (marker) + 2 (length) + 4 (MPF\0) = 10
+  // For entry 2, parsed offset = rawGainmapOffset + mpfDataStart (when rawGainmapOffset != 0)
+  // We need parsed offset + gainmapSize <= total buffer length
+  const mpfDataStart = 10;
+  const parsedGainmapOffset = gainmapOffset === 0 ? baseSize : gainmapOffset + mpfDataStart;
+  const requiredLength = parsedGainmapOffset + gainmapSize;
+
+  if (padToFit && requiredLength > parts.length) {
+    // Pad with zeros so the buffer is large enough
+    const paddingNeeded = requiredLength - parts.length;
+    for (let i = 0; i < paddingNeeded; i++) {
+      parts.push(0x00);
+    }
+  }
 
   const buf = new ArrayBuffer(parts.length);
   const uint8 = new Uint8Array(buf);
@@ -149,6 +194,144 @@ describe('JPEGGainmapDecoder', () => {
       expect(info).not.toBeNull();
       // Default headroom is 2.0 when no XMP is found
       expect(info!.headroom).toBe(2.0);
+    });
+  });
+
+  describe('MPF offset+size overflow validation (MED-34)', () => {
+    it('throws DecoderError when gainmap offset+size exceeds buffer length', () => {
+      // Create a buffer where MPF entries have offset+size larger than the buffer
+      const buf = createMPFJPEGBuffer({
+        baseSize: 1000,
+        gainmapSize: 500,
+        padToFit: false,
+      });
+      // The buffer is only ~74 bytes but claims gainmap at offset ~1010 with size 500
+      expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
+      expect(() => parseGainmapJPEG(buf)).toThrow(/exceeds buffer/);
+    });
+
+    it('throws DecoderError when gainmap size causes overflow at buffer boundary', () => {
+      // Create a buffer where the gainmap offset is valid but offset+size exceeds by 1 byte
+      const buf = createMPFJPEGBuffer({
+        baseSize: 50,
+        gainmapSize: 100,
+        gainmapOffset: 50,
+        padToFit: false,
+      });
+      // parsedOffset = 50 + 10 (mpfDataStart) = 60, size = 100, total = 160
+      // Buffer is only ~74 bytes, so this should throw
+      expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
+    });
+
+    it('does not throw when gainmap offset+size fits exactly within buffer', () => {
+      // Create a buffer padded to exactly fit the MPF entries
+      const buf = createMPFJPEGBuffer({
+        baseSize: 50,
+        gainmapSize: 10,
+        gainmapOffset: 50,
+        padToFit: true,
+      });
+      const info = parseGainmapJPEG(buf);
+      expect(info).not.toBeNull();
+      expect(info!.gainmapLength).toBe(10);
+    });
+
+    it('throws DecoderError with very large offset values', () => {
+      // Use a large offset that would cause overflow-like behavior
+      const buf = createMPFJPEGBuffer({
+        baseSize: 100,
+        gainmapSize: 100,
+        gainmapOffset: 0x7ffffff0, // ~2GB offset
+        padToFit: false,
+      });
+      expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
+    });
+
+    it('throws DecoderError with very large size values', () => {
+      // Use a large size that would cause overflow-like behavior
+      const buf = createMPFJPEGBuffer({
+        baseSize: 100,
+        gainmapSize: 0x7ffffff0, // ~2GB size
+        gainmapOffset: 100,
+        padToFit: false,
+      });
+      expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
+    });
+
+    it('handles zero gainmap size with non-zero offset without throwing', () => {
+      // Zero size is technically valid (the entry just has no data)
+      // parseMPFEntries will set offset=0 for second entry if size=0 only when first entry size > 0
+      // With gainmapOffset non-zero and size=0, offset+size = offset which may or may not fit
+      const buf = createMPFJPEGBuffer({
+        baseSize: 50,
+        gainmapSize: 0,
+        gainmapOffset: 10,
+        padToFit: true,
+      });
+      // offset+size = (10+10)+0 = 20, well within buffer
+      const info = parseGainmapJPEG(buf);
+      expect(info).not.toBeNull();
+      expect(info!.gainmapLength).toBe(0);
+    });
+
+    it('valid MPF JPEG with properly sized buffer parses correctly', () => {
+      const buf = createMPFJPEGBuffer({
+        baseSize: 100,
+        gainmapSize: 50,
+        gainmapOffset: 100,
+        padToFit: true,
+      });
+      const info = parseGainmapJPEG(buf);
+      expect(info).not.toBeNull();
+      expect(info!.baseImageOffset).toBe(0);
+      expect(info!.baseImageLength).toBe(100);
+      expect(info!.gainmapLength).toBe(50);
+      // Gainmap offset = rawOffset (100) + mpfDataStart (10) = 110
+      expect(info!.gainmapOffset).toBe(110);
+      expect(info!.headroom).toBe(2.0);
+    });
+
+    it('throws DecoderError when MPF fix-up (offset=0 -> entries[0].size) produces out-of-bounds', () => {
+      // When entry 2 has offset=0, parseMPFEntries sets it to entries[0].size.
+      // If entries[0].size + entries[1].size > buffer.byteLength, parseGainmapJPEG should throw.
+      // Use gainmapOffset=0 so the fix-up fires: parsed offset becomes baseSize.
+      const buf = createMPFJPEGBuffer({
+        baseSize: 5000,
+        gainmapSize: 5000,
+        gainmapOffset: 0,
+        padToFit: false,
+      });
+      // Buffer is tiny (~74 bytes), but fix-up sets gainmap offset to 5000, size 5000 => 10000 > 74
+      expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
+      expect(() => parseGainmapJPEG(buf)).toThrow(/exceeds buffer/);
+    });
+  });
+
+  describe('decodeGainmapToFloat32 bounds checks', () => {
+    it('throws DecoderError when gainmap slice exceeds buffer', async () => {
+      const smallBuffer = new ArrayBuffer(100);
+      const info: GainmapInfo = {
+        baseImageOffset: 0,
+        baseImageLength: 50,
+        gainmapOffset: 60,
+        gainmapLength: 50, // 60 + 50 = 110 > 100
+        headroom: 2.0,
+      };
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(DecoderError);
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/Gainmap slice exceeds buffer/);
+    });
+
+    it('throws DecoderError when base image slice exceeds buffer', async () => {
+      const smallBuffer = new ArrayBuffer(100);
+      const info: GainmapInfo = {
+        baseImageOffset: 0,
+        baseImageLength: 120, // 0 + 120 = 120 > 100
+        gainmapOffset: 50,
+        gainmapLength: 10, // 50 + 10 = 60 <= 100 (gainmap is fine)
+        headroom: 2.0,
+      };
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(DecoderError);
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/Base image slice exceeds buffer/);
     });
   });
 });

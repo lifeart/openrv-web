@@ -1030,6 +1030,158 @@ describe('PlaybackEngine', () => {
 
       perfNowSpy.mockRestore();
     });
+
+    // --- LOW-21 regression tests: dropped frame counter reset ---
+
+    it('PE-168: droppedFrameCount is preserved after pause (readable post-playback)', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      engine.play();
+      tc.trackDroppedFrame(ts, 7);
+      expect(engine.droppedFrameCount).toBe(7);
+
+      engine.pause();
+      // Counter must be preserved so consumers can read it after playback stops
+      expect(engine.droppedFrameCount).toBe(7);
+    });
+
+    it('PE-169a: droppedFrameCount is preserved after goToFrame (seek)', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      tc.trackDroppedFrame(ts, 4);
+      expect(engine.droppedFrameCount).toBe(4);
+
+      engine.goToFrame(50);
+      expect(engine.droppedFrameCount).toBe(4);
+    });
+
+    it('PE-169b: droppedFrameCount is preserved after setInOutRange', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      tc.trackDroppedFrame(ts, 3);
+      expect(engine.droppedFrameCount).toBe(3);
+
+      engine.setInOutRange(10, 90);
+      expect(engine.droppedFrameCount).toBe(3);
+    });
+
+    it('PE-169c: resetDroppedFrames() manually resets counter', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      tc.trackDroppedFrame(ts, 10);
+      expect(engine.droppedFrameCount).toBe(10);
+
+      engine.resetDroppedFrames();
+      expect(engine.droppedFrameCount).toBe(0);
+    });
+
+    it('PE-169d: droppedFrameCount increments correctly after reset', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      // Accumulate, reset, then accumulate again
+      tc.trackDroppedFrame(ts, 5);
+      expect(engine.droppedFrameCount).toBe(5);
+
+      engine.resetDroppedFrames();
+      expect(engine.droppedFrameCount).toBe(0);
+
+      tc.trackDroppedFrame(ts, 2);
+      expect(engine.droppedFrameCount).toBe(2);
+    });
+
+    it('PE-169e: play-pause-play cycle preserves counter on pause, resets on play', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      engine.play();
+      tc.trackDroppedFrame(ts, 3);
+      expect(engine.droppedFrameCount).toBe(3);
+
+      // Pause preserves counter so consumers can read it
+      engine.pause();
+      expect(engine.droppedFrameCount).toBe(3);
+
+      // New play() resets counter for the new playback segment
+      engine.play();
+      expect(engine.droppedFrameCount).toBe(0);
+
+      tc.trackDroppedFrame(ts, 1);
+      expect(engine.droppedFrameCount).toBe(1);
+
+      engine.pause();
+      expect(engine.droppedFrameCount).toBe(1);
+    });
+
+    it('PE-169f: droppedFrameCount resets only on play() (the sole auto-reset point)', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      tc.trackDroppedFrame(ts, 5);
+      expect(engine.droppedFrameCount).toBe(5);
+
+      // play() is the only automatic reset point (via resetFpsTracking)
+      engine.play();
+      expect(engine.droppedFrameCount).toBe(0);
+    });
+
+    it('PE-169g: droppedFrameCount is readable between pause and next play', () => {
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      engine.play();
+      tc.trackDroppedFrame(ts, 12);
+      engine.pause();
+
+      // Counter remains readable after pause — consumers can inspect it
+      expect(engine.droppedFrameCount).toBe(12);
+
+      // Seeking, range changes do NOT clear it
+      engine.goToFrame(1);
+      expect(engine.droppedFrameCount).toBe(12);
+      engine.setInOutRange(5, 80);
+      expect(engine.droppedFrameCount).toBe(12);
+
+      // Only the next play() clears it
+      engine.play();
+      expect(engine.droppedFrameCount).toBe(0);
+    });
   });
 
   // ---------------------------------------------------------------
