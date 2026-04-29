@@ -856,6 +856,112 @@ describe('JPEGGainmapDecoder', () => {
     });
   });
 
+  describe('MED-30 round 2: 0xB002 count/16 derivation cap', () => {
+    /**
+     * Build a custom MPF JPEG containing only an MPEntry tag (0xB002) with a
+     * caller-controlled `count` field. With no preceding 0xB001 NumberOfImages
+     * tag, the parser's `mpEntryCount === 0` branch fires and derives the
+     * count via `count / 16`. This is the residual MED-30 surface the
+     * HIGH-31 follow-up note called out — even though the buffer-size check
+     * downstream prevents OOB/unbounded loops, a direct cap produces a
+     * clearer error message.
+     *
+     * The buffer is sized large enough that the IFD-entry bounds check
+     * (HIGH-31) does NOT trip — the IFD itself is just one entry. The MPEntry
+     * valueOffset points outside the buffer body, but the cap must fire
+     * BEFORE that bounds check is reached.
+     */
+    function buildMPFWithBareB002(count: number): ArrayBuffer {
+      const parts: number[] = [];
+      parts.push(0xff, 0xd8); // SOI
+      parts.push(0xff, 0xe2); // APP2
+      const lenIdx = parts.length;
+      parts.push(0x00, 0x00); // length placeholder
+      parts.push(0x4d, 0x50, 0x46, 0x00); // 'MPF\0'
+      parts.push(0x49, 0x49); // 'II' little-endian
+      parts.push(0x2a, 0x00); // TIFF magic LE
+      parts.push(0x08, 0x00, 0x00, 0x00); // IFD offset = 8 (rel. to mpfDataStart)
+      // IFD: 1 entry — only 0xB002, no 0xB001 ahead of it
+      parts.push(0x01, 0x00);
+      // Entry: tag 0xB002 (MPEntry), type UNDEFINED(7), count=<arg>, valueOffset=64
+      parts.push(0x02, 0xb0); // tag LE
+      parts.push(0x07, 0x00); // type UNDEFINED
+      parts.push(
+        count & 0xff,
+        (count >>> 8) & 0xff,
+        (count >>> 16) & 0xff,
+        (count >>> 24) & 0xff,
+      ); // count LE
+      parts.push(0x40, 0x00, 0x00, 0x00); // valueOffset = 64 (rel. to mpfDataStart)
+      // Set APP2 segment length
+      const segLen = parts.length - lenIdx;
+      parts[lenIdx] = (segLen >> 8) & 0xff;
+      parts[lenIdx + 1] = segLen & 0xff;
+      parts.push(0xff, 0xd9); // EOI
+
+      const buf = new ArrayBuffer(parts.length);
+      const u8 = new Uint8Array(buf);
+      for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
+      return buf;
+    }
+
+    it('throws descriptive DecoderError when 0xB002 count/16 implies > 256 entries', () => {
+      // MAX_MPF_IFD_ENTRIES + 1 = 257 entries → count = 257 * 16 = 4112
+      const count = (256 + 1) * 16; // 4112
+      const buf = buildMPFWithBareB002(count);
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      const msg = (err as Error).message;
+      // The descriptive cap message must surface the implied entry count
+      // and the cap, not the generic buffer-overflow error.
+      expect(msg).toMatch(/MPEntry table implies/);
+      expect(msg).toContain('257'); // implied entry count
+      expect(msg).toContain('256'); // cap
+      expect(msg).toMatch(/exceeds practical cap/);
+    });
+
+    it('throws descriptive DecoderError for very large 0xB002 count (e.g., 0xFFFFFFF0)', () => {
+      // Hostile file with a near-uint32-max count value. The cap must fire
+      // before any downstream bounds check or loop.
+      const count = 0xfffffff0; // ~268M entries implied
+      const buf = buildMPFWithBareB002(count);
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      const msg = (err as Error).message;
+      expect(msg).toMatch(/MPEntry table implies/);
+      expect(msg).toMatch(/exceeds practical cap/);
+      expect(msg).toContain('256');
+    });
+
+    it('does NOT throw the cap error when 0xB002 count/16 implies exactly the cap (256 entries)', () => {
+      // count = MAX_MPF_IFD_ENTRIES * 16 = 4096 → exactly 256 entries → at
+      // the cap, must be accepted by the cap check. The parser may still
+      // fail later (MPEntry valueOffset points OOB) and throw a different
+      // descriptive error, but the cap-violation error must not raise.
+      const count = 256 * 16; // 4096
+      const buf = buildMPFWithBareB002(count);
+      // The cap-specific error must not fire. Any other DecoderError (e.g.
+      // OOB MPEntry table) is allowed — the buffer is intentionally too
+      // small to actually hold 256 * 16 = 4096 bytes of MP entries.
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        expect(e).toBeInstanceOf(DecoderError);
+        expect((e as Error).message).not.toMatch(/MPEntry table implies/);
+      }
+    });
+  });
+
   describe('MED-28: JPEG segment length spec compliance (ITU-T T.81 §B.1.1.4)', () => {
     /**
      * MED-28 background: the four marker-scanning loops (`findMPFMarkerOffset`,

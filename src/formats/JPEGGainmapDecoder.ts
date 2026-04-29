@@ -558,6 +558,17 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
       // Each entry is 16 bytes; count is byte length, not entry count
       if (mpEntryCount === 0) {
         mpEntryCount = Math.floor(count / 16);
+        // MED-30 round 2: cap the count/16 derivation explicitly. The
+        // buffer-size check below already prevents OOB and unbounded loops
+        // here, but a direct cap surfaces a clearer "exceeds practical cap"
+        // error when 0xB002 appears before 0xB001 (or 0xB001 is missing) and
+        // an attacker supplies a huge `count`. Mirrors the 0xB001 cap above.
+        if (mpEntryCount > MAX_MPF_IFD_ENTRIES) {
+          throw new DecoderError(
+            'JPEG Gainmap',
+            `MPF: MPEntry table implies ${mpEntryCount} entries, exceeds practical cap ${MAX_MPF_IFD_ENTRIES}`,
+          );
+        }
       }
       // If data > 4 bytes, valueOffset is relative to mpfDataStart
       mpEntryOffset = mpfDataStart + valueOffset;
