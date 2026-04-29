@@ -10,6 +10,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { BackgroundPatternType, BackgroundPatternState } from '../../core/types/background';
 export { DEFAULT_BACKGROUND_PATTERN_STATE, PATTERN_COLORS } from '../../core/types/background';
@@ -30,16 +31,15 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
   private dropdown: HTMLElement;
   private state: BackgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
   private isOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   /** Tracks previous pattern before toggling to checker, for toggle-back */
   private previousPattern: BackgroundPatternType = 'black';
 
   constructor() {
     super();
 
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
     this.boundHandleKeydown = (e: KeyboardEvent) => this.handleDropdownKeydown(e);
 
@@ -451,7 +451,14 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
     // Rebuild to reflect current state
     this.buildDropdown();
 
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.dropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+    });
+    // Navigation keydown listener stays — registry only owns Escape (handled
+    // via dismissOnEscape: true). The Escape branch in handleDropdownKeydown
+    // is now redundant but harmless (registry fires first via capture).
     document.addEventListener('keydown', this.boundHandleKeydown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
@@ -463,7 +470,8 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonStyle();
 
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     document.removeEventListener('keydown', this.boundHandleKeydown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
@@ -475,14 +483,10 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
     this.dropdown.style.left = `${rect.left}px`;
   }
 
-  private handleOutsideClick(e: MouseEvent): void {
-    const target = e.target as HTMLElement;
-    if (!this.dropdown.contains(target) && !this.button.contains(target)) {
-      this.closeDropdown();
-    }
-  }
-
   private handleDropdownKeydown(e: KeyboardEvent): void {
+    // Note: Escape is also handled by OutsideClickRegistry.dismissOnEscape.
+    // This branch remains for legacy parity but the registry will close the
+    // dropdown first (capture phase).
     if (e.key === 'Escape') {
       this.closeDropdown();
       return;

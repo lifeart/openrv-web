@@ -15,6 +15,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { type StereoAlignMode, DEFAULT_STEREO_ALIGN_MODE, STEREO_ALIGN_MODES } from '../../stereo/StereoEyeTransform';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface StereoAlignControlEvents extends EventMap {
   alignModeChanged: StereoAlignMode;
@@ -34,14 +35,13 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
   private dropdown: HTMLElement;
   private mode: StereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
   private isDropdownOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private _cleanupA11y: (() => void) | null = null;
 
   constructor() {
     super();
 
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
 
     // Container
@@ -143,16 +143,6 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
     this.updateButtonStyle();
   }
 
-  private handleOutsideClick(e: MouseEvent): void {
-    if (
-      this.isDropdownOpen &&
-      !this.alignButton.contains(e.target as Node) &&
-      !this.dropdown.contains(e.target as Node)
-    ) {
-      this.closeDropdown();
-    }
-  }
-
   private positionDropdown(): void {
     if (!this.isDropdownOpen) return;
     const rect = this.alignButton.getBoundingClientRect();
@@ -205,7 +195,11 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
     this.alignButton.style.background = 'var(--bg-hover)';
     this.alignButton.style.borderColor = 'var(--border-primary)';
 
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.dropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+    });
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -216,7 +210,8 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
     this.alignButton.setAttribute('aria-expanded', 'false');
     this.updateButtonStyle();
 
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }

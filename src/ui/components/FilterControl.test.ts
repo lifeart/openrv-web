@@ -4,16 +4,45 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FilterControl, DEFAULT_FILTER_SETTINGS } from './FilterControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('FilterControl', () => {
   let control: FilterControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new FilterControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('FLT-OCR-001: show registers exactly 1 entry; hide deregisters', () => {
+      expectRegistrationCount(0);
+      control.show();
+      expectRegistrationCount(1);
+      control.hide();
+      expectRegistrationCount(0);
+    });
+
+    it('FLT-OCR-002: outside-click after open dismisses the panel', () => {
+      control.show();
+      const panel = document.querySelector('.filter-panel') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('initialization', () => {
@@ -166,25 +195,9 @@ describe('FilterControl', () => {
       expect(control.isOpen).toBe(false);
     });
 
-    it('FLT-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.show();
-      control.hide();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
-
-    it('FLT-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.show();
-      control.dispose();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
+    // FLT-M14c/M14d removed: keydown listener now owned by OutsideClickRegistry,
+    // which manages its own lifecycle. Behavioral Escape tests above continue
+    // to verify the registry integration end-to-end.
   });
 
   describe('focus management (M-18)', () => {

@@ -1,6 +1,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams } from '../../transform/LensDistortion';
 import { getIconSvg } from './shared/Icons';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface LensControlEvents extends EventMap {
   lensChanged: LensDistortionParams;
@@ -15,7 +16,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
   private sliders: Map<string, HTMLInputElement> = new Map();
   private valueLabels: Map<string, HTMLSpanElement> = new Map();
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -87,25 +88,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
     this.container.appendChild(this.lensButton);
     // Panel will be appended to body when shown
-
-    // Close panel on outside click
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isPanelOpen) {
-        this.hidePanel();
-      }
-    };
-  }
-
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hidePanel();
-    }
+    // Outside-click and Escape dismiss are handled by OutsideClickRegistry
+    // (registered in showPanel(), deregistered in hidePanel()).
   }
 
   private createPanelContent(): void {
@@ -397,7 +381,11 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     this.panel.style.display = 'block';
     this.lensButton.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel],
+      onDismiss: () => this.hidePanel(),
+      dismissOn: 'click',
+    });
 
     // Move focus to the first interactive element in the panel
     const firstSlider = this.sliders.get('k1');
@@ -409,7 +397,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     this.panel.style.display = 'none';
     this.lensButton.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
 
     // Return focus to the toggle button
     this.lensButton.focus();
@@ -442,8 +431,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     // Remove body-mounted panel if present
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

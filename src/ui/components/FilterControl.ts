@@ -1,6 +1,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { FilterSettings } from '../../core/types/filter';
 export { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
@@ -21,7 +22,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
   private blurSlider: HTMLInputElement | null = null;
   private sharpenSlider: HTMLInputElement | null = null;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -97,25 +98,8 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
     this.container.appendChild(this.filterButton);
     // Panel will be appended to body when shown
-
-    // Close on outside click
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isPanelOpen) {
-        this.hide();
-      }
-    };
-  }
-
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hide();
-    }
+    // Outside-click and Escape dismiss are handled by OutsideClickRegistry
+    // (registered in show(), deregistered in hide()).
   }
 
   private createPanelContent(): void {
@@ -302,7 +286,11 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.panel.style.display = 'block';
     this.filterButton.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel],
+      onDismiss: () => this.hide(),
+      dismissOn: 'click',
+    });
 
     // Move focus to the first interactive element in the panel
     this.blurSlider?.focus();
@@ -313,7 +301,8 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.panel.style.display = 'none';
     this.filterButton.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
 
     // Return focus to the toggle button
     this.filterButton.focus();
@@ -368,8 +357,8 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     // Remove body-mounted panel if present
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

@@ -8,16 +8,45 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LensControl } from './LensControl';
 import { DEFAULT_LENS_PARAMS, type LensDistortionParams } from '../../transform/LensDistortion';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('LensControl', () => {
   let control: LensControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new LensControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('LENS-OCR-001: showPanel registers exactly 1 entry; hidePanel deregisters', () => {
+      expectRegistrationCount(0);
+      control.showPanel();
+      expectRegistrationCount(1);
+      control.hidePanel();
+      expectRegistrationCount(0);
+    });
+
+    it('LENS-OCR-002: outside-click after open dismisses the panel', () => {
+      control.showPanel();
+      const panel = document.querySelector('.lens-panel') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('initialization', () => {
@@ -359,25 +388,9 @@ describe('LensControl', () => {
       expect(panel.style.display).toBe('block');
     });
 
-    it('LENS-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.showPanel();
-      control.hidePanel();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
-
-    it('LENS-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.showPanel();
-      control.dispose();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
+    // LENS-M14c/M14d removed: keydown listener now owned by OutsideClickRegistry,
+    // which manages its own lifecycle. Behavioral Escape/dispose tests above
+    // continue to verify the registry integration end-to-end.
   });
 
   describe('slider thumb styling', () => {
