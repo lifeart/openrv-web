@@ -3538,3 +3538,86 @@ describe('Renderer renderTiledImages GL state restore', () => {
     expect(lastViewportCall).toEqual([50, 60, 1024, 768]);
   });
 });
+
+/**
+ * MED-51 PR-1 Phase 4 — Renderer last-input-transfer accessor.
+ *
+ * `getLastInputTransferCodeForTest()` exposes the most recent
+ * `u_inputTransfer` uniform value bound during a render call so that the
+ * LUT output color-space cascade can be verified end-to-end without
+ * spying on individual `setUniformInt` calls. The accessor is `@internal`
+ * — test-only.
+ */
+describe('Renderer last-input-transfer accessor (MED-51)', () => {
+  it('REN-LIN-002: renderImage with transferFunction "pq" sets INPUT_TRANSFER_PQ (code 2)', () => {
+    const renderer = new Renderer();
+    initRendererWithMockGL(renderer);
+    renderer.resize(10, 10);
+
+    const image = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+      metadata: { transferFunction: 'pq' },
+    });
+    renderer.renderImage(image);
+
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(2);
+  });
+
+  it('REN-LIN-003: renderImage with transferFunction "linear" maps to INPUT_TRANSFER_SRGB (code 0, identity)', () => {
+    const renderer = new Renderer();
+    initRendererWithMockGL(renderer);
+    renderer.resize(10, 10);
+
+    const image = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+      metadata: { transferFunction: 'linear' },
+    });
+    renderer.renderImage(image);
+
+    // Linear is treated as identity by the shader's INPUT_TRANSFER_SRGB path.
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(0);
+  });
+
+  it('REN-LIN-004: with no transferFunction set, accessor returns the default (sRGB code 0)', () => {
+    const renderer = new Renderer();
+    // Pre-render: default initial value is sRGB (0).
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(0);
+
+    initRendererWithMockGL(renderer);
+    renderer.resize(10, 10);
+
+    const image = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+      // No metadata.transferFunction — falls through to default sRGB.
+    });
+    renderer.renderImage(image);
+
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(0);
+  });
+
+  it('REN-LIN-005: renderImage with transferFunction "hlg" sets INPUT_TRANSFER_HLG (code 1)', () => {
+    const renderer = new Renderer();
+    initRendererWithMockGL(renderer);
+    renderer.resize(10, 10);
+
+    const image = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+      metadata: { transferFunction: 'hlg' },
+    });
+    renderer.renderImage(image);
+
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(1);
+  });
+});

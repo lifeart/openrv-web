@@ -232,6 +232,11 @@ export class Renderer implements RendererBackend {
   private _userFlipH = false;
   private _userFlipV = false;
 
+  // Last `u_inputTransfer` code bound during a render call (test-only).
+  // Tracked so MED-51 cascade behavior can be verified end-to-end without
+  // having to mock-and-spy on individual uniform calls.
+  private _lastInputTransferCode: number = INPUT_TRANSFER_SRGB;
+
   /** Expose the underlying WebGL2 context for direct readback (e.g. scope canvas capture). */
   getGL(): WebGL2RenderingContext | null {
     return this.gl;
@@ -626,6 +631,7 @@ export class Renderer implements RendererBackend {
       inputTransferCode = INPUT_TRANSFER_SRGB;
     }
     this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
+    this._lastInputTransferCode = inputTransferCode;
 
     // Debug: log shader uniforms for HDR pipeline diagnosis (once per texture update)
     if (image.textureNeedsUpdate === false) {
@@ -1462,6 +1468,19 @@ export class Renderer implements RendererBackend {
    */
   getHDRHeadroom(): number {
     return this.hdrHeadroom;
+  }
+
+  /**
+   * Returns the last `u_inputTransfer` code that was bound during a render
+   * call. Used by E2E and unit tests to verify the MED-51 LUT output color
+   * space cascade resolves to the expected EOTF code at the renderer boundary.
+   *
+   * Codes follow the `INPUT_TRANSFER_*` constants in `ShaderConstants.ts`.
+   *
+   * @internal Test-only. Not part of the public API.
+   */
+  getLastInputTransferCodeForTest(): number {
+    return this._lastInputTransferCode;
   }
 
   /**
