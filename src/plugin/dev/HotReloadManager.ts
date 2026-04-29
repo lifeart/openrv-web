@@ -53,12 +53,25 @@ export class HotReloadManager {
 
     this.reloading.add(pluginId);
     try {
-      // 1. Capture state if available
+      // 1. Capture state if available.
+      //
+      // The plugin contract says getState() should return a copy, but defensively
+      // structuredClone the captured state. This protects against:
+      //   - Plugins that accidentally return a reference to live state
+      //   - Concurrent mutation of state during the capture/restore window
+      //   - Subsequent code paths (or the new plugin's restoreState) mutating
+      //     the snapshot back into the old plugin's live state
+      //
+      // structuredClone handles Maps, Sets, ArrayBuffers, typed arrays, etc.
+      // If state contains non-cloneable values (functions, DOM nodes, class
+      // instances), structuredClone throws DataCloneError; we fall back to the
+      // raw reference with a console.warn so dev can fix their getState().
       const plugin = this.registry.getPlugin(pluginId);
       let savedState: unknown = undefined;
       if (plugin && 'getState' in plugin && typeof plugin.getState === 'function') {
         try {
-          savedState = plugin.getState();
+          const rawState = plugin.getState();
+          savedState = deepCloneState(rawState, pluginId);
         } catch (err) {
           console.warn(`[hot-reload:${pluginId}] getState() threw:`, err);
         }
@@ -109,5 +122,49 @@ export class HotReloadManager {
    */
   isTracked(pluginId: PluginId): boolean {
     return this.pluginURLs.has(pluginId);
+  }
+}
+
+/**
+ * Defensively deep-clone plugin state captured for hot-reload.
+ *
+ * `null` and `undefined` short-circuit (nothing to clone). Primitives also
+ * short-circuit since structuredClone is unnecessary work for them.
+ *
+ * If structuredClone throws (e.g., DataCloneError for functions, DOM nodes,
+ * or class instances), we log a warning and return the raw reference. This
+ * preserves the prior behavior — a hot-reload that *would* have worked
+ * before this hardening continues to work — while alerting the developer
+ * that their getState() should return a structurally cloneable value.
+ *
+ * Errors are not silently swallowed: the warn is gated behind a real failure
+ * mode and includes the cause.
+ */
+function deepCloneState(state: unknown, pluginId: PluginId): unknown {
+  if (state === null || state === undefined) {
+    return state;
+  }
+  // Primitives are immutable; cloning is a no-op.
+  if (typeof state !== 'object' && typeof state !== 'function') {
+    return state;
+  }
+  // structuredClone is available in Node 17+ and all modern browsers.
+  // Guard for the unlikely case it's missing (e.g., old test runners).
+  if (typeof structuredClone !== 'function') {
+    console.warn(
+      `[hot-reload:${pluginId}] structuredClone unavailable; using raw state reference. ` +
+        `Plugin getState() should return a copy per contract.`,
+    );
+    return state;
+  }
+  try {
+    return structuredClone(state);
+  } catch (err) {
+    console.warn(
+      `[hot-reload:${pluginId}] structuredClone failed (state contains non-cloneable values); ` +
+        `falling back to raw reference. Plugin getState() should return a structurally cloneable copy.`,
+      err,
+    );
+    return state;
   }
 }
