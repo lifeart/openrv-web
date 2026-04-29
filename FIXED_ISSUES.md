@@ -5361,3 +5361,27 @@ Each error is descriptive — names the actual count and the cap.
 **Known follow-ups** (separate tickets, not blockers):
 - Snap-to-common-FPS at `MediabunnyFrameExtractor.ts:111-117` aliases 24→23.976, 30→29.97, 60→59.94 due to wide tolerance (0.5) + first-match-wins ordering. New MED-42 tests codify the current behavior; a fix should change to nearest-match.
 - For trimmed videos where first PTS is t0>0, the `(N-1)/lastTimestamp` formula understates FPS. Pre-existing assumption ("first frame at t=0") documented in JSDoc.
+
+## Issue #378: LOW-24 — Midtone mask integer rounding precision
+
+**Root cause**: The clarity effect's midtone weighting used a 256-entry uint8-indexed LUT looked up via `Math.round(luminance)`. Any two luminances in the same uint8 bin (e.g. 60.2 and 60.4) got the same mask weight, producing visible plateaus / banding in smooth gradients — particularly for HDR / float pipelines where the input precision exceeds 8 bits. Three call sites had the same defect: the worker (full-res + half-res clarity loops), `EffectProcessor` (sync, half-res, async-chunked), and `ViewerEffects.applyClarity` (consumed by `ClarityNode`).
+
+**Fix**: Extracted a shared `computeMidtoneMaskValue(normalizedLum: number): number` helper in `src/utils/effects/effectProcessing.shared.ts` computing the smooth formula `1 - (|n - 0.5| * 2)^2` in float precision (mathematically identical to the LUT's shape but without quantization). All three call sites updated to use the shared helper. Worker and EffectProcessor inline the formula in tight per-pixel loops for performance; ViewerEffects calls the helper per pixel (less hot path). Plateau count on a 1024-sample sweep drops from 769 to 1 (the mathematical peak). Removed dead code: `EffectProcessor.midtoneMask` static cache + `getMidtoneMask()` method. Worker `getMidtoneMask` LUT retained for back-compat with tests.
+
+**Tests added**:
+- `src/workers/effectProcessor.worker.buffers.test.ts`: 6 LOW24-NNN tests covering edge cases, clamping, LUT-vs-formula consistency, plateau-free monotonic sweep, sub-pixel divergence from legacy lookup, 1024-step ramp.
+- `src/utils/effects/EffectProcessor.test.ts`: EP-051 rewritten as behavioral midtone-peak test; EP-052 added as end-to-end precision test that builds a checkerboard near uint8 bin centers and asserts `applyEffects` output diverges from a legacy `LUT[Math.round(luma)]` reference.
+
+**Files changed**:
+- `src/utils/effects/effectProcessing.shared.ts` (new shared helper)
+- `src/workers/effectProcessor.worker.ts`
+- `src/utils/effects/EffectProcessor.ts`
+- `src/ui/components/ViewerEffects.ts`
+- `src/workers/effectProcessor.worker.buffers.test.ts`
+- `src/utils/effects/EffectProcessor.test.ts`
+
+**Verification**:
+- 9486 tests across workers + utils/effects + ui/components + nodes/effects passing.
+- 26083 tests passing in full suite.
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 6 LOW24 tests fail on pre-fix code.
