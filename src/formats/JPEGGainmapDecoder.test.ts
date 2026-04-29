@@ -710,8 +710,11 @@ describe('JPEGGainmapDecoder', () => {
       return buf;
     }
 
-    it('throws DecoderError when NumberOfImages exceeds 65535 sanity cap', () => {
-      const buf = buildMPFWithNumberOfImages(0x10_0000); // 1,048,576 — well above 65535
+    it('throws DecoderError when NumberOfImages exceeds 256 practical cap', () => {
+      // MED-30 tightened the previous 65535 cap (HIGH-31) to 256 so that the
+      // limit matches the IFD entry-count cap and reflects what real MPF
+      // gainmap JPEGs actually produce (2-4 sub-images).
+      const buf = buildMPFWithNumberOfImages(0x10_0000); // 1,048,576 — well above 256
       let err: unknown;
       try {
         parseGainmapJPEG(buf);
@@ -720,22 +723,136 @@ describe('JPEGGainmapDecoder', () => {
       }
       expect(err).toBeInstanceOf(DecoderError);
       expect((err as Error).message).toMatch(/NumberOfImages/);
-      expect((err as Error).message).toMatch(/65535/);
+      expect((err as Error).message).toMatch(/256/);
     });
 
     it('throws DecoderError when NumberOfImages is 0xFFFFFFFF (uint32 max)', () => {
       const buf = buildMPFWithNumberOfImages(0xffffffff);
       expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
-      expect(() => parseGainmapJPEG(buf)).toThrow(/65535/);
+      expect(() => parseGainmapJPEG(buf)).toThrow(/256/);
     });
 
-    it('accepts NumberOfImages at the cap (65535)', () => {
-      // 65535 is the max accepted value — it shouldn't trip the sanity check.
+    it('throws DecoderError when NumberOfImages is just above the cap (257)', () => {
+      const buf = buildMPFWithNumberOfImages(257);
+      expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
+      expect(() => parseGainmapJPEG(buf)).toThrow(/NumberOfImages/);
+      expect(() => parseGainmapJPEG(buf)).toThrow(/256/);
+    });
+
+    it('accepts NumberOfImages at the cap (256)', () => {
+      // 256 is the max accepted value — it shouldn't trip the sanity check.
       // The parser will then fail later when it can't find a valid MPEntry table,
       // returning null rather than throwing — that's the documented graceful path.
-      const buf = buildMPFWithNumberOfImages(65535);
+      const buf = buildMPFWithNumberOfImages(256);
       // Should not throw the sanity-cap error; may return null (no MPEntry table).
-      expect(() => parseGainmapJPEG(buf)).not.toThrow(/65535/);
+      expect(() => parseGainmapJPEG(buf)).not.toThrow(/exceeds practical cap/);
+    });
+  });
+
+  describe('MED-30: IFD entry count cap', () => {
+    /**
+     * Build a custom MPF JPEG with an arbitrary IFD entry count and matching
+     * (zero-filled) entry payload. Used to drive the new MED-30 cap which
+     * rejects entry counts > MAX_MPF_IFD_ENTRIES (256).
+     *
+     * The buffer is sized so the entry-array bounds check (HIGH-31) does NOT
+     * trip — the IFD entries themselves fit in the buffer. This is the whole
+     * point of MED-30: a hostile file CAN allocate enough bytes to satisfy
+     * the bounds check while still forcing the parser into an absurd loop.
+     */
+    function buildMPFWithIFDEntryCount(entryCount: number): ArrayBuffer {
+      // 8-byte TIFF header + 2-byte entry count + N * 12-byte entries + EOI
+      const tiffHeaderSize = 8;
+      const entryCountSize = 2;
+      const entriesSize = entryCount * 12;
+      const segmentDataLen = 4 /* MPF\0 */ + tiffHeaderSize + entryCountSize + entriesSize;
+      const segmentLen = segmentDataLen + 2; // includes its own 2 bytes
+
+      const parts: number[] = [];
+      parts.push(0xff, 0xd8); // SOI
+      parts.push(0xff, 0xe2); // APP2
+      parts.push((segmentLen >> 8) & 0xff, segmentLen & 0xff);
+      parts.push(0x4d, 0x50, 0x46, 0x00); // 'MPF\0'
+      // mpfDataStart is at offset 10
+      parts.push(0x49, 0x49); // 'II' little-endian
+      parts.push(0x2a, 0x00); // TIFF magic LE
+      parts.push(0x08, 0x00, 0x00, 0x00); // IFD offset = 8 (relative to mpfDataStart)
+      // Entry count (uint16 LE)
+      parts.push(entryCount & 0xff, (entryCount >>> 8) & 0xff);
+      // Entry payload — all zeros (tag=0, type=0, count=0, valueOffset=0)
+      // Real entries don't matter for testing the count cap; the parser must
+      // reject before iterating.
+      for (let i = 0; i < entryCount; i++) {
+        for (let j = 0; j < 12; j++) parts.push(0x00);
+      }
+      parts.push(0xff, 0xd9); // EOI
+
+      const buf = new ArrayBuffer(parts.length);
+      const u8 = new Uint8Array(buf);
+      for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
+      return buf;
+    }
+
+    it('throws DecoderError when IFD entry count is 65535 (uint16 max)', () => {
+      // The pathological case the cap is meant to defend against: maximum
+      // possible uint16 value, which would force 65535 loop iterations.
+      const buf = buildMPFWithIFDEntryCount(65535);
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      expect((err as Error).message).toMatch(/IFD entry count/);
+      expect((err as Error).message).toMatch(/65535/);
+      expect((err as Error).message).toMatch(/256/);
+    });
+
+    it('throws DecoderError when IFD entry count is 257 (cap + 1)', () => {
+      // Just over the cap — must still throw with a descriptive error.
+      const buf = buildMPFWithIFDEntryCount(257);
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      expect((err as Error).message).toMatch(/IFD entry count/);
+      expect((err as Error).message).toMatch(/257/);
+      expect((err as Error).message).toMatch(/256/);
+    });
+
+    it('does NOT throw the IFD-cap error when entry count is 256 (cap)', () => {
+      // Exactly at the cap — should be accepted by MED-30. The parser may
+      // still fail later (no valid MPEntry tag) and return null; what matters
+      // is that the cap-violation error is not raised.
+      const buf = buildMPFWithIFDEntryCount(256);
+      expect(() => parseGainmapJPEG(buf)).not.toThrow(/IFD entry count/);
+    });
+
+    it('does NOT throw when entry count is 4 (typical real-world MPF)', () => {
+      // A typical gainmap JPEG declares 2-4 IFD entries. The cap must not
+      // reject the common case.
+      const buf = buildMPFWithIFDEntryCount(4);
+      expect(() => parseGainmapJPEG(buf)).not.toThrow(/IFD entry count/);
+    });
+
+    it('error message includes the actual entry count and the cap', () => {
+      // Round-2 review constraint: don't just throw — describe the actual
+      // count and the cap so the message is useful for debugging hostile files.
+      const buf = buildMPFWithIFDEntryCount(1000);
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      const msg = (err as Error).message;
+      expect(msg).toContain('1000'); // actual count
+      expect(msg).toContain('256'); // cap
     });
   });
 

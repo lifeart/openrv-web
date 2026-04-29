@@ -329,6 +329,28 @@ interface MPFImageEntry {
 }
 
 /**
+ * Maximum number of IFD entries (TIFF-style tag entries) we are willing to
+ * iterate through in the MPF index IFD before giving up.
+ *
+ * Rationale (MED-30): the IFD entry count is a uint16 read directly from the
+ * file, so a hostile file can declare up to 65535 entries. Even after
+ * `ensureMPFRange` (HIGH-31) prevents out-of-bounds reads on the entry array
+ * itself, the loop still does 65535 iterations of three DataView reads each,
+ * which is wasted CPU on a corrupt input.
+ *
+ * CIPA DC-007 / ISO 21496-1 don't formally cap this count, but practical MPF
+ * gainmap JPEGs have 2-4 entries (NumberOfImages, MPEntry, ImageUIDList,
+ * TotalFrames). 256 is two orders of magnitude above any real file's entry
+ * count and well below the threshold where iteration cost matters.
+ *
+ * Also reused as the cap for NumberOfImages (tag 0xB001): the previous 65535
+ * limit from HIGH-31 was a uint16 ceiling rather than a practical cap. A
+ * single MPF file with > 256 sub-images is not something we want to spend
+ * cycles on either.
+ */
+const MAX_MPF_IFD_ENTRIES = 256;
+
+/**
  * Throws a DecoderError if a [start, end) byte range falls outside [0, bufferLength].
  *
  * Catches three failure modes that ArrayBuffer.slice would otherwise silently
@@ -481,6 +503,20 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
   // Read number of IFD entries
   const entryCount = view.getUint16(ifdStart, isLittleEndian);
 
+  // MED-30: the entry count is a uint16, so without an explicit cap the loop
+  // below could do up to 65535 iterations on a hostile input. Even after the
+  // HIGH-31 `ensureMPFRange` check forces such a file to be ~786 KB to even
+  // reach the loop, that's still uncapped CPU work derived from attacker-
+  // controlled bytes. Reject early with a descriptive error; real MPF files
+  // never have more than a handful of IFD entries.
+  if (entryCount > MAX_MPF_IFD_ENTRIES) {
+    throw new DecoderError(
+      'JPEG Gainmap',
+      `MPF: IFD entry count ${entryCount} exceeds practical cap ${MAX_MPF_IFD_ENTRIES} ` +
+        `(real MPF gainmap JPEGs have 2-4 entries; this is likely a corrupt or hostile file)`,
+    );
+  }
+
   // Bounds-check the entire IFD-entry array up front. Each entry is 12 bytes.
   if (entryCount > 0) {
     ensureMPFRange(ifdStart + 2, entryCount * 12, bufferLength, `IFD with ${entryCount} entries`);
@@ -500,14 +536,18 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
     if (tag === 0xb001) {
       // NumberOfImages tag: type=LONG, count=1
       // The value field contains the actual number of images.
-      // MPF practically caps the image count at uint16 range; values larger
-      // than 65535 are either corrupt or hostile (e.g., a uint32 wrap into
-      // the giga-range that would later survive `ensureMPFRange` only if the
-      // file were also massive). Short-circuit with a descriptive error.
-      if (valueOffset > 65535) {
+      //
+      // MED-30: tighten the previous HIGH-31 cap (65535, the uint16 ceiling)
+      // to MAX_MPF_IFD_ENTRIES (256). NumberOfImages and the IFD entry count
+      // are conceptually different fields, but both share the same property:
+      // real MPF gainmap JPEGs only have a handful of sub-images, and
+      // allowing values up to 65535 means later loops can still grind through
+      // attacker-controlled byte counts. Use the same practical cap.
+      if (valueOffset > MAX_MPF_IFD_ENTRIES) {
         throw new DecoderError(
           'JPEG Gainmap',
-          `MPF: NumberOfImages (tag 0xB001) value ${valueOffset} exceeds sanity cap 65535`,
+          `MPF: NumberOfImages (tag 0xB001) value ${valueOffset} exceeds practical cap ${MAX_MPF_IFD_ENTRIES} ` +
+            `(real MPF gainmap JPEGs have 2-4 sub-images)`,
         );
       }
       mpEntryCount = valueOffset;
