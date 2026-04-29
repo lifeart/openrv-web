@@ -29,8 +29,8 @@ export function createRenderer(caps: DisplayCapabilities): RendererBackend {
   if (caps.webgpuAvailable && caps.webgpuHDR) {
     try {
       return new WebGPUBackend();
-    } catch {
-      // WebGPU construction failed; fall through to WebGL2
+    } catch (err) {
+      console.warn('[createRenderer] WebGPU construction failed, falling back to WebGL2:', err);
     }
   }
   return new Renderer();
