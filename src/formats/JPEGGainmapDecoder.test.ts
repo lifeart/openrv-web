@@ -297,6 +297,267 @@ describe('JPEGGainmapDecoder', () => {
     });
   });
 
+  describe('HIGH-31: explicit MPF bounds-check errors', () => {
+    /**
+     * Build a JPEG buffer with a manually crafted MPF box. Caller specifies the
+     * exact ifdOffset (relative to mpfDataStart), the IFD entries, and the MP
+     * entries — letting us exercise specific overflow scenarios that the
+     * higher-level helper above can't reach.
+     */
+    function buildCustomMPF(opts: {
+      ifdOffset: number; // relative to mpfDataStart
+      ifdEntries: { tag: number; type: number; count: number; valueOffset: number }[];
+      mpEntries?: { size: number; offset: number }[];
+      mpEntriesOffsetOverride?: number; // override MPEntry valueOffset (relative to mpfDataStart)
+      truncateAt?: number; // truncate the buffer to this many bytes
+      totalSize?: number; // pad/expand the buffer to this size (after construction)
+    }): ArrayBuffer {
+      const parts: number[] = [];
+      // SOI
+      parts.push(0xff, 0xd8);
+      // APP2 marker
+      parts.push(0xff, 0xe2);
+      // Length placeholder (filled later)
+      const lenIdx = parts.length;
+      parts.push(0x00, 0x00);
+      // 'MPF\0'
+      parts.push(0x4d, 0x50, 0x46, 0x00);
+      // mpfDataStart = 10 from start of file
+      const mpfDataStart = parts.length; // 10
+      // 'II' little-endian
+      parts.push(0x49, 0x49);
+      // TIFF magic 0x002A LE
+      parts.push(0x2a, 0x00);
+      // IFD offset (LE)
+      const ifdOff = opts.ifdOffset;
+      parts.push(ifdOff & 0xff, (ifdOff >> 8) & 0xff, (ifdOff >> 16) & 0xff, (ifdOff >>> 24) & 0xff);
+
+      // Pad to ifdStart if it's beyond current position — but cap the padding
+      // so we don't try to allocate gigabytes when testing OOB ifdOffset values.
+      const ifdStartAbs = mpfDataStart + ifdOff;
+      const PAD_CAP = 4096;
+      const padTarget = Math.min(ifdStartAbs, parts.length + PAD_CAP);
+      while (parts.length < padTarget) parts.push(0x00);
+
+      // If ifdStartAbs is far beyond what we padded to, the IFD entries simply
+      // won't be reachable from the buffer — that's the OOB scenario we want.
+      const ifdReachable = parts.length >= ifdStartAbs;
+      // IFD entry count (only written if reachable)
+      if (ifdReachable) {
+        parts.push(opts.ifdEntries.length & 0xff, (opts.ifdEntries.length >> 8) & 0xff);
+      }
+      // IFD entries (only written if reachable)
+      for (const e of ifdReachable ? opts.ifdEntries : []) {
+        parts.push(e.tag & 0xff, (e.tag >> 8) & 0xff);
+        parts.push(e.type & 0xff, (e.type >> 8) & 0xff);
+        parts.push(e.count & 0xff, (e.count >> 8) & 0xff, (e.count >> 16) & 0xff, (e.count >>> 24) & 0xff);
+        parts.push(
+          e.valueOffset & 0xff,
+          (e.valueOffset >> 8) & 0xff,
+          (e.valueOffset >> 16) & 0xff,
+          (e.valueOffset >>> 24) & 0xff,
+        );
+      }
+
+      // Optionally write MP entries at the requested offset
+      if (opts.mpEntries) {
+        const mpEntriesAbs = mpfDataStart + (opts.mpEntriesOffsetOverride ?? parts.length - mpfDataStart);
+        while (parts.length < mpEntriesAbs) parts.push(0x00);
+        for (const me of opts.mpEntries) {
+          // attributes(4)
+          parts.push(0x00, 0x00, 0x00, 0x00);
+          // size(4) LE
+          parts.push(me.size & 0xff, (me.size >> 8) & 0xff, (me.size >> 16) & 0xff, (me.size >>> 24) & 0xff);
+          // offset(4) LE
+          parts.push(me.offset & 0xff, (me.offset >> 8) & 0xff, (me.offset >> 16) & 0xff, (me.offset >>> 24) & 0xff);
+          // dep1(2), dep2(2)
+          parts.push(0x00, 0x00, 0x00, 0x00);
+        }
+      }
+
+      // Set APP2 segment length to cover from the length field through the MPF body.
+      // (Required so findMPFMarkerOffset doesn't walk past the end.)
+      const appBodyEnd = parts.length;
+      const segLen = appBodyEnd - lenIdx; // length field includes itself
+      parts[lenIdx] = (segLen >> 8) & 0xff;
+      parts[lenIdx + 1] = segLen & 0xff;
+
+      // EOI
+      parts.push(0xff, 0xd9);
+
+      let finalLen = parts.length;
+      if (opts.truncateAt !== undefined) finalLen = Math.min(finalLen, opts.truncateAt);
+      if (opts.totalSize !== undefined) finalLen = opts.totalSize;
+
+      const buf = new ArrayBuffer(finalLen);
+      const u8 = new Uint8Array(buf);
+      const writeLen = Math.min(parts.length, finalLen);
+      for (let i = 0; i < writeLen; i++) u8[i] = parts[i]!;
+      return buf;
+    }
+
+    it('throws descriptive error when IFD offset points past buffer end', () => {
+      // ifdOffset is huge — IFD start would be far past the buffer.
+      // Create a small buffer that has the MPF header but no IFD body.
+      const buf = buildCustomMPF({
+        ifdOffset: 0xffff_0000, // ~4 GB into the buffer
+        ifdEntries: [],
+        totalSize: 64,
+      });
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      expect((err as Error).message).toMatch(/MPF:/);
+      expect((err as Error).message).toMatch(/IFD start/);
+      expect((err as Error).message).toMatch(/exceeds buffer length/);
+    });
+
+    it('throws descriptive error when MPEntry tag valueOffset points past buffer end', () => {
+      // IFD has a 0xB001 (NumberOfImages = 2) and a 0xB002 with a wildly OOB valueOffset.
+      const buf = buildCustomMPF({
+        ifdOffset: 8, // IFD immediately after the 8-byte TIFF header
+        ifdEntries: [
+          { tag: 0xb001, type: 4, count: 1, valueOffset: 2 }, // 2 images
+          { tag: 0xb002, type: 7, count: 32, valueOffset: 0xfffffff0 }, // huge offset
+        ],
+        totalSize: 200,
+      });
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      expect((err as Error).message).toMatch(/MPEntry table/);
+      expect((err as Error).message).toMatch(/0xfffffff0/);
+      expect((err as Error).message).toMatch(/exceeds buffer length/);
+    });
+
+    it('throws descriptive error when MPEntry table is partially truncated', () => {
+      // MP entries should fit at offset X with mpEntryCount=2 (32 bytes) but the
+      // buffer is sliced short so only ~16 bytes of MPEntry data remain.
+      const buf = buildCustomMPF({
+        ifdOffset: 8,
+        ifdEntries: [
+          { tag: 0xb001, type: 4, count: 1, valueOffset: 2 },
+          { tag: 0xb002, type: 7, count: 32, valueOffset: 38 },
+        ],
+        mpEntries: [
+          { size: 100, offset: 0 },
+          { size: 100, offset: 100 },
+        ],
+        // Truncate to cut the second MPEntry in half
+        truncateAt: 60,
+      });
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      expect((err as Error).message).toMatch(/MPEntry table|MPEntry array/);
+      expect((err as Error).message).toMatch(/exceeds buffer length/);
+    });
+
+    it('throws descriptive error when base image (MPEntry #0) size exceeds buffer', () => {
+      // Build a valid-looking MPF with a base image whose size > buffer length.
+      const buf = createMPFJPEGBuffer({
+        baseSize: 0x7fffff00, // ~2 GB
+        gainmapSize: 10,
+        gainmapOffset: 50,
+        padToFit: false,
+      });
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      // Could be either base or gainmap depending on order; both have descriptive context.
+      expect((err as Error).message).toMatch(/MPF:/);
+      expect((err as Error).message).toMatch(/exceeds buffer length/);
+    });
+
+    it('throws descriptive error when JPEG with valid SOI is cut inside MPF segment', () => {
+      // Build a full MPF buffer then truncate it after the APP2 length field.
+      // This simulates a JPEG blob where the file was cut off mid-MPF-IFD.
+      const fullBuf = createMPFJPEGBuffer({
+        baseSize: 100,
+        gainmapSize: 50,
+        gainmapOffset: 100,
+        padToFit: true,
+      });
+      // Truncate to just past the MPF marker + length field but before the IFD body.
+      // mpfDataStart = 10, header is 8 bytes -> truncate at 14 to cut the IFD-offset field
+      const truncBuf = fullBuf.slice(0, 14);
+      // findMPFMarkerOffset requires the segment length to fit; with the segment
+      // length pointing past the buffer, no MPF marker is detected and the
+      // function returns null. That's the documented behavior — confirm it
+      // doesn't throw an opaque internal error.
+      expect(() => parseGainmapJPEG(truncBuf)).not.toThrow();
+      // Now truncate just at mpfDataStart+8 boundary — header technically reads
+      // but IFD-offset field is at the boundary.
+      const truncBuf2 = fullBuf.slice(0, 18);
+      // This may either return null (header check fails) or throw a descriptive
+      // error — either is acceptable, but we must NOT throw an opaque error.
+      let result: unknown;
+      let err: unknown;
+      try {
+        result = parseGainmapJPEG(truncBuf2);
+      } catch (e) {
+        err = e;
+      }
+      if (err) {
+        expect(err).toBeInstanceOf(DecoderError);
+        expect((err as Error).message).toMatch(/MPF:/);
+      } else {
+        expect(result).toBeNull();
+      }
+    });
+
+    it('boundary case: MPEntry table that ends exactly at buffer length is accepted', () => {
+      // Build MPF where mpEntryOffset + 32 (2 entries * 16 bytes) == buffer length.
+      // This is the tight-fit success case — must NOT throw.
+      const buf = createMPFJPEGBuffer({
+        baseSize: 100,
+        gainmapSize: 50,
+        gainmapOffset: 100,
+        padToFit: true,
+      });
+      // This already-passing case verifies the boundary check uses > not >=.
+      expect(() => parseGainmapJPEG(buf)).not.toThrow();
+      const info = parseGainmapJPEG(buf);
+      expect(info).not.toBeNull();
+    });
+
+    it('boundary case: gainmap offset == buffer length with size 0 is accepted', () => {
+      // Gainmap entry sized 0 at the buffer end is degenerate but not an OOB read.
+      // baseSize must fit within the buffer too — we now bounds-check it.
+      const buf = createMPFJPEGBuffer({
+        baseSize: 50,
+        gainmapSize: 0,
+        gainmapOffset: 50, // parsed offset becomes 50+10=60
+        padToFit: true,
+      });
+      const info = parseGainmapJPEG(buf);
+      expect(info).not.toBeNull();
+      expect(info!.gainmapLength).toBe(0);
+    });
+
+    it('returns null for empty buffer (no SOI) without throwing', () => {
+      // Sanity check: degenerate inputs still return null, not an opaque crash.
+      expect(parseGainmapJPEG(new ArrayBuffer(0))).toBeNull();
+      expect(parseGainmapJPEG(new ArrayBuffer(2))).toBeNull();
+    });
+  });
+
   describe('decodeGainmapToFloat32 bounds checks', () => {
     it('throws DecoderError when gainmap slice exceeds buffer', async () => {
       const smallBuffer = new ArrayBuffer(100);
