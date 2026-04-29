@@ -89,7 +89,6 @@ These findings were not yet verified against actual source code:
 - ~~**LOW-24**~~: Midtone mask integer rounding precision — **FIXED** (see FIXED_ISSUES.md #378)
 
 #### Format Decoders
-- **MED-29**: HDR RLE scanline validation — `HDRDecoder.ts` ~lines 414-446 (verified: throws on mismatch — likely FP)
 - ~~**MED-33**~~: TIFF LZW chain corruption — **FIXED** (see FIXED_ISSUES.md #350)
 - ~~**MED-34**~~: JPEG Gainmap MPF offset+size overflow — **FIXED** (see FIXED_ISSUES.md #351)
 - ~~**LOW-17**~~: TIFF LZW string length overflow in Uint16Array — **FIXED** (see FIXED_ISSUES.md #352)
@@ -98,7 +97,7 @@ These findings were not yet verified against actual source code:
 
 #### Misc
 - ~~**MED-18**~~: WebSocketClient malformed message flood not rate-limited — **FIXED** (see FIXED_ISSUES.md #360)
-- **LOW-07**: Clarity/sharpen sample raw texture (known trade-off) — `viewer.frag.glsl`
+- ~~**LOW-07**~~: Clarity/sharpen sample raw texture (known trade-off) — **FIXED** (see FIXED_ISSUES.md #385)
 - ~~**LOW-14**~~: Stereo eye offset not bounds-validated — **FIXED** (see FIXED_ISSUES.md #367)
 - ~~**LOW-15**~~: Stereo side-by-side odd width asymmetry — **FIXED** (see FIXED_ISSUES.md #368)
 - ~~**LOW-20**~~: Frame accumulator overflow on speed changes — **FIXED** (see FIXED_ISSUES.md #357)

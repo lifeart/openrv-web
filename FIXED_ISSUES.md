@@ -5575,3 +5575,28 @@ Each warning includes the offending mode list for debuggability. Production hot 
 - `npx tsc --noEmit` clean.
 - Reviewer confirmed test integrity: removing the invariant code causes BLD-TOPMOST-INV-002 and BLD-TOPMOST-INV-003 to fail; other three are contract pins that hold either way.
 - StackGroupNode (`src/nodes/groups/StackGroupNode.ts:285-294`) short-circuits topmost via `getCompositeType()`, structurally guaranteeing the invariant for in-tree callers.
+
+## Issue #385: LOW-07 — Clarity/sharpen sample raw texture (known trade-off)
+
+**Root cause (documentation gap, not a code defect)**: The clarity (5x5 Gaussian) and sharpen (4-tap Laplacian) effects in the GLSL single-pass renderer intentionally sample `u_texture` (the raw input) rather than the post-color-pipeline value. True post-pipeline neighbour sampling would require an extra FBO + second render pass that the single-pass design deliberately avoids. The trade-off was undocumented in shader source — a future reader might "fix" it and silently change rendering quality.
+
+**Fix (documentation-only, no rendering behavior change)**: Added inline rationale at every relevant call site explaining the trade-off, the FBO/extra-pass cost being avoided, quality implications (input encoding vs display-referred), and a "do not 'fix' this" warning:
+- `src/render/shaders/viewer.frag.glsl` — clarity (~line 1297) and sharpen (~line 1514) — single-pass: samples raw input texture
+- `src/render/webgpu/shaders/spatial_effects.wgsl` — clarity (multi-pass: samples its stage's input, which is pre-color-pipeline by stage ordering)
+- `src/render/webgpu/shaders/spatial_effects_post.wgsl` — sharpen (multi-pass: samples post-color-pipeline due to `colorPipeline → sceneAnalysis → spatialEffectsPost → displayOutput` order; explicitly contrasted with GLSL behavior)
+- `src/utils/effects/EffectProcessor.ts` — clarity (~line 1143) and sharpen (~line 1337) — CPU: operates on display-referred snapshot at function entry
+
+**Tests added** (`src/render/shaders/claritySharpenDocs.test.ts`):
+6 tests pinning the documentation phrases via `?raw` source imports. Each test loads the relevant source file as text and asserts specific phrases (`LOW-07`, `TRADE-OFF`, `raw input texture`, `color-pipeline`, `fbo`, `render pass`, `input encoding`/`display-referred`) within a 2500-char window before each anchor. If a future refactor strips the comments, the tests fail.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/spatial_effects.wgsl`
+- `src/render/webgpu/shaders/spatial_effects_post.wgsl`
+- `src/utils/effects/EffectProcessor.ts`
+- `src/render/shaders/claritySharpenDocs.test.ts` (new)
+
+**Verification**:
+- 6 documentation-pinning tests passing.
+- 139 tests passing in `src/render/shaders` + `src/utils/effects/EffectProcessor.test.ts`.
+- `npx tsc --noEmit` clean.
