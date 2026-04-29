@@ -18,6 +18,30 @@ Without tone mapping, a simple clamp at 1.0 destroys all highlight information a
 
 ---
 
+## Unified HDR Headroom Convention
+
+All non-Drago operators in OpenRV Web share a single peak-white renormalization convention so that operators can be A/B compared at any display headroom without an unfair dynamic-range mismatch:
+
+```
+scaled = color / hdrHeadroom         // normalize so peak white = 1.0
+mapped = <operator-specific curve>(scaled)
+result = mapped * hdrHeadroom         // re-scale output peak to display headroom
+```
+
+Properties this guarantees:
+
+- **At SDR (`hdrHeadroom = 1.0`)** every operator reduces to its canonical SDR curve. SDR rendering is bit-for-bit unchanged.
+- **At HDR (`hdrHeadroom > 1.0`)** every operator produces output in `[0, hdrHeadroom]` and preserves display-side headroom uniformly.
+- **Peak-white invariance**: `f(H * x, H) = H * f(x, 1)` for every non-Drago operator, so swapping operators on the same scene yields comparable output ranges instead of one operator being silently brighter than another.
+
+The HDR headroom value is queried from the host display and clamped to `[1, 100]`; non-finite values fall back to `1.0` at the WebGL2 and WebGPU entry points, and the shaders defensively floor the divisor to `1e-6`.
+
+::: tip Drago is the exception
+**Drago is intentionally outside the unified convention.** It is physically parameterized via scene average luminance (`Lwa`) and scene peak luminance (`Lmax`), and folds display headroom into `Lmax` (`Lmax_effective = Lmax * hdrHeadroom`). The `Bias` parameter shapes the logarithmic curve and `Brightness` acts as the post-multiplier. For Drago, headroom is expressed by the operator's own physical parameters rather than by an external pre/post scale.
+:::
+
+---
+
 ## Available Operators
 
 ### Reinhard
@@ -75,8 +99,11 @@ An adaptive logarithmic tone mapping operator (Drago et al.) that uses scene sta
 
 **Parameters:**
 - **Bias** (default 0.85) -- controls the compression curve shape. Lower values produce more aggressive compression.
-- **Scene average luminance** -- measured from the image, used to anchor the adaptation.
-- **Scene peak luminance** -- measured from the image, defines the upper extent of the input range.
+- **Scene average luminance** (`Lwa`) -- measured from the image, used to anchor the adaptation.
+- **Scene peak luminance** (`Lmax`) -- measured from the image, defines the upper extent of the input range. The display headroom is folded in here (`Lmax_effective = Lmax * hdrHeadroom`).
+- **Brightness** -- post-multiplier applied after the curve.
+
+**Headroom convention:** Drago is the **physically parameterized exception** to the unified peak-white renormalization convention used by every other operator. Its headroom behavior is expressed through `Lmax` and `Brightness` instead of an external pre-divide / post-multiply pair. CPU and GPU paths use the same `Lmax * hdrHeadroom` scaling for parity.
 
 **Best for:** Scenes with very high dynamic range where automatic adaptation to content brightness is desired.
 

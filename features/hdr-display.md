@@ -201,10 +201,34 @@ The current codebase has a **partial foundation** for tone mapping:
 - [x] Filmic (Hable/Uncharted 2) tone mapping with configurable shoulder/toe
 - [x] ACES tone mapping with Academy-standard fitted curve
 - [x] Reinhard tone mapping with configurable white point parameter
+- [x] AgX (Sobotka, per-channel matrix-based curve)
+- [x] PBR Neutral (Khronos)
+- [x] GT (Gran Turismo, Uchimura)
+- [x] ACES Hill (Stephen Hill fit)
+- [x] Drago (adaptive logarithmic, physically parameterized via `Lwa`/`Lmax`)
 - [ ] Custom tone mapping via user-adjustable Catmull-Rom spline curve
-- [x] All operators implemented as GLSL fragment shader functions
+- [x] All operators implemented as GLSL fragment shader functions and matching WGSL functions
+- [x] CPU formula-identical implementations in `utils/effects/effectProcessing.shared.ts`
 - [x] All operators preserve alpha channel unchanged
 - [ ] HDR to SDR conversion pipeline
+
+### Unified HDR Headroom Convention (MED-52)
+
+All non-Drago operators (Reinhard, Filmic, ACES, AgX, PBR Neutral, GT, ACES Hill) share a single **peak-white renormalization convention** so that switching between them on the same scene at `hdrHeadroom > 1` produces comparable output dynamic ranges (`[0, hdrHeadroom]`):
+
+```
+scaled = color / hdrHeadroom
+mapped = <operator-specific curve>(scaled)
+result = mapped * hdrHeadroom
+```
+
+- At `hdrHeadroom == 1.0` (SDR output mode) every operator reduces to its canonical SDR curve — bit-for-bit unchanged.
+- At `hdrHeadroom > 1.0` (HDR output mode) every operator produces output in `[0, hdrHeadroom]` and preserves display-side headroom uniformly. Operators are **A/B comparable at any headroom** with no dynamic-range mismatch.
+- **Drago is the documented exception**: physically parameterized via scene-average luminance (`Lwa`) and scene-peak luminance (`Lmax`); display headroom is folded into `Lmax` (`Lmax * hdrHeadroom`) and `Brightness` is the post-multiplier. CPU and GPU paths share the same `Lmax * hdrHeadroom` scaling.
+
+**Robustness guards**:
+- JS entry points (`Renderer.setHDRHeadroom`, `WebGPUShaderPipeline.setGlobalHDRHeadroom`) sanitize non-finite (`NaN`, `±Infinity`) input to `1.0` before clamping to `[1, 100]`.
+- All non-Drago shader operators (GLSL and WGSL) defensively floor the divisor to `max(hdrHeadroom, 1e-6)` to prevent division-by-zero even if a caller bypasses the JS sanitization.
 
 ### Per-Operator Parameters
 - [ ] Reinhard: white point parameter (default 1.0, range 0.1 to 10.0)
