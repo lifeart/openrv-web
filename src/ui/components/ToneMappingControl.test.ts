@@ -781,7 +781,6 @@ describe('ToneMappingControl', () => {
     });
   });
 
-
   describe('dispose', () => {
     it('TONE-U120: dispose can be called without error', () => {
       expect(() => control.dispose()).not.toThrow();
