@@ -5073,3 +5073,77 @@ Subsequent reviews uncovered:
 - Renderer SDR fallback path at `Renderer.ts:1023-1026` mutates `managedVideoFrame` directly; should respect non-owning clone contract.
 - Stereo right-eye IPImage doesn't currently get cascaded (left as TODO comment in Viewer.ts).
 - `'linear'` and additional ACES/Log transfer enum values would benefit color-space-converting LUTs (would touch decoders + worker round-trip table — out of scope here).
+
+---
+
+## Issue #371: MED-52 — Tone mapping headroom inconsistent across operators
+
+**Root cause**: Two incompatible HDR-headroom conventions were mixed across the eight tone mapping operators in `viewer.frag.glsl`, `webgpu/shaders/common.wgsl`, and `webgpu/shaders/scene_analysis.wgsl`:
+
+- **Reinhard / Filmic**: scaled the curve white-point by `hdrHeadroom` (`wp = WP * hdrHeadroom`). This stretched the curve so HDR headroom was compressed into the SDR `[0, 1]` output range. Output range was approximately `[0, 1]` regardless of headroom — display-side HDR headroom was destroyed.
+- **ACES / AgX / PBR Neutral / GT / ACES Hill**: pre-divided input by `hdrHeadroom`, applied a `[0, 1] → [0, 1]` curve, then re-multiplied output by `hdrHeadroom`. Output range was `[0, hdrHeadroom]` — display-side HDR headroom was preserved.
+- **Drago**: physically parameterized via `Lwa` and `Lmax`; folded headroom into `Lmax`.
+
+In HDR output mode (`u_outputMode == 1`, `u_hdrHeadroom > 1`), Reinhard/Filmic produced output in `[0, 1]` while ACES/AgX/PBR/GT/ACES-Hill produced output up to `hdrHeadroom`. The user's stated A/B comparison workflow ("toggle between operators on the same scene") was broken because the output dynamic range differed across operators by a factor of `hdrHeadroom`. The CPU implementations in `effectProcessing.shared.ts` ignored headroom entirely (implicit headroom=1.0, so the SDR CPU paths were correct but unable to express HDR).
+
+**Fix** — adopt a single uniform headroom convention across every non-Drago operator and every backend (GLSL / WGSL / CPU):
+
+```
+scaled = color / hdrHeadroom         // normalize so peak white = 1.0
+mapped = <operator-specific curve>(scaled)
+result = mapped * hdrHeadroom         // re-scale output peak to headroom
+```
+
+Properties of the new convention:
+
+1. **At hdrHeadroom = 1.0** (SDR output mode, which is forced by the renderer when `outputMode == 'sdr'` — see `Renderer.ts:613`) every operator reduces to its canonical SDR curve. SDR rendering is bit-for-bit unchanged.
+2. **At hdrHeadroom > 1.0** (HDR output mode) every operator produces output in `[0, hdrHeadroom]` and preserves display-side headroom uniformly.
+3. **Peak-white invariance** holds for every operator: `f(H * x, H) = H * f(x, 1)`. This is the formal statement of "A/B comparable across headroom".
+4. **Operator artistic identity is preserved**: the curve coefficients, white-point, exposure-bias, AgX matrix transforms, and clamp-to-`[0,1]` semantics are unchanged. Only the input/output scaling around the curve changes for Reinhard/Filmic.
+5. **Drago is excluded by design** and explicitly documented — it is physically parameterized (`Lwa`, `Lmax`) and folds headroom into `Lmax`, with `dragoBrightness` playing the role of the post-multiplier. Its existing behavior is preserved.
+
+**Backend parity**:
+
+- GLSL `viewer.frag.glsl` (WebGL2 fragment shader)
+- WGSL `webgpu/shaders/common.wgsl` (shared functions for primary/secondary/diagnostics passes)
+- WGSL `webgpu/shaders/scene_analysis.wgsl` (multi-pass scene analysis stage)
+- CPU `utils/effects/effectProcessing.shared.ts` (worker + main-thread fallback path, formula-identical to the shaders)
+
+All four implementations now use the same `scaled = color/headroom; mapped = curve(scaled); return mapped * headroom` pattern. CPU function signatures gained an optional `hdrHeadroom = 1.0` argument so existing call sites continue to work and HDR CPU paths can opt in. `ToneMappingParams.hdrHeadroom` was added to thread the value through `applyToneMappingToChannel` / `applyToneMappingToRGB`. Invalid headroom values (NaN, ±Infinity, `≤ 0`) sanitize to 1.0 to match the renderer's `[1, 100]` clamp at the boundary.
+
+**Drago CPU/GPU parity (Round 2)**: the GLSL/WGSL shaders all multiply `Lmax` by `hdrHeadroom` (`Lmax = max(u_tmDragoLmax, 1e-6) * u_hdrHeadroom`) so display headroom is folded into the operator's physical peak. The CPU `tonemapDragoChannel` previously dropped headroom entirely; it now accepts a fifth `hdrHeadroom = 1.0` argument and applies the same `Lmax * hdrHeadroom` scaling. Both dispatchers (`applyToneMappingToChannel` / `applyToneMappingToRGB`) thread `params.hdrHeadroom` into the Drago path. Bit-for-bit equivalence with the shader is verified by `XE-TM-MED52-Drago-001..006` at H ∈ {1, 2, 5, 10}.
+
+**JS-side NaN sanitization (Round 2)**: `Math.min(100, Math.max(1, NaN))` evaluates to `NaN` because `Math.min/max` propagate NaN — the previous `Renderer.setHDRHeadroom` accepted such input and would have uploaded NaN to the GPU uniform, poisoning every tone mapping division. `Renderer.setHDRHeadroom` now early-returns 1.0 for any non-finite input, then clamps to `[1, 100]`. `WebGPUShaderPipeline.setGlobalHDRHeadroom` previously had zero clamping; it now mirrors the Renderer contract (sanitize non-finite to 1.0, clamp to `[1, 100]`).
+
+**Shader-side defense-in-depth (Round 2)**: every non-Drago tone mapping operator in `viewer.frag.glsl`, `webgpu/shaders/common.wgsl`, and `webgpu/shaders/scene_analysis.wgsl` now defines a local `headroom = max(<uniform>, 1e-6)` at the top of the function and uses it for the `color / headroom` and `result * headroom` operations. This prevents division-by-zero and (because `1e-6` is small) leaves all peak-white invariance behavior intact when the JS-side guards are working. Drago paths already have their own `max(L, 1e-6)` clamps.
+
+**Tests added**:
+
+- `XE-TM-MED52-001..007` in `src/render/__tests__/shaderMathToneMapping.test.ts` (cross-operator headroom consistency: identity at headroom=1, output is non-negative at black, peak-white invariance across multiple `(H, x)` operating points, mid-gray ballpark, peak-output bound, NaN safety).
+- `HDRTM-MED52-001..014` in `src/utils/effects/toneMappingOperators.test.ts` (per-operator: default headroom=1.0 matches bare call, peak-white invariance for each operator including the cross-channel ones, NaN/Infinity/0/negative headroom safety, monotonicity at non-trivial headroom).
+- `XE-TM-MED52-Drago-001..006` (Round 2) in `src/utils/effects/toneMappingOperators.test.ts` — CPU/GPU Drago equivalence: per-channel formula match against a shader-mirror reference at H ∈ {1, 2, 5, 10}, dispatcher parity, RGB path parity, H=1.0 backward-compatibility, NaN/Infinity/0/negative safety, headroom monotonicity (larger H → lower output for same scene-referred input).
+- `XE-TM-MED52-LH-001..007` (Round 2) — large-headroom numerical stability at H=1000 across every operator (Reinhard, Filmic, ACES, GT, AgX, PBRNeutral, ACESHill, Drago, and the dispatcher).
+- `REN-EXT-008-NAN`, `REN-EXT-008-CLAMP` (Round 2) in `src/render/Renderer.test.ts` — `Renderer.setHDRHeadroom(NaN/Infinity/-Infinity)` falls back to 1.0 (Math.min/max NaN propagation regression); ceiling clamp to 100.
+- `WGPU-SP-081`, `WGPU-SP-082` (Round 2) in `src/render/webgpu/WebGPUShaderPipeline.test.ts` — `setGlobalHDRHeadroom` mirrors the Renderer contract: NaN/Infinity sanitized to 1.0 and clamp to `[1, 100]`.
+- Existing `XE-TM-091` updated to assert the new shared convention rather than document the previous divergence.
+
+**Files changed**:
+
+- `src/render/shaders/viewer.frag.glsl` — Reinhard, Filmic now use the uniform convention; added a top-of-section comment block documenting the convention; updated per-operator comments for ACES, AgX, PBR Neutral, GT, ACES Hill, and Drago. Round 2: every non-Drago operator now defines a local `headroom = max(u_hdrHeadroom, 1e-6)` for defense-in-depth.
+- `src/render/webgpu/shaders/common.wgsl` — same fix in the shared WGSL functions; added section comment block. Round 2: shader-side defensive `headroom = max(hdrHeadroom, 1e-6)` local.
+- `src/render/webgpu/shaders/scene_analysis.wgsl` — same fix in the scene-analysis WGSL pass; added section comment block. Round 2: shader-side defensive `headroom = max(u.hdrHeadroom, 1e-6)` local.
+- `src/utils/effects/effectProcessing.shared.ts` — every non-Drago operator gained an optional `hdrHeadroom = 1.0` parameter with sanitization; `ToneMappingParams` extended; `applyToneMappingToChannel` / `applyToneMappingToRGB` thread headroom through. Round 2: `tonemapDragoChannel` accepts `hdrHeadroom` (defaults 1.0) and folds it into Lmax to match the GPU shader; both dispatchers thread headroom into the Drago branch.
+- `src/render/Renderer.ts` — Round 2: `setHDRHeadroom` early-returns 1.0 for non-finite input before clamping (Math.min/max propagate NaN, which would otherwise reach the GPU uniform).
+- `src/render/webgpu/WebGPUShaderPipeline.ts` — Round 2: `setGlobalHDRHeadroom` now sanitizes non-finite to 1.0 and clamps to `[1, 100]` to mirror the WebGL2 Renderer contract.
+- `src/render/__tests__/shaderMathToneMapping.test.ts` — added `XE-TM-MED52-*` describe block; updated `XE-TM-091` to document the new convention.
+- `src/utils/effects/toneMappingOperators.test.ts` — added `HDR Headroom Convention (MED-52)` describe block; Round 2: `XE-TM-MED52-Drago-*` (CPU/GPU equivalence) and `XE-TM-MED52-LH-*` (H=1000 stability) added.
+- `src/render/Renderer.test.ts` — Round 2: `REN-EXT-008-NAN`, `REN-EXT-008-CLAMP`.
+- `src/render/webgpu/WebGPUShaderPipeline.test.ts` — Round 2: `WGPU-SP-081`, `WGPU-SP-082`.
+- `ISSUES.md` — moved MED-52 to fixed.
+
+**Test results**: 1746 render tests passing, 405 effects tests passing, 200 UI tone mapping tests passing, 0 regressions, `tsc --noEmit` clean.
+
+**Known follow-ups (non-blocking)**:
+
+- The CPU `applyToneMappingToData` byte-array path is still SDR-only (`Uint8ClampedArray` clips above 1.0 by definition); the headroom plumbing is in place but no caller sets a non-default value yet. This is consistent with the current architecture (HDR CPU path uses Float32 buffers separately).
+- The `Renderer.setHDRHeadroom` NaN-propagation edge case noted in Round 1 is now fixed (Round 2): both the WebGL2 and WebGPU JS-side entry points sanitize non-finite headroom to 1.0 before clamping, and every shader operator additionally floors the divisor to `1e-6` defensively.

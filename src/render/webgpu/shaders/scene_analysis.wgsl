@@ -76,13 +76,26 @@ const P3_TO_SRGB = mat3x3f(
 
 // =====================================================================
 // Tone Mapping Operators
+//
+// HDR headroom semantics (MED-52): all operators except Drago follow the
+// uniform convention — normalize input by hdrHeadroom (curve treats peak
+// white as 1.0), apply the curve, re-scale by hdrHeadroom on output. This
+// makes operators A/B comparable: at hdrHeadroom=1.0 each reduces to its
+// canonical SDR curve; at hdrHeadroom>1.0 each preserves display headroom
+// uniformly. See common.wgsl for the full rationale.
 // =====================================================================
 
-// --- Reinhard ---
+// --- Reinhard (uniform headroom convention) ---
 fn tonemapReinhard(color: vec3f) -> vec3f {
-  let wp = u.tmReinhardWhitePoint * u.hdrHeadroom;
+  // Defensive: floor headroom away from zero so divisions never blow up
+  // even if a caller manages to slip a non-finite/zero value past the
+  // CPU-side sanitization in WebGPUShaderPipeline.setGlobalHDRHeadroom.
+  let headroom = max(u.hdrHeadroom, 1e-6);
+  let wp = u.tmReinhardWhitePoint;
   let wp2 = wp * wp;
-  return color * (1.0 + color / wp2) / (1.0 + color);
+  let scaled = color / headroom;
+  let mapped = scaled * (1.0 + scaled / wp2) / (1.0 + scaled);
+  return mapped * headroom;
 }
 
 // --- Filmic / Uncharted 2 ---
@@ -96,10 +109,13 @@ fn filmicCurve(x: vec3f) -> vec3f {
   return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
 }
 
+// Filmic (uniform headroom convention)
 fn tonemapFilmic(color: vec3f) -> vec3f {
-  let curr = filmicCurve(u.tmFilmicExposureBias * color);
-  let whiteScale = vec3f(1.0) / filmicCurve(vec3f(u.tmFilmicWhitePoint * u.hdrHeadroom));
-  return curr * whiteScale;
+  let headroom = max(u.hdrHeadroom, 1e-6);
+  let scaled = color / headroom;
+  let curr = filmicCurve(u.tmFilmicExposureBias * scaled);
+  let whiteScale = vec3f(1.0) / filmicCurve(vec3f(u.tmFilmicWhitePoint));
+  return max(curr * whiteScale, vec3f(0.0)) * headroom;
 }
 
 // --- ACES (Narkowicz fit) ---
@@ -109,10 +125,11 @@ fn tonemapACES(color: vec3f) -> vec3f {
   let c = 2.43;
   let d = 0.59;
   let e = 0.14;
+  let headroom = max(u.hdrHeadroom, 1e-6);
   // Scale input to map headroom range to [0,1], apply curve, then scale back
-  let scaled = color / u.hdrHeadroom;
+  let scaled = color / headroom;
   let mapped = clamp((scaled * (a * scaled + b)) / (scaled * (c * scaled + d) + e), vec3f(0.0), vec3f(1.0));
-  return mapped * u.hdrHeadroom;
+  return mapped * headroom;
 }
 
 // --- AgX (Troy Sobotka / Blender 4.x) ---
@@ -143,7 +160,8 @@ fn tonemapAgX(color: vec3f) -> vec3f {
   let AgxMinEv = -12.47393;
   let AgxMaxEv = 4.026069;
 
-  var scaled = color / u.hdrHeadroom;
+  let headroom = max(u.hdrHeadroom, 1e-6);
+  var scaled = color / headroom;
   scaled = AgXInsetMatrix * scaled;
   scaled = max(scaled, vec3f(1e-10));
   scaled = log2(scaled);
@@ -152,7 +170,7 @@ fn tonemapAgX(color: vec3f) -> vec3f {
   scaled = agxDefaultContrastApprox(scaled);
   scaled = AgXOutsetMatrix * scaled;
   scaled = clamp(scaled, vec3f(0.0), vec3f(1.0));
-  return scaled * u.hdrHeadroom;
+  return scaled * headroom;
 }
 
 // --- PBR Neutral (Khronos) ---
@@ -160,7 +178,8 @@ fn tonemapPBRNeutral(color: vec3f) -> vec3f {
   let startCompression = 0.8 - 0.04;
   let desaturation = 0.15;
 
-  var scaled = color / u.hdrHeadroom;
+  let headroom = max(u.hdrHeadroom, 1e-6);
+  var scaled = color / headroom;
 
   let x = min(scaled.r, min(scaled.g, scaled.b));
   var offset: f32;
@@ -173,7 +192,7 @@ fn tonemapPBRNeutral(color: vec3f) -> vec3f {
 
   let peak = max(scaled.r, max(scaled.g, scaled.b));
   if (peak < startCompression) {
-    return scaled * u.hdrHeadroom;
+    return scaled * headroom;
   }
 
   let d = 1.0 - startCompression;
@@ -181,7 +200,7 @@ fn tonemapPBRNeutral(color: vec3f) -> vec3f {
   scaled *= newPeak / peak;
 
   let g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-  return mix(scaled, vec3f(newPeak), g) * u.hdrHeadroom;
+  return mix(scaled, vec3f(newPeak), g) * headroom;
 }
 
 // --- GT / Gran Turismo (Hajime Uchimura) ---
@@ -211,13 +230,14 @@ fn gt_tonemap_channel(x: f32) -> f32 {
 }
 
 fn tonemapGT(color: vec3f) -> vec3f {
-  let scaled = color / u.hdrHeadroom;
+  let headroom = max(u.hdrHeadroom, 1e-6);
+  let scaled = color / headroom;
   let mapped = vec3f(
     gt_tonemap_channel(scaled.r),
     gt_tonemap_channel(scaled.g),
     gt_tonemap_channel(scaled.b)
   );
-  return mapped * u.hdrHeadroom;
+  return mapped * headroom;
 }
 
 // --- ACES Hill (Stephen Hill) ---
@@ -239,12 +259,13 @@ fn tonemapACESHill(color: vec3f) -> vec3f {
     vec3f(-0.07367, -0.00605,  1.07602)
   );
 
-  var scaled = color / u.hdrHeadroom;
+  let headroom = max(u.hdrHeadroom, 1e-6);
+  var scaled = color / headroom;
   scaled = ACESInputMat * scaled;
   scaled = RRTAndODTFit(scaled);
   scaled = ACESOutputMat * scaled;
   scaled = clamp(scaled, vec3f(0.0), vec3f(1.0));
-  return scaled * u.hdrHeadroom;
+  return scaled * headroom;
 }
 
 // --- Drago adaptive logarithmic tone mapping (per-channel) ---

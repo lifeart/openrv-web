@@ -387,6 +387,21 @@ export function isIdentityHueRotation(degrees: number): boolean {
 
 // ============================================================================
 // Tone Mapping Operators (CPU fallback)
+//
+// HDR headroom semantics (MED-52): all operators except Drago use a uniform
+// convention — normalize input by `hdrHeadroom` (peak white = 1.0 inside the
+// curve), apply the operator-specific curve, then re-scale by `hdrHeadroom`
+// on output. At hdrHeadroom == 1.0 (the default and the only value used by
+// the SDR CPU paths today) every operator reduces to its canonical curve,
+// so existing behavior is preserved bit-for-bit. At hdrHeadroom > 1.0 every
+// operator preserves display headroom in the same way (output up to
+// ~hdrHeadroom). Drago is physically parameterized and folds headroom into
+// Lmax; its post-multiplier `dragoBrightness` plays the role of headroom
+// scaling.
+//
+// These CPU routines are formula-identical to the GLSL/WGSL shader code in
+// src/render/shaders/viewer.frag.glsl and
+// src/render/webgpu/shaders/{common,scene_analysis}.wgsl.
 // ============================================================================
 
 /**
@@ -394,12 +409,16 @@ export function isIdentityHueRotation(degrees: number): boolean {
  * Extended Reinhard formula: L * (1 + L / (Lw^2)) / (1 + L)
  * where Lw is the white point parameter.
  * Maps [0, infinity) to [0, 1) with configurable highlight rolloff.
- * Matches GPU shader: color * (1.0 + color / wp2) / (1.0 + color)
+ * Uniform headroom convention: normalize by hdrHeadroom, apply curve,
+ * re-scale by hdrHeadroom. At hdrHeadroom=1.0 reduces to the bare formula.
  */
-export function tonemapReinhardChannel(value: number, whitePoint = 4.0): number {
+export function tonemapReinhardChannel(value: number, whitePoint = 4.0, hdrHeadroom = 1.0): number {
   if (!Number.isFinite(value) || value < 0) return 0;
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
   const wp2 = whitePoint * whitePoint;
-  return (value * (1.0 + value / wp2)) / (1.0 + value);
+  const scaled = value / headroom;
+  const mapped = (scaled * (1.0 + scaled / wp2)) / (1.0 + scaled);
+  return mapped * headroom;
 }
 
 /**
@@ -419,39 +438,61 @@ export function filmicCurveShared(x: number): number {
 /**
  * Filmic tone mapping operator (per-channel).
  * Uses Hable/Uncharted 2 curve with configurable exposure bias and white point.
- * Matches GPU shader: filmic(exposureBias * color) / filmic(whitePoint)
+ * Uniform headroom convention: normalize by hdrHeadroom, apply curve,
+ * re-scale by hdrHeadroom. At hdrHeadroom=1.0 reduces to the bare formula.
  */
-export function tonemapFilmicChannel(value: number, exposureBias = 2.0, whitePoint = 11.2): number {
+export function tonemapFilmicChannel(
+  value: number,
+  exposureBias = 2.0,
+  whitePoint = 11.2,
+  hdrHeadroom = 1.0,
+): number {
   if (!Number.isFinite(value) || value < 0) return 0;
-  const curr = filmicCurveShared(exposureBias * value);
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
+  const scaled = value / headroom;
+  const curr = filmicCurveShared(exposureBias * scaled);
   const whiteScale = 1.0 / filmicCurveShared(whitePoint);
-  return Math.max(0, curr * whiteScale);
+  return Math.max(0, curr * whiteScale) * headroom;
 }
 
 /**
  * ACES tone mapping operator (per-channel).
  * Fitted approximation by Krzysztof Narkowicz.
  * Formula: (x * (2.51x + 0.03)) / (x * (2.43x + 0.59) + 0.14)
+ * Uniform headroom convention.
  */
-export function tonemapACESChannel(value: number): number {
+export function tonemapACESChannel(value: number, hdrHeadroom = 1.0): number {
   if (!Number.isFinite(value) || value < 0) return 0;
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
   const a = 2.51;
   const b = 0.03;
   const c = 2.43;
   const d = 0.59;
   const e = 0.14;
-  return clamp((value * (a * value + b)) / (value * (c * value + d) + e), 0, 1);
+  const scaled = value / headroom;
+  const mapped = clamp((scaled * (a * scaled + b)) / (scaled * (c * scaled + d) + e), 0, 1);
+  return mapped * headroom;
 }
 
 /**
  * AgX tone mapping (Troy Sobotka / Blender 4.x).
  * Cross-channel operation: matrix transform → log2 → polynomial sigmoid → inverse matrix.
  * Best hue preservation in saturated highlights.
+ * Uniform headroom convention: normalize by hdrHeadroom, apply curve, re-scale.
  */
-export function tonemapAgX(r: number, g: number, b: number): { r: number; g: number; b: number } {
+export function tonemapAgX(
+  r: number,
+  g: number,
+  b: number,
+  hdrHeadroom = 1.0,
+): { r: number; g: number; b: number } {
   if (!Number.isFinite(r) || r < 0) r = 0;
   if (!Number.isFinite(g) || g < 0) g = 0;
   if (!Number.isFinite(b) || b < 0) b = 0;
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
+  r = r / headroom;
+  g = g / headroom;
+  b = b / headroom;
 
   // AgX inset matrix (row-major interpretation of GLSL column-major mat3)
   let ir = 0.842479062253094 * r + 0.0784335999999992 * g + 0.0792237451477643 * b;
@@ -486,18 +527,32 @@ export function tonemapAgX(r: number, g: number, b: number): { r: number; g: num
   const og = -0.0528968517574562 * ir + 1.15190312990417 * ig + -0.0989611768448433 * ib;
   const ob = -0.0529716355144438 * ir + -0.0980434501171241 * ig + 1.15107367264116 * ib;
 
-  return { r: clamp(or, 0, 1), g: clamp(og, 0, 1), b: clamp(ob, 0, 1) };
+  return {
+    r: clamp(or, 0, 1) * headroom,
+    g: clamp(og, 0, 1) * headroom,
+    b: clamp(ob, 0, 1) * headroom,
+  };
 }
 
 /**
  * PBR Neutral tone mapping (Khronos).
  * Cross-channel operation: offset → peak compress → desaturate.
  * Minimal hue/saturation shift, ideal for color-critical work.
+ * Uniform headroom convention: normalize by hdrHeadroom, apply curve, re-scale.
  */
-export function tonemapPBRNeutral(r: number, g: number, b: number): { r: number; g: number; b: number } {
+export function tonemapPBRNeutral(
+  r: number,
+  g: number,
+  b: number,
+  hdrHeadroom = 1.0,
+): { r: number; g: number; b: number } {
   if (!Number.isFinite(r) || r < 0) r = 0;
   if (!Number.isFinite(g) || g < 0) g = 0;
   if (!Number.isFinite(b) || b < 0) b = 0;
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
+  r = r / headroom;
+  g = g / headroom;
+  b = b / headroom;
 
   const startCompression = 0.8 - 0.04;
   const desaturation = 0.15;
@@ -509,7 +564,7 @@ export function tonemapPBRNeutral(r: number, g: number, b: number): { r: number;
   b -= offset;
 
   const peak = Math.max(r, g, b);
-  if (peak < startCompression) return { r, g, b };
+  if (peak < startCompression) return { r: r * headroom, g: g * headroom, b: b * headroom };
 
   const d = 1.0 - startCompression;
   const newPeak = 1.0 - (d * d) / (peak + d - startCompression);
@@ -523,15 +578,18 @@ export function tonemapPBRNeutral(r: number, g: number, b: number): { r: number;
   g = g * (1.0 - gFactor) + newPeak * gFactor;
   b = b * (1.0 - gFactor) + newPeak * gFactor;
 
-  return { r, g, b };
+  return { r: r * headroom, g: g * headroom, b: b * headroom };
 }
 
 /**
  * GT (Gran Turismo / Uchimura) tone mapping per-channel.
  * Smooth highlight rolloff with toe, linear, and shoulder regions.
+ * Uniform headroom convention: normalize by hdrHeadroom, apply curve, re-scale.
  */
-export function tonemapGTChannel(value: number): number {
+export function tonemapGTChannel(value: number, hdrHeadroom = 1.0): number {
   if (!Number.isFinite(value) || value < 0) return 0;
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
+  const x = value / headroom;
 
   const P = 1.0; // max display brightness
   const a = 1.0; // contrast
@@ -546,26 +604,36 @@ export function tonemapGTChannel(value: number): number {
   const C2 = (a * P) / (P - S1);
   const CP = -C2 / P;
 
-  const w0 = 1.0 - smoothstep(0.0, m, value);
-  const w2 = value >= m + l0 ? 1.0 : 0.0;
+  const w0 = 1.0 - smoothstep(0.0, m, x);
+  const w2 = x >= m + l0 ? 1.0 : 0.0;
   const w1 = 1.0 - w0 - w2;
 
-  const T = m * Math.pow(value / m, c) + b;
-  const L = m + a * (value - m);
-  const S = P - (P - S1) * Math.exp(CP * (value - S0));
+  const T = m * Math.pow(x / m, c) + b;
+  const L = m + a * (x - m);
+  const S = P - (P - S1) * Math.exp(CP * (x - S0));
 
-  return T * w0 + L * w1 + S * w2;
+  return (T * w0 + L * w1 + S * w2) * headroom;
 }
 
 /**
  * ACES Hill tone mapping (Stephen Hill).
  * Cross-channel operation: sRGB→AP1 → RRT+ODT rational fit → AP1→sRGB.
  * More accurate RRT+ODT fit than Narkowicz.
+ * Uniform headroom convention: normalize by hdrHeadroom, apply curve, re-scale.
  */
-export function tonemapACESHill(r: number, g: number, b: number): { r: number; g: number; b: number } {
+export function tonemapACESHill(
+  r: number,
+  g: number,
+  b: number,
+  hdrHeadroom = 1.0,
+): { r: number; g: number; b: number } {
   if (!Number.isFinite(r) || r < 0) r = 0;
   if (!Number.isFinite(g) || g < 0) g = 0;
   if (!Number.isFinite(b) || b < 0) b = 0;
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
+  r = r / headroom;
+  g = g / headroom;
+  b = b / headroom;
 
   // ACES input matrix (sRGB → AP1, row-major interpretation)
   const ir = 0.59719 * r + 0.35458 * g + 0.04823 * b;
@@ -582,18 +650,40 @@ export function tonemapACESHill(r: number, g: number, b: number): { r: number; g
   const og = -0.10208 * fitR + 1.10813 * fitG + -0.00605 * fitB;
   const ob = -0.00327 * fitR + -0.07276 * fitG + 1.07602 * fitB;
 
-  return { r: clamp(or, 0, 1), g: clamp(og, 0, 1), b: clamp(ob, 0, 1) };
+  return {
+    r: clamp(or, 0, 1) * headroom,
+    g: clamp(og, 0, 1) * headroom,
+    b: clamp(ob, 0, 1) * headroom,
+  };
 }
 
 /**
  * Drago adaptive logarithmic tone mapping (per-channel).
  * Reference: Drago et al., "Adaptive Logarithmic Mapping For Displaying High Contrast Scenes"
  * Matches GPU shader: tonemapDragoChannel()
+ *
+ * NOTE: Drago does NOT use the uniform normalize/rescale headroom convention
+ * shared by the other operators. It is physically parameterized by Lwa
+ * (scene average luminance) and Lmax (scene peak luminance); display
+ * headroom is folded into Lmax by multiplying `Lmax * hdrHeadroom` before
+ * the log-domain mapping (matches the GPU formula:
+ *   GLSL viewer.frag.glsl:486
+ *   WGSL common.wgsl:399
+ *   WGSL scene_analysis.wgsl:264
+ * ). The post-multiplier dragoBrightness then scales normalized output
+ * to display range. Invalid hdrHeadroom (NaN/Infinity/≤0) sanitizes to 1.0.
  */
-export function tonemapDragoChannel(value: number, bias = 0.85, Lwa = 0.2, Lmax = 1.5): number {
+export function tonemapDragoChannel(
+  value: number,
+  bias = 0.85,
+  Lwa = 0.2,
+  Lmax = 1.5,
+  hdrHeadroom = 1.0,
+): number {
   if (!Number.isFinite(value) || value < 0) return 0;
+  const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
   const safeWa = Math.max(Lwa, 1e-6);
-  const safeMax = Math.max(Lmax, 1e-6);
+  const safeMax = Math.max(Lmax, 1e-6) * headroom;
   const Ln = value / safeWa;
   const biasP = Math.log(bias) / Math.log(0.5);
   const denom = Math.log2(1.0 + safeMax / safeWa);
@@ -663,7 +753,13 @@ export function gamutMapRGB(
 
 /**
  * Tone mapping parameters for CPU processing.
- * Matches the GPU uniforms: u_tmReinhardWhitePoint, u_tmFilmicExposureBias, u_tmFilmicWhitePoint.
+ * Matches the GPU uniforms: u_tmReinhardWhitePoint, u_tmFilmicExposureBias,
+ * u_tmFilmicWhitePoint, u_hdrHeadroom.
+ *
+ * `hdrHeadroom` follows the uniform headroom convention (MED-52): default
+ * 1.0 means SDR (no scaling); values > 1 normalize input by headroom and
+ * re-scale output, preserving curve identity for every operator. Drago is
+ * the exception (see `tonemapDragoChannel` documentation).
  */
 export interface ToneMappingParams {
   reinhardWhitePoint?: number;
@@ -673,24 +769,28 @@ export interface ToneMappingParams {
   dragoLwa?: number;
   dragoLmax?: number;
   dragoBrightness?: number;
+  hdrHeadroom?: number;
 }
 
 /**
  * Apply tone mapping to a single channel value using the specified operator.
  */
 export function applyToneMappingToChannel(value: number, operator: string, params?: ToneMappingParams): number {
+  const headroom = params?.hdrHeadroom;
   switch (operator) {
     case 'reinhard':
-      return tonemapReinhardChannel(value, params?.reinhardWhitePoint);
+      return tonemapReinhardChannel(value, params?.reinhardWhitePoint, headroom);
     case 'filmic':
-      return tonemapFilmicChannel(value, params?.filmicExposureBias, params?.filmicWhitePoint);
+      return tonemapFilmicChannel(value, params?.filmicExposureBias, params?.filmicWhitePoint, headroom);
     case 'aces':
-      return tonemapACESChannel(value);
+      return tonemapACESChannel(value, headroom);
     case 'gt':
-      return tonemapGTChannel(value);
+      return tonemapGTChannel(value, headroom);
     case 'drago': {
       const brightness = params?.dragoBrightness ?? 2.0;
-      return tonemapDragoChannel(value, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness;
+      return (
+        tonemapDragoChannel(value, params?.dragoBias, params?.dragoLwa, params?.dragoLmax, headroom) * brightness
+      );
     }
     default:
       return value;
@@ -709,43 +809,44 @@ export function applyToneMappingToRGB(
   operator: string,
   params?: ToneMappingParams,
 ): { r: number; g: number; b: number } {
+  const headroom = params?.hdrHeadroom;
   switch (operator) {
     case 'reinhard':
       return {
-        r: tonemapReinhardChannel(r, params?.reinhardWhitePoint),
-        g: tonemapReinhardChannel(g, params?.reinhardWhitePoint),
-        b: tonemapReinhardChannel(b, params?.reinhardWhitePoint),
+        r: tonemapReinhardChannel(r, params?.reinhardWhitePoint, headroom),
+        g: tonemapReinhardChannel(g, params?.reinhardWhitePoint, headroom),
+        b: tonemapReinhardChannel(b, params?.reinhardWhitePoint, headroom),
       };
     case 'filmic':
       return {
-        r: tonemapFilmicChannel(r, params?.filmicExposureBias, params?.filmicWhitePoint),
-        g: tonemapFilmicChannel(g, params?.filmicExposureBias, params?.filmicWhitePoint),
-        b: tonemapFilmicChannel(b, params?.filmicExposureBias, params?.filmicWhitePoint),
+        r: tonemapFilmicChannel(r, params?.filmicExposureBias, params?.filmicWhitePoint, headroom),
+        g: tonemapFilmicChannel(g, params?.filmicExposureBias, params?.filmicWhitePoint, headroom),
+        b: tonemapFilmicChannel(b, params?.filmicExposureBias, params?.filmicWhitePoint, headroom),
       };
     case 'aces':
       return {
-        r: tonemapACESChannel(r),
-        g: tonemapACESChannel(g),
-        b: tonemapACESChannel(b),
+        r: tonemapACESChannel(r, headroom),
+        g: tonemapACESChannel(g, headroom),
+        b: tonemapACESChannel(b, headroom),
       };
     case 'agx':
-      return tonemapAgX(r, g, b);
+      return tonemapAgX(r, g, b, headroom);
     case 'pbrNeutral':
-      return tonemapPBRNeutral(r, g, b);
+      return tonemapPBRNeutral(r, g, b, headroom);
     case 'gt':
       return {
-        r: tonemapGTChannel(r),
-        g: tonemapGTChannel(g),
-        b: tonemapGTChannel(b),
+        r: tonemapGTChannel(r, headroom),
+        g: tonemapGTChannel(g, headroom),
+        b: tonemapGTChannel(b, headroom),
       };
     case 'acesHill':
-      return tonemapACESHill(r, g, b);
+      return tonemapACESHill(r, g, b, headroom);
     case 'drago': {
       const brightness = params?.dragoBrightness ?? 2.0;
       return {
-        r: tonemapDragoChannel(r, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness,
-        g: tonemapDragoChannel(g, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness,
-        b: tonemapDragoChannel(b, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness,
+        r: tonemapDragoChannel(r, params?.dragoBias, params?.dragoLwa, params?.dragoLmax, headroom) * brightness,
+        g: tonemapDragoChannel(g, params?.dragoBias, params?.dragoLwa, params?.dragoLmax, headroom) * brightness,
+        b: tonemapDragoChannel(b, params?.dragoBias, params?.dragoLwa, params?.dragoLmax, headroom) * brightness,
       };
     }
     default:

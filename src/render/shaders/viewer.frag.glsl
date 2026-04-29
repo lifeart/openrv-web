@@ -253,17 +253,50 @@
         return max(color, 0.0);
       }
 
+      // ----- HDR headroom semantics (MED-52) -----
+      // All tone mapping operators (except Drago, see below) use a UNIFORM
+      // headroom convention: the input is scene-referred linear with peak
+      // white at u_hdrHeadroom (i.e. SDR diffuse white = 1.0, display peak
+      // = u_hdrHeadroom). Each operator follows the pattern
+      //
+      //   scaled = color / hdrHeadroom        // normalize so peak = 1.0
+      //   mapped = <operator-specific curve>(scaled)
+      //   result = mapped * hdrHeadroom        // re-scale so result peak = headroom
+      //
+      // Why: this guarantees that
+      //   (a) at hdrHeadroom == 1.0 (SDR display) every operator reduces to
+      //       its canonical [0,1]→[0,1] curve and outputs in the display
+      //       range expected by downstream stages (display LUT, transfer,
+      //       gamma, then SDR clamp). All operators are A/B comparable.
+      //   (b) at hdrHeadroom > 1.0 (HDR display) every operator produces
+      //       output up to hdrHeadroom, preserving display-side headroom in
+      //       the same way for every operator. Output range is [0, headroom]
+      //       and downstream stages (HDR pass-through, no clamp) preserve it.
+      //
+      // Drago is a physically-parameterized operator (Lwa, Lmax) and does
+      // not fit this normalize/rescale pattern; it scales Lmax by headroom
+      // and uses dragoBrightness as its own post-multiplier instead.
+
       // Reinhard tone mapping operator
-      // Simple global operator that preserves detail in highlights
+      // Simple global operator that preserves detail in highlights.
       // Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom, apply extended Reinhard with curve white-point wp, then
+      // re-scale by hdrHeadroom. The curve identity (wp) is preserved.
       vec3 tonemapReinhard(vec3 color) {
-        float wp = u_tmReinhardWhitePoint * u_hdrHeadroom;
+        // Defensive: floor headroom away from zero so divisions never blow up
+        // even if a caller manages to slip a non-finite/zero value past the
+        // CPU-side sanitization in Renderer.setHDRHeadroom.
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        float wp = u_tmReinhardWhitePoint;
         float wp2 = wp * wp;
-        return color * (1.0 + color / wp2) / (1.0 + color);
+        vec3 scaled = color / headroom;
+        vec3 mapped = scaled * (1.0 + scaled / wp2) / (1.0 + scaled);
+        return mapped * headroom;
       }
 
       // Filmic tone mapping (Uncharted 2 style)
-      // S-curve response similar to film stock
+      // S-curve response similar to film stock.
       // Reference: John Hable, "Uncharted 2: HDR Lighting"
       vec3 filmic(vec3 x) {
         float A = 0.15;  // Shoulder strength
@@ -275,16 +308,26 @@
         return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
       }
 
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom, apply Hable filmic curve with normalized white-point,
+      // re-scale by hdrHeadroom. Curve identity (whitePoint, exposureBias)
+      // is preserved.
       vec3 tonemapFilmic(vec3 color) {
-        vec3 curr = filmic(u_tmFilmicExposureBias * color);
-        vec3 whiteScale = vec3(1.0) / filmic(vec3(u_tmFilmicWhitePoint * u_hdrHeadroom));
-        // Clamp to non-negative to match CPU implementation (filmic curve can produce slightly negative values)
-        return max(curr * whiteScale, vec3(0.0));
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
+        vec3 curr = filmic(u_tmFilmicExposureBias * scaled);
+        vec3 whiteScale = vec3(1.0) / filmic(vec3(u_tmFilmicWhitePoint));
+        // Clamp to non-negative (filmic curve can produce slightly negative values)
+        return max(curr * whiteScale, vec3(0.0)) * headroom;
       }
 
       // ACES (Academy Color Encoding System) tone mapping
-      // Industry standard for cinema
-      // Reference: Academy ACES Output Transform
+      // Industry standard for cinema.
+      // Reference: Academy ACES Output Transform (Narkowicz fit)
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom, apply Narkowicz fit which maps [0,1]→[0,1], re-scale by
+      // hdrHeadroom. The curve clamp to [0,1] is part of the operator
+      // identity (saturation behavior) and preserved.
       vec3 tonemapACES(vec3 color) {
         // ACES fitted curve by Krzysztof Narkowicz
         float a = 2.51;
@@ -292,14 +335,18 @@
         float c = 2.43;
         float d = 0.59;
         float e = 0.14;
-        // Scale input to map headroom range to [0,1], apply curve, then scale back
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         vec3 mapped = clamp((scaled * (a * scaled + b)) / (scaled * (c * scaled + d) + e), 0.0, 1.0);
-        return mapped * u_hdrHeadroom;
+        return mapped * headroom;
       }
 
       // AgX tone mapping (Troy Sobotka / Blender 4.x)
-      // Best hue preservation in saturated highlights
+      // Best hue preservation in saturated highlights.
+      // Uniform headroom convention (see comment block above): the AgX curve
+      // expects log2 input in [AgxMinEv, AgxMaxEv]; normalize by hdrHeadroom
+      // before the log2 step so the curve operates on the same dynamic range
+      // regardless of headroom. Re-scale by hdrHeadroom on output.
       vec3 agxDefaultContrastApprox(vec3 x) {
         vec3 x2 = x * x;
         vec3 x4 = x2 * x2;
@@ -326,7 +373,8 @@
         const float AgxMinEv = -12.47393;
         const float AgxMaxEv = 4.026069;
 
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         scaled = AgXInsetMatrix * scaled;
         scaled = max(scaled, vec3(1e-10));
         scaled = log2(scaled);
@@ -335,34 +383,39 @@
         scaled = agxDefaultContrastApprox(scaled);
         scaled = AgXOutsetMatrix * scaled;
         scaled = clamp(scaled, 0.0, 1.0);
-        return scaled * u_hdrHeadroom;
+        return scaled * headroom;
       }
 
       // PBR Neutral tone mapping (Khronos)
-      // Minimal hue/saturation shift, ideal for color-critical work
+      // Minimal hue/saturation shift, ideal for color-critical work.
+      // Uniform headroom convention (see comment block above).
       vec3 tonemapPBRNeutral(vec3 color) {
         const float startCompression = 0.8 - 0.04;
         const float desaturation = 0.15;
 
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
 
         float x = min(scaled.r, min(scaled.g, scaled.b));
         float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
         scaled -= offset;
 
         float peak = max(scaled.r, max(scaled.g, scaled.b));
-        if (peak < startCompression) return scaled * u_hdrHeadroom;
+        if (peak < startCompression) return scaled * headroom;
 
         float d = 1.0 - startCompression;
         float newPeak = 1.0 - d * d / (peak + d - startCompression);
         scaled *= newPeak / peak;
 
         float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-        return mix(scaled, vec3(newPeak), g) * u_hdrHeadroom;
+        return mix(scaled, vec3(newPeak), g) * headroom;
       }
 
       // GT tone mapping per-channel (Hajime Uchimura / Gran Turismo Sport)
-      // Smooth highlight rolloff with toe and shoulder regions
+      // Smooth highlight rolloff with toe and shoulder regions.
+      // The channel function expects input in [0, P=1.0]; tonemapGT applies
+      // the uniform headroom convention (see comment block above) by
+      // normalizing/rescaling around the channel function.
       float gt_tonemap_channel(float x) {
         const float P = 1.0;
         const float a = 1.0;
@@ -389,17 +442,21 @@
       }
 
       vec3 tonemapGT(vec3 color) {
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         vec3 mapped = vec3(
           gt_tonemap_channel(scaled.r),
           gt_tonemap_channel(scaled.g),
           gt_tonemap_channel(scaled.b)
         );
-        return mapped * u_hdrHeadroom;
+        return mapped * headroom;
       }
 
       // ACES Hill tone mapping (Stephen Hill)
-      // More accurate RRT+ODT fit than Narkowicz
+      // More accurate RRT+ODT fit than Narkowicz.
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom before the AP1 input matrix so the rational fit operates
+      // on the same dynamic range regardless of headroom; re-scale on output.
       vec3 RRTAndODTFit(vec3 v) {
         vec3 a = v * (v + 0.0245786) - 0.000090537;
         vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
@@ -418,16 +475,22 @@
           vec3(-0.07367, -0.00605,  1.07602)
         );
 
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         scaled = ACESInputMat * scaled;
         scaled = RRTAndODTFit(scaled);
         scaled = ACESOutputMat * scaled;
         scaled = clamp(scaled, 0.0, 1.0);
-        return scaled * u_hdrHeadroom;
+        return scaled * headroom;
       }
 
       // Drago adaptive logarithmic tone mapping (per-channel)
       // Reference: Drago et al., "Adaptive Logarithmic Mapping For Displaying High Contrast Scenes"
+      // Drago is physically-parameterized: Lwa=scene avg luminance,
+      // Lmax=scene peak. Headroom is folded into Lmax (display peak) and the
+      // post-multiplier u_tmDragoBrightness scales output. Drago therefore
+      // does NOT use the normalize/rescale convention shared by the other
+      // operators, by design — its own parameters express the headroom.
       float tonemapDragoChannel(float L) {
         float Lwa = max(u_tmDragoLwa, 1e-6);
         float Lmax = max(u_tmDragoLmax, 1e-6) * u_hdrHeadroom;

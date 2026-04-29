@@ -1440,8 +1440,15 @@ export class Renderer implements RendererBackend {
    * Used by tone mapping to preserve highlights up to display peak brightness.
    */
   setHDRHeadroom(headroom: number): void {
-    // Clamp to [1.0, 100.0] — values beyond 100x SDR white are unreasonable
-    // and could cause NaN/Inf in shader tone mapping math.
+    // Sanitize non-finite (NaN, ±Infinity) to default 1.0 first — Math.min/max
+    // propagate NaN, so a NaN input would otherwise reach the GPU uniform and
+    // poison every tone mapping division. Then clamp to [1.0, 100.0]: values
+    // beyond 100x SDR white are unreasonable and could cause numerical issues
+    // in shader math.
+    if (!Number.isFinite(headroom)) {
+      this.hdrHeadroom = 1.0;
+      return;
+    }
     this.hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
   }
 

@@ -1297,6 +1297,30 @@ describe('Renderer Extended HDR Mode', () => {
     expect(renderer.getHDRHeadroom()).toBe(3.0);
   });
 
+  it('REN-EXT-008-NAN: setHDRHeadroom sanitizes NaN/Infinity to 1.0 (MED-52 round 2)', () => {
+    initRendererWithMockGL(renderer);
+
+    // Math.min/Math.max propagate NaN — without explicit Number.isFinite
+    // sanitization, Renderer.setHDRHeadroom(NaN) would store NaN and the
+    // GPU uniform upload would poison every tone mapping division.
+    renderer.setHDRHeadroom(NaN);
+    expect(renderer.getHDRHeadroom()).toBe(1.0);
+
+    renderer.setHDRHeadroom(Infinity);
+    expect(renderer.getHDRHeadroom()).toBe(1.0);
+
+    renderer.setHDRHeadroom(-Infinity);
+    expect(renderer.getHDRHeadroom()).toBe(1.0);
+  });
+
+  it('REN-EXT-008-CLAMP: setHDRHeadroom clamps to ceiling 100.0', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setHDRHeadroom(1000);
+    expect(renderer.getHDRHeadroom()).toBe(100.0);
+    renderer.setHDRHeadroom(1e6);
+    expect(renderer.getHDRHeadroom()).toBe(100.0);
+  });
+
   it('REN-EXT-009: initialize auto-detects extended mode when HLG/PQ unavailable', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');

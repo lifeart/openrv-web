@@ -415,5 +415,40 @@ describe('WebGPUShaderPipeline', () => {
       pipeline.setGlobalHDRHeadroom(2.5);
       pipeline.setGlobalOutputMode(3);
     });
+
+    it('WGPU-SP-081: setGlobalHDRHeadroom sanitizes NaN/Infinity to 1.0 (MED-52 round 2)', () => {
+      // Read internal state via a typed cast — defense-in-depth for the WebGPU
+      // path that previously had zero clamping, mirroring Renderer.setHDRHeadroom.
+      type Internals = { _hdrHeadroom: number };
+      const pipeline = new WebGPUShaderPipeline();
+      const internals = pipeline as unknown as Internals;
+
+      pipeline.setGlobalHDRHeadroom(NaN);
+      expect(internals._hdrHeadroom).toBe(1.0);
+
+      pipeline.setGlobalHDRHeadroom(Infinity);
+      expect(internals._hdrHeadroom).toBe(1.0);
+
+      pipeline.setGlobalHDRHeadroom(-Infinity);
+      expect(internals._hdrHeadroom).toBe(1.0);
+    });
+
+    it('WGPU-SP-082: setGlobalHDRHeadroom clamps to [1, 100]', () => {
+      type Internals = { _hdrHeadroom: number };
+      const pipeline = new WebGPUShaderPipeline();
+      const internals = pipeline as unknown as Internals;
+
+      pipeline.setGlobalHDRHeadroom(0.5);
+      expect(internals._hdrHeadroom).toBe(1.0);
+
+      pipeline.setGlobalHDRHeadroom(-2);
+      expect(internals._hdrHeadroom).toBe(1.0);
+
+      pipeline.setGlobalHDRHeadroom(1000);
+      expect(internals._hdrHeadroom).toBe(100.0);
+
+      pipeline.setGlobalHDRHeadroom(3.5);
+      expect(internals._hdrHeadroom).toBe(3.5);
+    });
   });
 });

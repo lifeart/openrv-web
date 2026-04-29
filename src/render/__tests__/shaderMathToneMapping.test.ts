@@ -541,15 +541,191 @@ describe('XE-TM: WGSL vs CPU discrepancy notes', () => {
     // max(0) on the final result.
   });
 
-  it('XE-TM-091: WGSL Reinhard uses hdrHeadroom scaling, CPU default does not', () => {
-    // WGSL: tonemapReinhard(color, whitePoint, hdrHeadroom) scales wp by hdrHeadroom
-    // CPU: tonemapReinhardChannel(value, whitePoint) uses whitePoint directly
-    // When hdrHeadroom=1.0, they should match exactly.
-    // This test documents the API difference.
-    const cpuResult = tonemapReinhardChannel(0.5, 4.0);
-    // Simulating WGSL with hdrHeadroom=1.0: wp = 4.0 * 1.0 = 4.0
-    const wp = 4.0 * 1.0;
-    const wgslSimulated = (0.5 * (1.0 + 0.5 / (wp * wp))) / (1.0 + 0.5);
-    expect(cpuResult).toBeCloseTo(wgslSimulated, 6);
+  it('XE-TM-091: GPU and CPU share the same hdrHeadroom convention (MED-52)', () => {
+    // After MED-52, ALL operators (GLSL viewer.frag.glsl, WGSL common.wgsl,
+    // WGSL scene_analysis.wgsl, and CPU effectProcessing.shared.ts) use the
+    // same uniform headroom convention:
+    //   scaled = color / hdrHeadroom
+    //   mapped = curve(scaled)
+    //   result = mapped * hdrHeadroom
+    // At hdrHeadroom=1.0 each operator reduces to its canonical curve.
+    const wp = 4.0;
+    const cpu1 = tonemapReinhardChannel(0.5, wp, 1.0);
+    const expected1 = (0.5 * (1.0 + 0.5 / (wp * wp))) / (1.0 + 0.5);
+    expect(cpu1).toBeCloseTo(expected1, 6);
+
+    // At hdrHeadroom=3.0 the curve operates on scaled=color/3, then result*3.
+    const headroom = 3.0;
+    const cpu2 = tonemapReinhardChannel(0.5, wp, headroom);
+    const scaled = 0.5 / headroom;
+    const expected2 = ((scaled * (1.0 + scaled / (wp * wp))) / (1.0 + scaled)) * headroom;
+    expect(cpu2).toBeCloseTo(expected2, 6);
+  });
+});
+
+// ===================================================================
+// 9. Cross-operator headroom consistency (MED-52)
+//
+// All operators except Drago use the uniform headroom convention. These
+// tests verify the contract end-to-end:
+//   (a) at hdrHeadroom=1.0 each operator reduces to its canonical curve
+//       (i.e. behavior is identical to the value with no headroom argument).
+//   (b) every operator scales output proportionally with headroom for any
+//       value that does not saturate the curve.
+//   (c) at hdrHeadroom=H, an input of H (display peak white) maps to roughly
+//       the same output as input 1 at hdrHeadroom=1, scaled by H.
+// ===================================================================
+describe('XE-TM-MED52: cross-operator headroom consistency', () => {
+  type OperatorOutputs = {
+    reinhard: number;
+    filmic: number;
+    aces: number;
+    gt: number;
+    agx: number;
+    pbr: number;
+    acesHill: number;
+  };
+  const OP_KEYS: (keyof OperatorOutputs)[] = ['reinhard', 'filmic', 'aces', 'gt', 'agx', 'pbr', 'acesHill'];
+
+  // Helper: collect all per-channel-style operators at a single input.
+  function evalAllAtGray(input: number, headroom: number): OperatorOutputs {
+    const reinhard = tonemapReinhardChannel(input, 4.0, headroom);
+    const filmic = tonemapFilmicChannel(input, 2.0, 11.2, headroom);
+    const aces = tonemapACESChannel(input, headroom);
+    const gt = tonemapGTChannel(input, headroom);
+    // Cross-channel ops applied to gray input: r=g=b
+    const agx = tonemapAgX(input, input, input, headroom).g;
+    const pbr = tonemapPBRNeutral(input, input, input, headroom).g;
+    const acesHill = tonemapACESHill(input, input, input, headroom).g;
+    return { reinhard, filmic, aces, gt, agx, pbr, acesHill };
+  }
+
+  it('XE-TM-MED52-001: hdrHeadroom=1.0 reduces every operator to its canonical curve', () => {
+    const v = 0.5;
+    expect(tonemapReinhardChannel(v, 4.0, 1.0)).toBeCloseTo(tonemapReinhardChannel(v, 4.0), 12);
+    expect(tonemapFilmicChannel(v, 2.0, 11.2, 1.0)).toBeCloseTo(tonemapFilmicChannel(v, 2.0, 11.2), 12);
+    expect(tonemapACESChannel(v, 1.0)).toBeCloseTo(tonemapACESChannel(v), 12);
+    expect(tonemapGTChannel(v, 1.0)).toBeCloseTo(tonemapGTChannel(v), 12);
+
+    const a1 = tonemapAgX(v, v, v, 1.0);
+    const a0 = tonemapAgX(v, v, v);
+    expect(a1.r).toBeCloseTo(a0.r, 12);
+    expect(a1.g).toBeCloseTo(a0.g, 12);
+    expect(a1.b).toBeCloseTo(a0.b, 12);
+
+    const p1 = tonemapPBRNeutral(v, v, v, 1.0);
+    const p0 = tonemapPBRNeutral(v, v, v);
+    expect(p1.r).toBeCloseTo(p0.r, 12);
+    expect(p1.g).toBeCloseTo(p0.g, 12);
+    expect(p1.b).toBeCloseTo(p0.b, 12);
+
+    const h1 = tonemapACESHill(v, v, v, 1.0);
+    const h0 = tonemapACESHill(v, v, v);
+    expect(h1.r).toBeCloseTo(h0.r, 12);
+    expect(h1.g).toBeCloseTo(h0.g, 12);
+    expect(h1.b).toBeCloseTo(h0.b, 12);
+  });
+
+  it('XE-TM-MED52-002: black (0) maps to 0 for every operator at every headroom', () => {
+    for (const headroom of [1.0, 2.0, 3.0, 5.0, 10.0]) {
+      const r = evalAllAtGray(0, headroom);
+      // Filmic curve has a small toe offset; at scaled=0 it yields exactly the
+      // toe term scaled by whiteScale, which is ~0 (within 1e-12). All others
+      // are exactly 0.
+      expect(r.reinhard).toBeCloseTo(0, 12);
+      expect(r.aces).toBeCloseTo(0, 12);
+      expect(r.gt).toBeCloseTo(0, 12);
+      // Filmic's near-zero floor scales with headroom (same convention as
+      // every other operator); bound it loosely.
+      expect(r.filmic).toBeLessThan(0.05 * headroom);
+      // AgX/PBRNeutral/ACESHill have non-zero outputs at zero input due to
+      // their offset/sigmoid/matrix behavior; these are operator-specific
+      // floor levels, not bugs. Just check they are bounded.
+      expect(r.agx).toBeGreaterThanOrEqual(0);
+      expect(r.pbr).toBeGreaterThanOrEqual(0);
+      expect(r.acesHill).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('XE-TM-MED52-003: output scales linearly with headroom (peak-white invariance)', () => {
+    // Property: f(H * x, H) ≈ H * f(x, 1) for every operator.
+    // Equivalent to: dividing out headroom on both input and output recovers
+    // the canonical SDR curve.
+    const x = 0.5;
+    for (const H of [1.0, 2.0, 3.0, 5.0, 10.0]) {
+      const baseline = evalAllAtGray(x, 1.0);
+      const scaledIn = evalAllAtGray(H * x, H);
+      for (const op of OP_KEYS) {
+        // f(H*x, H)/H should equal f(x, 1)
+        expect(scaledIn[op] / H).toBeCloseTo(baseline[op], 9);
+      }
+    }
+  });
+
+  it('XE-TM-MED52-004: operators at scene-referred 0.18 mid-gray are within ballpark', () => {
+    // 0.18 mid-gray with hdrHeadroom=1 should map to a perceptual midtone for
+    // every operator. They will not produce identical output (each operator's
+    // curve is artistically different), but they should all land in a
+    // reasonable range and preserve monotonicity. This is the core A/B
+    // comparison invariant the user cares about.
+    const r = evalAllAtGray(0.18, 1.0);
+    for (const op of OP_KEYS) {
+      expect(r[op]).toBeGreaterThan(0);
+      expect(r[op]).toBeLessThan(1);
+      // No operator should output more than 1.0 at 0.18 input with headroom=1.
+      // (Reinhard does not saturate at 1.0 here either since 0.18 < wp.)
+      expect(r[op]).toBeLessThan(0.6);
+    }
+  });
+
+  it('XE-TM-MED52-005: at HDR headroom=3, peak-white input never exceeds headroom', () => {
+    // For input = headroom (i.e. display peak), output should be ≤ headroom
+    // for every operator. Reinhard's extended formula caps at exactly
+    // wp²/(wp²)=... no, extended Reinhard at v=wp evaluates to v*(1+1/wp²)/2
+    // which is <wp for wp>1. ACES/AgX/PBR/GT/ACESHill all clamp to [0,1]
+    // before re-scaling so output ≤ headroom. Filmic with wp=11.2 and
+    // exposureBias=2 at scaled=1 evaluates well below 1.
+    const H = 3.0;
+    const r = evalAllAtGray(H, H); // input = headroom, normalized scaled=1
+    for (const op of OP_KEYS) {
+      expect(r[op]).toBeLessThanOrEqual(H + 1e-6);
+      expect(r[op]).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('XE-TM-MED52-006: peak-white invariance round-trip across many operating points', () => {
+    // Verify f(H*x, H)/H ≈ f(x, 1) at multiple inputs across the full SDR
+    // and HDR domain. This is the core MED-52 contract and makes operators
+    // A/B comparable: pre-scaling input by display headroom and post-scaling
+    // output by the same factor leaves the canonical SDR curve invariant.
+    for (const H of [1.5, 2.0, 4.0, 7.5]) {
+      for (const x of [0.05, 0.18, 0.5, 0.8, 0.95]) {
+        const baseline = evalAllAtGray(x, 1.0);
+        const scaledIn = evalAllAtGray(H * x, H);
+        for (const op of OP_KEYS) {
+          expect(scaledIn[op] / H).toBeCloseTo(baseline[op], 8);
+        }
+      }
+    }
+  });
+
+  it('XE-TM-MED52-007: hdrHeadroom invalid values fall back to 1.0 (NaN safety)', () => {
+    // Defensive: NaN/Infinity/zero/negative headroom should not blow up math.
+    // The CPU implementations sanitize via `headroom > 0 ? hdrHeadroom : 1.0`.
+    const baseline = tonemapACESChannel(0.5, 1.0);
+    expect(tonemapACESChannel(0.5, NaN)).toBeCloseTo(baseline, 12);
+    expect(tonemapACESChannel(0.5, Infinity)).toBeCloseTo(baseline, 12);
+    expect(tonemapACESChannel(0.5, 0)).toBeCloseTo(baseline, 12);
+    expect(tonemapACESChannel(0.5, -1)).toBeCloseTo(baseline, 12);
+
+    const baseR = tonemapReinhardChannel(0.5, 4.0, 1.0);
+    expect(tonemapReinhardChannel(0.5, 4.0, NaN)).toBeCloseTo(baseR, 12);
+    expect(tonemapReinhardChannel(0.5, 4.0, 0)).toBeCloseTo(baseR, 12);
+
+    const baseAgx = tonemapAgX(0.5, 0.5, 0.5, 1.0);
+    const nanAgx = tonemapAgX(0.5, 0.5, 0.5, NaN);
+    expect(nanAgx.r).toBeCloseTo(baseAgx.r, 12);
+    expect(nanAgx.g).toBeCloseTo(baseAgx.g, 12);
+    expect(nanAgx.b).toBeCloseTo(baseAgx.b, 12);
   });
 });

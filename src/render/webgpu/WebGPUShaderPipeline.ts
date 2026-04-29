@@ -246,9 +246,17 @@ export class WebGPUShaderPipeline {
     this._defaultFilterMode = mode;
   }
 
-  /** Set the hdrHeadroom value for the global UBO. */
+  /** Set the hdrHeadroom value for the global UBO.
+   * Sanitizes non-finite (NaN, ±Infinity) to 1.0 and clamps to [1, 100] to
+   * match the WebGL2 Renderer.setHDRHeadroom contract — keeps GPU shader math
+   * robust regardless of caller hygiene.
+   */
   setGlobalHDRHeadroom(headroom: number): void {
-    this._hdrHeadroom = headroom;
+    if (!Number.isFinite(headroom)) {
+      this._hdrHeadroom = 1.0;
+      return;
+    }
+    this._hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
   }
 
   /** Set the outputMode value for the global UBO. */
