@@ -81,7 +81,6 @@ export class InfoStripSettingsMenu {
     menu.style.top = `${top}px`;
     menu.style.visibility = 'visible';
 
-    this.menuEl = menu;
     this._isVisible = true;
     this.deregisterDismiss = outsideClickRegistry.register({
       elements: [menu],
@@ -239,5 +238,4 @@ export class InfoStripSettingsMenu {
       }
     });
   }
-
 }

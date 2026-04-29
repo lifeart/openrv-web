@@ -31,6 +31,21 @@
  * Returns a deregister function. Call it when the popover closes or when the
  * component is disposed. It is safe to call more than once.
  *
+ * Capture-phase semantics
+ * -----------------------
+ * The internal listeners are attached with `useCapture: true`. This is a
+ * deliberate semantic change from the pre-existing per-component bubble-phase
+ * handlers and is NOT just a defensive default. Consequences:
+ *   - The registry sees every event before bubble-phase listeners on
+ *     descendants run.
+ *   - A descendant calling `event.stopPropagation()` or even
+ *     `event.stopImmediatePropagation()` in the bubble phase CANNOT prevent
+ *     the registry from processing the event. The registry has already run by
+ *     the time bubble-phase listeners execute.
+ *   - To suppress dismiss for a specific click, deregister the registration
+ *     before the event fires (or include the relevant element in `elements`)
+ *     — do NOT rely on stopPropagation.
+ *
  * Nesting
  * -------
  * Registrations are stored in LIFO order (most recently opened first).
@@ -50,6 +65,17 @@
  * registration that opted into Escape handling — matching native modal/menu
  * behavior on every other platform. Each layer eats its own Escape.
  *
+ * Re-entrant register/deregister during dispatch
+ * ----------------------------------------------
+ *   - A `register()` call made from inside an `onDismiss` callback (or any
+ *     other listener fired during dispatch) takes effect immediately for
+ *     FUTURE events but is NOT considered for the in-flight event. Dispatch
+ *     iterates over a snapshot taken before any callback runs.
+ *   - A `deregister()` call made from inside a callback prevents the
+ *     deregistered entry's `onDismiss` from being invoked even if the entry
+ *     was already in the snapshot for the current event. This preserves the
+ *     intuitive contract: "if I deregister, my `onDismiss` won't be called."
+ *
  * Lifecycle safety
  * ----------------
  * Dismissing a registration automatically removes it from the registry, so a
@@ -66,6 +92,17 @@ export interface OutsideClickRegistration {
    *
    * Typically this is `[triggerButton, popoverElement]`. Pass an empty array
    * to dismiss on every outside event (rarely useful).
+   *
+   * Footgun: if the trigger button toggles the popover via a `click`
+   * listener, you MUST include the trigger element here. Otherwise the click
+   * sequence on the trigger is:
+   *   1. `mousedown` on trigger → registry sees target outside `elements`
+   *      → fires `onDismiss` → popover closes.
+   *   2. `click` on trigger → trigger's toggle handler runs → popover
+   *      reopens.
+   * The user perceives the popover as "uncloseable by clicking the trigger."
+   * Including the trigger in `elements` makes step 1 a no-op so the click
+   * cleanly toggles closed.
    */
   elements: ReadonlyArray<Element | null | undefined>;
 
@@ -109,6 +146,13 @@ interface InternalEntry {
   onDismiss: () => void;
   dismissOn: OutsideClickEventType;
   dismissOnEscape: boolean;
+  /**
+   * Set to true when the entry's deregister function is invoked, OR when the
+   * entry is removed during dispatch. Checked between snapshot iteration and
+   * callback invocation so that a callback that deregisters a peer prevents
+   * the peer's `onDismiss` from being called for the same in-flight event.
+   */
+  deregistered: boolean;
 }
 
 /**
@@ -123,10 +167,8 @@ export class OutsideClickRegistry {
   private listenersAttached = false;
 
   // Bound handlers so add/remove use the same identity.
-  private readonly boundMousedown = (e: MouseEvent): void =>
-    this.handlePointerEvent(e, 'mousedown');
-  private readonly boundClick = (e: MouseEvent): void =>
-    this.handlePointerEvent(e, 'click');
+  private readonly boundMousedown = (e: MouseEvent): void => this.handlePointerEvent(e, 'mousedown');
+  private readonly boundClick = (e: MouseEvent): void => this.handlePointerEvent(e, 'click');
   private readonly boundKeydown = (e: KeyboardEvent): void => this.handleKeydown(e);
 
   /**
@@ -140,15 +182,19 @@ export class OutsideClickRegistry {
       onDismiss: registration.onDismiss,
       dismissOn: registration.dismissOn ?? 'mousedown',
       dismissOnEscape: registration.dismissOnEscape ?? true,
+      deregistered: false,
     };
     // Insert at front: most recently registered = innermost.
+    // Note: if a callback fired during dispatch calls `register()`, the new
+    // entry is added here but is NOT visible to the in-flight event because
+    // `handlePointerEvent` iterates over a snapshot taken before any callback
+    // ran. The new entry will participate in subsequent events.
     this.entries.unshift(entry);
     this.ensureListenersAttached();
 
-    let deregistered = false;
     return () => {
-      if (deregistered) return;
-      deregistered = true;
+      if (entry.deregistered) return;
+      entry.deregistered = true;
       this.removeEntry(entry.id);
     };
   }
@@ -173,9 +219,14 @@ export class OutsideClickRegistry {
   private ensureListenersAttached(): void {
     if (this.listenersAttached) return;
     if (typeof document === 'undefined') return;
-    // `true` (capture) ensures we see the event even if a child stops
-    // propagation in the bubble phase. Settings menus historically used the
-    // bubble phase, but capture is safer for "did this click happen" detection.
+    // Capture-phase (`useCapture: true`) is a deliberate semantic change from
+    // the per-component bubble-phase handlers this registry replaced. It
+    // means the registry observes every event before any descendant
+    // bubble-phase handler runs, and a descendant calling
+    // `event.stopPropagation()` or `event.stopImmediatePropagation()` in the
+    // bubble phase CANNOT block the registry. Consumers must not rely on
+    // stopPropagation to suppress dismiss; instead, deregister beforehand or
+    // include the relevant element in `elements`.
     document.addEventListener('mousedown', this.boundMousedown, true);
     document.addEventListener('click', this.boundClick, true);
     document.addEventListener('keydown', this.boundKeydown, true);
@@ -199,10 +250,7 @@ export class OutsideClickRegistry {
     }
   }
 
-  private isTargetInside(
-    target: EventTarget | null,
-    elements: ReadonlyArray<Element | null | undefined>,
-  ): boolean {
+  private isTargetInside(target: EventTarget | null, elements: ReadonlyArray<Element | null | undefined>): boolean {
     if (!(target instanceof Node)) return false;
     for (const el of elements) {
       if (el && el.contains(target)) return true;
@@ -228,6 +276,8 @@ export class OutsideClickRegistry {
     // entries are safe.
     const toDismiss: InternalEntry[] = [];
     // Iterate over a snapshot — `onDismiss` may register/deregister others.
+    // Re-entrant `register()` calls during dispatch are NOT visible here; the
+    // new entries land in `this.entries` but not in this snapshot.
     const snapshot = this.entries.slice();
     for (const entry of snapshot) {
       if (this.isTargetInside(event.target, entry.elements)) {
@@ -245,12 +295,28 @@ export class OutsideClickRegistry {
 
     if (toDismiss.length === 0) return;
 
-    // Remove entries first so re-entrant register/deregister inside callbacks
-    // sees a consistent state.
+    // Remove the to-dismiss entries from the registry array first, so any
+    // `register`/`deregister` calls made from inside callbacks see a
+    // consistent state and `getRegistrationCount()` is accurate during
+    // callbacks.
+    //
+    // We do NOT set `entry.deregistered` here — that flag belongs to the
+    // deregister closure. A callback that calls a peer's deregister function
+    // will flip that peer's `deregistered` flag, and the invocation loop
+    // below will then skip the peer's `onDismiss`. This honors the contract:
+    // "if I deregister, my onDismiss won't be called."
     for (const entry of toDismiss) {
       this.removeEntry(entry.id);
     }
     for (const entry of toDismiss) {
+      // Skip entries whose deregister was invoked before we got to them in
+      // this dispatch (either by a peer callback or by external code racing
+      // with the event). This is the "deregister wins over in-flight
+      // dismiss" contract.
+      if (entry.deregistered) continue;
+      // Mark deregistered now so a callback calling our own deregister
+      // closure during onDismiss is a no-op rather than re-firing.
+      entry.deregistered = true;
       this.safeInvoke(entry.onDismiss);
     }
   }
@@ -264,6 +330,8 @@ export class OutsideClickRegistry {
     if (!innermost) return;
 
     this.removeEntry(innermost.id);
+    if (innermost.deregistered) return;
+    innermost.deregistered = true;
     this.safeInvoke(innermost.onDismiss);
   }
 }

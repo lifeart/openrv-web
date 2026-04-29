@@ -12,6 +12,7 @@
  */
 
 import { parseFrameInput, getFormatLabel, type FrameInputResult } from '../../utils/media/FrameInputParser';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 /**
  * Minimal session interface used by GotoFrameOverlay.
@@ -37,7 +38,7 @@ export class GotoFrameOverlay {
   private session: GotoFrameSession;
   private visible = false;
   private previousFocus: Element | null = null;
-  private boundOnClickOutside: ((e: MouseEvent) => void) | null = null;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private startFrame = 0;
 
   constructor(session: GotoFrameSession) {
@@ -174,9 +175,14 @@ export class GotoFrameOverlay {
     // Clear error state
     this.clearError();
 
-    // Register click-outside handler (mousedown for better UX)
-    this.boundOnClickOutside = this.onClickOutside.bind(this);
-    document.addEventListener('mousedown', this.boundOnClickOutside);
+    // Register click-outside handler via the centralized registry. The
+    // overlay also handles Escape on its own input, so we opt out of the
+    // registry's Escape handling to avoid double-dismiss / focus surprises.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container],
+      onDismiss: () => this.hide(),
+      dismissOnEscape: false,
+    });
   }
 
   /**
@@ -190,9 +196,9 @@ export class GotoFrameOverlay {
     this.input.value = '';
 
     // Remove click-outside handler
-    if (this.boundOnClickOutside) {
-      document.removeEventListener('mousedown', this.boundOnClickOutside);
-      this.boundOnClickOutside = null;
+    if (this.deregisterDismiss) {
+      this.deregisterDismiss();
+      this.deregisterDismiss = null;
     }
 
     // Restore focus
@@ -361,11 +367,5 @@ export class GotoFrameOverlay {
         this.input.style.borderColor = 'var(--bg-active, #3a3a4e)';
       }
     }, 600);
-  }
-
-  private onClickOutside(e: MouseEvent): void {
-    if (!this.container.contains(e.target as Node)) {
-      this.hide();
-    }
   }
 }

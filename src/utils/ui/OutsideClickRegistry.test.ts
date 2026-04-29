@@ -391,7 +391,7 @@ describe('OutsideClickRegistry', () => {
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
-    it('does not invoke a callback that was deregistered during another callback', () => {
+    it('skips a peer callback that is deregistered during dispatch ("if I deregister, my onDismiss does not run")', () => {
       const onDismissB = vi.fn();
       const a = document.createElement('div');
       const b = document.createElement('div');
@@ -407,14 +407,131 @@ describe('OutsideClickRegistry', () => {
         },
       });
 
-      // Inner (A) is processed first in LIFO order: it deregisters B before
-      // we reach B in the dismiss list.
-      // BUT — we dismiss in two phases: first remove from registry, then
-      // invoke callbacks. So both A and B are removed before any callback
-      // runs. A's callback then attempts to deregister B → idempotent no-op.
-      // B's callback still runs because it was already in the snapshot.
-      // The point of this test is that nothing crashes.
+      // LIFO order: A's onDismiss runs first; it calls B's deregister.
+      // The intuitive contract is that the deregister wins — B's onDismiss
+      // must NOT fire even though B was already in the toDismiss snapshot.
+      dispatch(outside, 'mousedown');
+
+      expect(onDismissB).not.toHaveBeenCalled();
+      a.remove();
+      b.remove();
+    });
+
+    it('continues invoking remaining callbacks when one throws', () => {
+      // Distinct from the deregister-skip case: even when an earlier callback
+      // throws (and does NOT deregister anyone), later callbacks still run.
+      const goodCallback = vi.fn();
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = document.createElement('div');
+      const b = document.createElement('div');
+      document.body.appendChild(a);
+      document.body.appendChild(b);
+
+      // Inner (A) registered last. LIFO walks A first, then B.
+      registry.register({ elements: [b], onDismiss: goodCallback });
+      registry.register({
+        elements: [a],
+        onDismiss: () => {
+          throw new Error('inner blew up');
+        },
+      });
+
       expect(() => dispatch(outside, 'mousedown')).not.toThrow();
+      expect(goodCallback).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+      a.remove();
+      b.remove();
+    });
+  });
+
+  describe('re-entrant register during dispatch', () => {
+    it('does not consider an entry registered during dispatch for the in-flight event', () => {
+      const lateOnDismiss = vi.fn();
+      const lateAnchor = document.createElement('div');
+      document.body.appendChild(lateAnchor);
+
+      const earlyOnDismiss = vi.fn(() => {
+        // A callback that registers a NEW entry during dispatch.
+        registry.register({ elements: [lateAnchor], onDismiss: lateOnDismiss });
+      });
+
+      registry.register({ elements: [inside], onDismiss: earlyOnDismiss });
+
+      // Click outside: the existing entry fires; the entry registered from
+      // inside its callback must NOT receive this in-flight event.
+      dispatch(outside, 'mousedown');
+
+      expect(earlyOnDismiss).toHaveBeenCalledTimes(1);
+      expect(lateOnDismiss).not.toHaveBeenCalled();
+      expect(registry.getRegistrationCount()).toBe(1);
+
+      // The next event SHOULD reach the new registration.
+      dispatch(outside, 'mousedown');
+      expect(lateOnDismiss).toHaveBeenCalledTimes(1);
+
+      lateAnchor.remove();
+    });
+
+    it('does not dismiss a re-entrantly-registered entry whose elements contain the click target', () => {
+      // Even if the new entry covers the current click target, it should not
+      // receive the in-flight event because it isn't in the snapshot.
+      const lateOnDismiss = vi.fn();
+
+      const earlyOnDismiss = vi.fn(() => {
+        // The late entry's elements include `outside` — the current click
+        // target. We're verifying the entry is not dismissed by the in-flight
+        // event regardless of element-target relationship.
+        registry.register({ elements: [outside], onDismiss: lateOnDismiss });
+      });
+
+      registry.register({ elements: [inside], onDismiss: earlyOnDismiss });
+
+      dispatch(outside, 'mousedown');
+
+      expect(lateOnDismiss).not.toHaveBeenCalled();
+      expect(registry.getRegistrationCount()).toBe(1);
+    });
+  });
+
+  describe('listener detach lifecycle', () => {
+    it('detaches global listeners when the last entry is removed via dismiss (not just manual deregister)', () => {
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+
+      registry.register({ elements: [inside], onDismiss: () => {} });
+      // Sanity: registered.
+      expect(registry.getRegistrationCount()).toBe(1);
+
+      dispatch(outside, 'mousedown');
+
+      // Last entry was removed via dismiss path — listeners must detach.
+      expect(registry.getRegistrationCount()).toBe(0);
+      const removed = removeSpy.mock.calls.filter(
+        (c) => c[0] === 'mousedown' || c[0] === 'click' || c[0] === 'keydown',
+      );
+      expect(removed.length).toBe(3);
+
+      removeSpy.mockRestore();
+    });
+  });
+
+  describe('detached DOM elements', () => {
+    it('still dismisses normally when a registered element is removed from the DOM before the event', () => {
+      const onDismiss = vi.fn();
+      const detachable = document.createElement('div');
+      document.body.appendChild(detachable);
+
+      registry.register({ elements: [detachable], onDismiss });
+
+      // Remove the registered element from the DOM. The registry does not
+      // observe this; the next outside event should still dismiss normally.
+      detachable.remove();
+
+      dispatch(outside, 'mousedown');
+
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(registry.getRegistrationCount()).toBe(0);
     });
   });
 
