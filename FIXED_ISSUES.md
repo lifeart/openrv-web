@@ -5417,3 +5417,35 @@ Each error is descriptive — names the actual count and the cap.
 - Stash-revert confirms 3 of 5 new tests would fail on pre-fix code (EPW-ERR-001, EPW-ERR-003, WP-015b); 2 are sanity checks that pass either way.
 
 **Known follow-up (separate ticket)**: `src/render/renderWorker.worker.ts` uses a different `renderError` protocol but has the same Error.stack-lost defect at lines ~258, 308, 336. Out of LOW-23 scope.
+
+## Issue #380: MED-54 — Gamut mapping matrix working space undocumented
+
+**Root cause**: Color matrices in `viewer.frag.glsl`, `common.wgsl`, `scene_analysis.wgsl`, `effectProcessing.shared.ts`, and `ShaderConstants.ts` had no inline documentation of source/destination color spaces, derivation references, or storage conventions. A future reader could not tell whether a matrix mapped Rec.709→AP1, AP1→Rec.709, Rec.2020→sRGB, etc. without re-deriving from constants. The `COLOR_PRIMARIES_MATRICES` JSDoc additionally claimed the matrices were derived "via the Bradford chromatic adaptation transform" — misleading because all entries share the D65 white point, so no CAT is involved.
+
+**Fix**: Documented ~10 matrices with source space, destination space, derivation reference (BT.2020-2 + BT.709-6, SMPTE EG 432-1, BakingLab/ACES.hlsl, MJP AgX 0.13.5), GLSL/WGSL column-major storage convention, and cross-links between mirrored implementations. Annotated AgX inset/outset matrices and ACES Hill input/output matrices as NOT pure primary conversions (they are gamut-compression pairs and ODT-tuned composites respectively), so future readers don't treat them as interchangeable with canonical Rec.709→AP1 matrices. Corrected the misleading "Bradford CAT" JSDoc to clarify CAT is only required when source and destination white points differ. NO matrix values were changed.
+
+**Tests added** (`src/render/__tests__/shaderMathColorPipeline.test.ts`):
+11 new tests (`MED-54-001..011`) pinning matrix values against documented intent:
+- Out-of-gamut signature for widening conversions (Rec.2020→sRGB red `r > 1`, P3→sRGB red mildly OOB)
+- In-gamut signature for narrowing conversions (sRGB→P3, sRGB→Rec.2020)
+- D65 white preservation across REC2020↔sRGB, P3↔sRGB
+- `gamutMapRGB` clip behavior and identity (sRGB→sRGB falls through)
+- AgX inset/outset preserves neutral axis (BT.709 working space)
+- ACES Hill input/output preserves neutral on neutral input (BT.709→AP1 round-trip)
+- Column-major mat3 storage convention pinned
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/webgpu/shaders/scene_analysis.wgsl`
+- `src/utils/effects/effectProcessing.shared.ts`
+- `src/render/ShaderConstants.ts`
+- `src/render/__tests__/shaderMathColorPipeline.test.ts`
+
+**Verification**:
+- 53 shaderMathColorPipeline tests passing.
+- 2195 tests passing across src/render + src/utils/effects.
+- `npx tsc --noEmit` clean.
+- Reviewer numerically verified: REC2020→sRGB applied to (1,0,0) ≈ (1.66, -0.12, -0.02) — out-of-gamut signature confirmed; D65 preservation confirmed; SRGB→P3 narrowing confirmed.
+
+**Known cosmetic follow-up**: 4th-decimal precision discrepancy between `ShaderConstants.ts` REC2020_TO_SRGB[3] (-0.5877) and GLSL/CPU mirrors (-0.5876). Pre-existing, no functional impact.
