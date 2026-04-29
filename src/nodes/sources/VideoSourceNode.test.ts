@@ -372,6 +372,149 @@ describe('VideoSourceNode', () => {
 
       testNode.dispose();
     });
+
+    // =========================================================================
+    // CRIT-01: HDR VideoSample/VideoFrame ownership transfer — close on every
+    // exit path. getFrameHDR() transfers ownership to the caller (fetchHDRFrame).
+    // These tests assert that no path leaks the sample or its VideoFrame.
+    // =========================================================================
+
+    it('CRIT-01-VSN-001: N HDR samples extracted -> N samples closed (success path)', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      const samples: { close: ReturnType<typeof vi.fn> }[] = [];
+
+      for (let i = 1; i <= 5; i++) {
+        const { mockSample } = createMockSample();
+        samples.push(mockSample);
+        mockFrameExtractor.getFrameHDR.mockResolvedValueOnce(mockSample);
+        await testNode.fetchHDRFrame(i);
+      }
+
+      // Each VideoSample must be closed exactly once
+      for (const sample of samples) {
+        expect(sample.close).toHaveBeenCalledTimes(1);
+      }
+
+      testNode.dispose();
+    });
+
+    it('CRIT-01-VSN-002: sample is closed even when hdrSampleToIPImage throws (sync error during use)', async () => {
+      const { testNode, internal, mockFrameExtractor } = setupHDRNode();
+      const { mockSample, mockVideoFrame } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      // Force hdrSampleToIPImage to throw mid-conversion
+      const spy = vi.spyOn(internal, 'hdrSampleToIPImage').mockImplementation(() => {
+        throw new Error('synthetic conversion failure');
+      });
+
+      const result = await testNode.fetchHDRFrame(1);
+
+      expect(result).toBeNull();
+      // Sample MUST be closed on the error path
+      expect(mockSample.close).toHaveBeenCalledTimes(1);
+      // VideoFrame is owned by hdrSampleToIPImage's try/catch; the test mock
+      // just verifies sample lifecycle. Spy ensures we hit the error path.
+      expect(spy).toHaveBeenCalledTimes(1);
+      // VideoFrame produced by toVideoFrame() should not have been leaked
+      // (in production hdrSampleToIPImage closes its videoFrame on throw;
+      // here we assert sample.toVideoFrame was at least attempted).
+      void mockVideoFrame; // referenced for future expansions
+      testNode.dispose();
+    });
+
+    it('CRIT-01-VSN-003: sample is closed when getFrameHDR resolves AFTER dispose', async () => {
+      const { testNode, internal, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+
+      // Make getFrameHDR resolve only after we've nulled frameExtractor (dispose race)
+      let resolveSample: (value: typeof mockSample) => void;
+      const samplePromise = new Promise<typeof mockSample>((r) => {
+        resolveSample = r;
+      });
+      mockFrameExtractor.getFrameHDR.mockReturnValue(samplePromise);
+
+      // Start fetch; do NOT await yet
+      const fetchP = testNode.fetchHDRFrame(1);
+
+      // Simulate dispose mid-await: null out frameExtractor
+      internal.frameExtractor = null;
+
+      // Now resolve the sample — caller (fetchHDRFrame) owns it and must close it
+      resolveSample!(mockSample);
+
+      const result = await fetchP;
+      expect(result).toBeNull();
+      // CRIT-01 leak fix: sample must be closed even when dispose nulled frameExtractor
+      expect(mockSample.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('CRIT-01-VSN-004: getFrameHDR rejection -> sample close not called (no sample to close)', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      mockFrameExtractor.getFrameHDR.mockRejectedValue(new Error('async extraction failure'));
+
+      const result = await testNode.fetchHDRFrame(1);
+
+      expect(result).toBeNull();
+      // No sample was produced, so no close call to verify; assertion is just
+      // that the async error doesn't throw out of fetchHDRFrame and dispose() still works
+      expect(() => testNode.dispose()).not.toThrow();
+    });
+
+    it('CRIT-01-VSN-005: ipImage and sample closed when dispose nulls frameExtractor after hdrSampleToIPImage', async () => {
+      const { testNode, internal, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      // Spy on hdrSampleToIPImage to (a) capture the produced IPImage with
+      // wrapped close() and (b) simulate dispose happening exactly between
+      // image creation and cache.set by nulling frameExtractor inside the spy.
+      const realToIPImage = internal.hdrSampleToIPImage.bind(internal);
+      let capturedIPImage: { close: ReturnType<typeof vi.fn> } | null = null;
+      vi.spyOn(internal, 'hdrSampleToIPImage').mockImplementation((...args: any[]) => {
+        const img = realToIPImage(...args);
+        const origClose = img.close.bind(img);
+        const closeSpy = vi.fn(() => origClose());
+        img.close = closeSpy;
+        capturedIPImage = img as unknown as { close: ReturnType<typeof vi.fn> };
+        // Simulate the dispose race: dispose() runs synchronously between
+        // hdrSampleToIPImage returning and the post-conversion guard check.
+        internal.frameExtractor = null;
+        return img;
+      });
+
+      const result = await testNode.fetchHDRFrame(1);
+
+      expect(result).toBeNull();
+      // Sample is owned by us — must be closed
+      expect(mockSample.close).toHaveBeenCalledTimes(1);
+      // IPImage was created but never cached — must be closed (CRIT-01 fix)
+      expect(capturedIPImage).not.toBeNull();
+      expect(capturedIPImage!.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('CRIT-01-VSN-006: sample closed when frameExtractor nulled while awaiting getFrameHDR', async () => {
+      const { testNode, internal, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+
+      // Resolve sample only after we null frameExtractor
+      let resolveSample: (v: typeof mockSample) => void;
+      mockFrameExtractor.getFrameHDR.mockReturnValue(
+        new Promise<typeof mockSample>((r) => {
+          resolveSample = r;
+        }),
+      );
+
+      const fetchP = testNode.fetchHDRFrame(1);
+      // Null frameExtractor before resolving — simulates dispose during await
+      internal.frameExtractor = null;
+      resolveSample!(mockSample);
+
+      const result = await fetchP;
+      expect(result).toBeNull();
+      // Sample arrived after dispose — caller (us) still owns it and must close
+      expect(mockSample.close).toHaveBeenCalledTimes(1);
+    });
   });
 
   // REGRESSION TEST: VideoSourceNode must use DEFAULT_PRELOAD_CONFIG

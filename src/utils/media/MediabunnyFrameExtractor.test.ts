@@ -745,6 +745,101 @@ describe('MediabunnyFrameExtractor', () => {
       expect(metadata.isHDR).toBe(false);
       expect(metadata.hdrDowngraded).toBe(true);
     });
+
+    // CRIT-01: probeSample.close() must run even when probeFrame.close() throws
+    // or probeSample.toVideoFrame() throws. Previous code only closed
+    // probeSample on the success path of the inner block.
+    it('CRIT-01-MFE-001: probeSample.close() runs when probeFrame.close() throws', async () => {
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const mockTrack = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        codec: 'hvc1',
+        canDecode: vi.fn().mockResolvedValue(true),
+        hasHighDynamicRange: vi.fn().mockResolvedValue(true),
+        getColorSpace: vi.fn().mockResolvedValue(null),
+      };
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue(mockTrack),
+        computeDuration: vi.fn().mockResolvedValue(10),
+        dispose: vi.fn(),
+      };
+      vi.mocked(Input).mockReturnValueOnce(mockInput as never);
+
+      const probeFrameClose = vi.fn(() => {
+        throw new Error('synthetic VideoFrame.close() failure');
+      });
+      const probeSampleClose = vi.fn();
+      const probeGetSample = vi.fn().mockResolvedValue({
+        toVideoFrame: vi.fn().mockReturnValue({
+          colorSpace: { transfer: 'smpte2084', primaries: 'bt2020' },
+          close: probeFrameClose,
+        }),
+        close: probeSampleClose,
+      });
+
+      vi.mocked(VideoSampleSink)
+        .mockImplementationOnce(() => ({ getSample: probeGetSample }) as never)
+        .mockImplementationOnce(() => ({ getSample: vi.fn().mockResolvedValue(null) }) as never);
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      // Probe ran (frame metadata was applied before close threw)
+      expect(metadata.colorSpace?.transfer).toBe('smpte2084');
+      expect(probeFrameClose).toHaveBeenCalledTimes(1);
+      // CRIT-01: probeSample.close() MUST be called even though probeFrame.close() threw
+      expect(probeSampleClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('CRIT-01-MFE-002: probeSample.close() runs when toVideoFrame() throws', async () => {
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const mockTrack = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        codec: 'hvc1',
+        canDecode: vi.fn().mockResolvedValue(true),
+        hasHighDynamicRange: vi.fn().mockResolvedValue(true),
+        getColorSpace: vi.fn().mockResolvedValue(null),
+      };
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue(mockTrack),
+        computeDuration: vi.fn().mockResolvedValue(10),
+        dispose: vi.fn(),
+      };
+      vi.mocked(Input).mockReturnValueOnce(mockInput as never);
+
+      const probeSampleClose = vi.fn();
+      const probeGetSample = vi.fn().mockResolvedValue({
+        toVideoFrame: vi.fn(() => {
+          throw new Error('synthetic toVideoFrame() failure');
+        }),
+        close: probeSampleClose,
+      });
+
+      vi.mocked(VideoSampleSink)
+        .mockImplementationOnce(() => ({ getSample: probeGetSample }) as never)
+        .mockImplementationOnce(() => ({ getSample: vi.fn().mockResolvedValue(null) }) as never);
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      // load() must not reject — the probe failure is expected to be swallowed
+      // by the outer try/catch around the probe block.
+      await expect(extractor.load(mockFile, 24)).resolves.toBeDefined();
+      // CRIT-01: probeSample.close() MUST be called even though toVideoFrame() threw
+      expect(probeSampleClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Metadata codec info', () => {

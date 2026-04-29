@@ -311,38 +311,57 @@ export class MediabunnyFrameExtractor {
           const probeSink = new VideoSampleSink(this.videoTrack);
           const probeSample = await probeSink.getSample(0);
           if (probeSample) {
-            const probeFrame = probeSample.toVideoFrame();
+            // CRIT-01: outer try/finally guarantees probeSample.close() runs even if
+            // probeSample.toVideoFrame() or probeFrame.close() throws. The inner
+            // try/finally ensures probeFrame.close() runs if reading colorSpace throws.
             try {
-              const cs = probeFrame.colorSpace;
-              if (cs) {
-                const transfer = cs.transfer ?? undefined;
-                const primaries = cs.primaries ?? undefined;
-                const transferName = transfer as string | undefined;
-                const primariesName = primaries as string | undefined;
-                if (transfer || primaries || cs.matrix || (cs.fullRange !== null && cs.fullRange !== undefined)) {
-                  videoColorSpace = {
-                    transfer,
-                    primaries,
-                    matrix: cs.matrix ?? undefined,
-                    fullRange: cs.fullRange ?? undefined,
-                  };
+              let probeFrame: VideoFrame | null = null;
+              try {
+                probeFrame = probeSample.toVideoFrame();
+                const cs = probeFrame.colorSpace;
+                if (cs) {
+                  const transfer = cs.transfer ?? undefined;
+                  const primaries = cs.primaries ?? undefined;
+                  const transferName = transfer as string | undefined;
+                  const primariesName = primaries as string | undefined;
+                  if (transfer || primaries || cs.matrix || (cs.fullRange !== null && cs.fullRange !== undefined)) {
+                    videoColorSpace = {
+                      transfer,
+                      primaries,
+                      matrix: cs.matrix ?? undefined,
+                      fullRange: cs.fullRange ?? undefined,
+                    };
+                  }
+                  if (
+                    transferName === 'pq' ||
+                    transferName === 'hlg' ||
+                    transferName === 'smpte2084' ||
+                    transferName === 'arib-std-b67' ||
+                    primariesName === 'bt2020' ||
+                    primariesName === 'smpte432'
+                  ) {
+                    isHDR = true;
+                    log.info(
+                      `HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`,
+                    );
+                  }
                 }
-                if (
-                  transferName === 'pq' ||
-                  transferName === 'hlg' ||
-                  transferName === 'smpte2084' ||
-                  transferName === 'arib-std-b67' ||
-                  primariesName === 'bt2020' ||
-                  primariesName === 'smpte432'
-                ) {
-                  isHDR = true;
-                  log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
+              } finally {
+                if (probeFrame) {
+                  try {
+                    probeFrame.close();
+                  } catch {
+                    /* already closed */
+                  }
                 }
               }
             } finally {
-              probeFrame.close();
+              try {
+                probeSample.close();
+              } catch {
+                /* already closed */
+              }
             }
-            probeSample.close();
           }
         } catch (e) {
           log.warn('VideoFrame HDR probe failed:', e);
@@ -762,8 +781,31 @@ export class MediabunnyFrameExtractor {
 
   /**
    * Extract a single HDR frame by frame number (1-based) using VideoSampleSink.
-   * Returns a VideoSample that can produce a VideoFrame for direct GPU upload.
-   * Falls back to null if VideoSampleSink is not available.
+   *
+   * **Ownership transfer:** The returned `VideoSample` is owned by the caller.
+   * The caller MUST call `.close()` on the sample when done to release the
+   * underlying GPU resource. Failing to close leaks GPU memory.
+   *
+   * **Recommended call pattern:**
+   * ```ts
+   * const sample = await extractor.getFrameHDR(frame);
+   * if (!sample) return null;
+   * try {
+   *   // use sample.toVideoFrame() — ownership of returned VideoFrame is the caller's
+   * } finally {
+   *   sample.close();
+   * }
+   * ```
+   *
+   * Note: `sample.toVideoFrame()` produces a `VideoFrame` whose lifecycle is
+   * also the caller's responsibility (close it OR transfer ownership to
+   * an `IPImage` whose `close()` will release it).
+   *
+   * Returns `null` when:
+   * - The video is not HDR (no `VideoSampleSink` available)
+   * - The abort signal is already aborted (or aborts during await)
+   * - The decoder fails to produce a sample for the requested timestamp
+   *
    * Uses CFR-based timestamp estimation when frame index is not yet built.
    */
   async getFrameHDR(frame: number, signal?: AbortSignal): Promise<VideoSample | null> {

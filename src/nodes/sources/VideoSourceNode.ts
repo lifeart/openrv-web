@@ -1048,6 +1048,13 @@ export class VideoSourceNode extends BaseSourceNode {
     if (pending) return pending;
 
     // Create the fetch promise and track it
+    //
+    // CRIT-01 lifecycle contract:
+    //   getFrameHDR() transfers VideoSample ownership to us. We MUST close it
+    //   on every exit path (success, error, dispose-during-await). The sample
+    //   is closed in the finally block once toVideoFrame() has been consumed
+    //   by hdrSampleToIPImage (which transfers VideoFrame ownership to IPImage).
+    //   The IPImage is closed if we cannot cache it (dispose race or error).
     const fetchPromise = (async (): Promise<IPImage | null> => {
       let sample: { toVideoFrame(): VideoFrame; close(): void } | null = null;
       let ipImage: IPImage | null = null;
@@ -1059,36 +1066,50 @@ export class VideoSourceNode extends BaseSourceNode {
         sample = await this.frameExtractor.getFrameHDR(frame);
         PerfTrace.end('getFrameHDR');
 
-        // Guard: dispose() may have been called while awaiting getFrameHDR
-        if (!sample || !this.frameExtractor) return null;
+        if (!sample) return null;
+
+        // Guard: dispose() may have been called while awaiting getFrameHDR.
+        // Sample is already owned by us — finally below will close it.
+        if (!this.frameExtractor) return null;
 
         // Use stable HDR target size (actual display dims, not interaction-reduced)
         const targetSize = this.hdrTargetSize;
         PerfTrace.begin('hdrSampleToIPImage');
         ipImage = this.hdrSampleToIPImage(sample, frame, targetSize);
         PerfTrace.end('hdrSampleToIPImage');
-        sample.close();
-        sample = null; // prevent double-close in catch
 
-        // Guard: dispose() may have been called during hdrSampleToIPImage/resize
-        if (!this.frameExtractor) {
-          ipImage.close(); // clean up since we won't cache it
-          return null;
-        }
+        // Guard: dispose() may have been called during hdrSampleToIPImage/resize.
+        // IPImage is owned by us — finally below will close it.
+        if (!this.frameExtractor) return null;
 
         // Store in LRU cache (eviction calls image.close() automatically)
         this.hdrFrameCache.set(frame, ipImage);
-        ipImage = null; // ownership transferred to cache
+        ipImage = null; // ownership transferred to cache; finally must NOT close
         return this.hdrFrameCache.get(frame)!;
       } catch (e) {
-        ipImage?.close();
-        try {
-          sample?.close();
-        } catch {
-          /* */
-        }
         log.debug('HDR frame decode/resize failed:', e);
         return null;
+      } finally {
+        // Always release the VideoSample — ownership was transferred to us by
+        // getFrameHDR(). VideoFrame produced via toVideoFrame() now belongs to
+        // the IPImage; closing the sample only releases the sample wrapper.
+        if (sample) {
+          try {
+            sample.close();
+          } catch {
+            /* already closed */
+          }
+        }
+        // If we still hold the IPImage (didn't transfer to cache), release it.
+        // This covers: error during cache.set, dispose race after creation,
+        // and any unexpected exit path.
+        if (ipImage) {
+          try {
+            ipImage.close();
+          } catch {
+            /* already closed */
+          }
+        }
       }
     })();
 
