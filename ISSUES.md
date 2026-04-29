@@ -48,9 +48,7 @@ These issues were found and fixed during the audit:
 - **File**: `src/composite/BlendModes.ts` ~lines 294-309
 - **Status**: Likely correct — topmost is a stack-level mode set uniformly on all layers. Checking `layers[0]` suffices.
 
-#### HIGH-31: MPF offset arithmetic partially unchecked
-- **File**: `src/formats/JPEGGainmapDecoder.ts` ~lines 413, 432
-- **Status**: Won't crash (ArrayBuffer.slice clamps), but truncated JPEG blobs produce opaque errors.
+#### ~~HIGH-31~~: MPF offset arithmetic partially unchecked — **FIXED** (see FIXED_ISSUES.md #374)
 
 #### MED-19: HotReloadManager state capture not deep-cloned
 - **File**: `src/plugin/dev/HotReloadManager.ts` ~lines 59-61

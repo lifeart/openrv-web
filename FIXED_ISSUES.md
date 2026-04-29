@@ -5237,3 +5237,35 @@ Migrated 14 components to the new registry: BugOverlaySettingsMenu, ClippingOver
 - `npx tsc --noEmit` clean.
 
 **Known follow-up (non-blocking)**: ~30 other controls (ZebraControl, CompareControl, StereoControl, ScopesControl, ToneMappingControl, OCIOControl, LUTPipelinePanel, etc.) still have hand-rolled outside-click dismiss patterns. Each migration requires updating the associated test (replace `expect(document.addEventListener).toHaveBeenCalledWith(...)` style assertions with `expect(outsideClickRegistry.getRegistrationCount()).toBe(...)`). Tracked as a follow-up batch.
+
+---
+
+## Issue #374: HIGH-31 — MPF offset arithmetic partially unchecked
+
+**Root cause**: `parseMPFEntries` and `parseGainmapJPEG` in `src/formats/JPEGGainmapDecoder.ts` performed offset+size arithmetic on uint32 values read from untrusted JPEG content with several unchecked paths. ArrayBuffer.slice silently clamps OOB offsets, producing opaque downstream errors (e.g., a decoder fails on a 0-byte blob with no context). The IFD entry array, MPEntry table, individual MPEntry slices, and base-image slice were all subject to silent truncation rather than explicit error.
+
+**Fix**: Added `ensureMPFRange(start, size, bufferLength, context)` helper that validates non-finite/negative/OOB ranges and throws `DecoderError` with descriptive context including offset, size, and buffer length in hex. Applied at every structural boundary:
+- `parseGainmapJPEG`: base image slice + gainmap slice
+- `parseMPFEntries`: IFD entry-count read, full IFD entry array, MPEntry table for tag 0xB002 (using `count` byte length per CIPA DC-007 spec when available, else `mpEntryCount * 16`), full MPEntry array
+- `decodeGainmapToFloat32`: unified to use `ensureMPFRange` for consistent error UX
+- Sanity cap `mpEntryCount > 65535` at the `0xB001` NumberOfImages tag to short-circuit malicious huge values
+- `parseGainmapJPEG` returns `null` for buffers < 4 bytes instead of throwing `RangeError` from getUint16
+
+Lenient/strict boundary preserved: returns `null` for "this isn't MPF" signals (size < 8, wrong BOM, missing TIFF magic) and throws for post-header bounds violations (corruption that should be surfaced).
+
+**Tests added** (`src/formats/JPEGGainmapDecoder.test.ts`):
+- `HIGH-31: explicit MPF bounds-check errors` describe block: 8 integration tests covering IFD offset OOB, MPEntry tag valueOffset OOB, MPEntry table truncation, base image size OOB, JPEG truncated inside MPF segment, boundary case (entries end exactly at buffer length), boundary case (gainmap offset == buffer length with size 0), empty buffer.
+- `ensureMPFRange (internal helper)` describe block: 9 direct unit tests for in-range, exact-fit, NaN/Infinity branches, negative branches, OOB, hex-format assertion, context passthrough.
+- `mpEntryCount sanity cap (round-2 polish)` describe block: 3 tests for cap at 65535, accepts boundary exactly 65535.
+- `decodeGainmapToFloat32 bounds checks`: 2 existing tests updated to assert unified message format.
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+**Verification**:
+- 47 JPEGGainmapDecoder tests passing.
+- 1128 format tests passing across 23 files.
+- `npx tsc --noEmit` clean.
+
+**Known follow-up**: MED-30 (MPF IFD entry count unbounded for the `count / 16` derivation when 0xB002 precedes 0xB001) is tracked as a separate issue.
