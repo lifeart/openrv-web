@@ -322,9 +322,6 @@ export class EffectProcessor {
   private static highlightLUT: Float32Array | null = null;
   private static shadowLUT: Float32Array | null = null;
 
-  // Cached midtone mask for clarity (static since it never changes)
-  private static midtoneMask: Float32Array | null = null;
-
   // Vibrance 3D LUT cache (static - shared across instances for same parameters)
   private static vibrance3DLUT: Float32Array | null = null;
   private static vibrance3DLUTParams: {
@@ -1099,20 +1096,10 @@ export class EffectProcessor {
     }
   }
 
-  /**
-   * Get cached midtone mask for clarity (lazily initialized)
-   */
-  private getMidtoneMask(): Float32Array {
-    if (!EffectProcessor.midtoneMask) {
-      EffectProcessor.midtoneMask = new Float32Array(256);
-      for (let i = 0; i < 256; i++) {
-        const normalized = i / 255;
-        const deviation = Math.abs(normalized - 0.5) * 2;
-        EffectProcessor.midtoneMask[i] = 1.0 - deviation * deviation;
-      }
-    }
-    return EffectProcessor.midtoneMask;
-  }
+  // Note: prior versions cached a 256-entry midtone mask LUT and indexed it by
+  // Math.round(luminance). That integer-rounded lookup produced banding in
+  // smooth gradients (LOW-24). The clarity loops now compute the mask formula
+  // `1 - (|n - 0.5| * 2)^2` inline in float precision.
 
   /**
    * Ensure clarity buffers are allocated and sized correctly.
@@ -1174,9 +1161,12 @@ export class EffectProcessor {
     this.applyGaussianBlur5x5InPlace(original, width, height);
     const blurred = this.clarityBlurResultBuffer!;
 
-    // Use cached midtone mask
-    const midtoneMask = this.getMidtoneMask();
     const effectScale = clarity * CLARITY_EFFECT_SCALE;
+    // Float-precision midtone mask (LOW-24): avoids the integer LUT quantization
+    // that produced banding in smooth gradients. inv255 normalizes the luma sum
+    // (already in [0, 255] since LUMA_R + LUMA_G + LUMA_B === 1) into [0, 1] so
+    // the mask formula 1 - (|n - 0.5| * 2)^2 is computed in float throughout.
+    const inv255 = 1 / 255;
 
     for (let i = 0; i < len; i += 4) {
       const r = original[i]!;
@@ -1187,9 +1177,9 @@ export class EffectProcessor {
       const blurredG = blurred[i + 1]!;
       const blurredB = blurred[i + 2]!;
 
-      const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-      const mask = midtoneMask[lumIndex]!;
+      const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+      const dev = Math.abs(lumNorm - 0.5) * 2;
+      const mask = 1.0 - dev * dev;
 
       const highR = r - blurredR;
       const highG = g - blurredG;
@@ -1235,9 +1225,9 @@ export class EffectProcessor {
     // Upsample the blurred result back to full resolution
     const upsampled = upsample2x(halfBlurred, halfW, halfH, width, height);
 
-    // Use cached midtone mask
-    const midtoneMask = this.getMidtoneMask();
     const effectScale = clarity * CLARITY_EFFECT_SCALE;
+    // Float-precision midtone mask (LOW-24).
+    const inv255 = 1 / 255;
 
     // Apply high-pass blend at full resolution: original + (original - upsampled_blur) * mask
     for (let i = 0; i < len; i += 4) {
@@ -1249,9 +1239,9 @@ export class EffectProcessor {
       const blurredG = upsampled[i + 1]!;
       const blurredB = upsampled[i + 2]!;
 
-      const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-      const mask = midtoneMask[lumIndex]!;
+      const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+      const dev = Math.abs(lumNorm - 0.5) * 2;
+      const mask = 1.0 - dev * dev;
 
       const highR = r - blurredR;
       const highG = g - blurredG;
@@ -1510,9 +1500,9 @@ export class EffectProcessor {
     this.applyGaussianBlur5x5InPlace(original, width, height);
     const blurred = this.clarityBlurResultBuffer!;
 
-    // Use cached midtone mask
-    const midtoneMask = this.getMidtoneMask();
     const effectScale = clarity * CLARITY_EFFECT_SCALE;
+    // Float-precision midtone mask (LOW-24).
+    const inv255 = 1 / 255;
 
     // Process the high-pass blend in row-based chunks
     const chunkRows = EffectProcessor.CHUNK_ROWS;
@@ -1530,9 +1520,9 @@ export class EffectProcessor {
         const blurredG = blurred[i + 1]!;
         const blurredB = blurred[i + 2]!;
 
-        const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-        const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-        const mask = midtoneMask[lumIndex]!;
+        const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+        const dev = Math.abs(lumNorm - 0.5) * 2;
+        const mask = 1.0 - dev * dev;
 
         const highR = r - blurredR;
         const highG = g - blurredG;

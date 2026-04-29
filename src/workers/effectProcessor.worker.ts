@@ -109,7 +109,10 @@ function ensureSharpenHalfResBuffers(halfLen: number): void {
   }
 }
 
-// Cached midtone mask (never changes, 256 entries)
+// Cached midtone mask (never changes, 256 entries).
+// Retained for backwards compatibility with tests/consumers that index by uint8
+// luminance. The hot clarity loops compute the mask in float precision via
+// computeMidtoneMaskValue() to avoid banding from index quantization.
 let midtoneMask: Float32Array | null = null;
 
 function ensureClarityBuffers(size: number): void {
@@ -121,13 +124,26 @@ function ensureClarityBuffers(size: number): void {
   }
 }
 
+/**
+ * Compute the midtone mask weight for a given normalized luminance in [0, 1].
+ *
+ * Formula: 1 - (|n - 0.5| * 2)^2 — a smooth inverted parabola peaking at 0.5.
+ *
+ * Operates entirely in float precision so that smooth gradients produce smooth
+ * mask values (no plateaus from int LUT quantization, see LOW-24).
+ * Input is clamped to [0, 1] so the result is always in [0, 1].
+ */
+function computeMidtoneMaskValue(normalizedLum: number): number {
+  const n = normalizedLum < 0 ? 0 : normalizedLum > 1 ? 1 : normalizedLum;
+  const dev = Math.abs(n - 0.5) * 2;
+  return 1.0 - dev * dev;
+}
+
 function getMidtoneMask(): Float32Array {
   if (!midtoneMask) {
     midtoneMask = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
-      const n = i / 255;
-      const dev = Math.abs(n - 0.5) * 2;
-      midtoneMask[i] = 1.0 - dev * dev;
+      midtoneMask[i] = computeMidtoneMaskValue(i / 255);
     }
   }
   return midtoneMask;
@@ -321,16 +337,20 @@ function applyClarity(data: Uint8ClampedArray, width: number, height: number, ca
   applyGaussianBlur5x5InPlace(original, width, height);
   const blurred = clarityBlurResultBuffer!;
 
-  const mask = getMidtoneMask();
   const effectScale = clarity * CLARITY_EFFECT_SCALE;
+  // Inverse-255 to keep the per-pixel luminance normalization in float precision
+  // (avoids the integer-rounded LUT lookup that produced banding — LOW-24).
+  // Mask formula `1 - (|n - 0.5| * 2)^2` is inlined for tight-loop perf;
+  // computeMidtoneMaskValue() exists for tests + cached LUT init.
+  const inv255 = 1 / 255;
 
   for (let i = 0; i < len; i += 4) {
     const r = original[i]!,
       g = original[i + 1]!,
       b = original[i + 2]!;
-    const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-    const adj = mask[lumIndex]! * effectScale;
+    const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+    const dev = Math.abs(lumNorm - 0.5) * 2;
+    const adj = (1.0 - dev * dev) * effectScale;
 
     data[i] = Math.max(0, Math.min(255, r + (r - blurred[i]!) * adj));
     data[i + 1] = Math.max(0, Math.min(255, g + (g - blurred[i + 1]!) * adj));
@@ -857,8 +877,9 @@ function applyClarityHalfRes(data: Uint8ClampedArray, width: number, height: num
   // Upsample the blurred result back to full resolution
   const upsampled = upsample2x(halfBlurred, halfW, halfH, width, height);
 
-  const mask = getMidtoneMask();
   const effectScale = clarity * CLARITY_EFFECT_SCALE;
+  // Float-precision midtone mask — see LOW-24.
+  const inv255 = 1 / 255;
 
   // Apply high-pass blend at full resolution
   for (let i = 0; i < len; i += 4) {
@@ -866,9 +887,9 @@ function applyClarityHalfRes(data: Uint8ClampedArray, width: number, height: num
     const g = data[i + 1]!;
     const b = data[i + 2]!;
 
-    const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-    const adj = mask[lumIndex]! * effectScale;
+    const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+    const dev = Math.abs(lumNorm - 0.5) * 2;
+    const adj = (1.0 - dev * dev) * effectScale;
 
     data[i] = Math.max(0, Math.min(255, r + (r - upsampled[i]!) * adj));
     data[i + 1] = Math.max(0, Math.min(255, g + (g - upsampled[i + 1]!) * adj));
@@ -1127,6 +1148,7 @@ export const __test__ = {
   ensureClarityBuffers,
   ensureSharpenBuffer,
   getMidtoneMask,
+  computeMidtoneMaskValue,
   getVibrance3DLUT,
   applyClarity,
   applySharpen,

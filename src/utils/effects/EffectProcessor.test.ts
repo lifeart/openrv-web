@@ -852,30 +852,57 @@ describe('EffectProcessor', () => {
         expect(processorAny.clarityBufferSize).toBe(50 * 50 * 4);
       });
 
-      it('EP-051: midtone mask is cached and reused', () => {
+      it('EP-051: clarity midtone weighting uses float precision (LOW-24)', () => {
+        // As of LOW-24 the clarity loop computes the midtone mask formula
+        // `1 - (|n - 0.5| * 2)^2` inline in float precision rather than
+        // looking up a 256-entry uint8-indexed LUT. Verify the weighting
+        // still peaks on midtones by comparing how much clarity modifies a
+        // midtone vs near-black vs near-white image (each filled with a
+        // checkerboard so blur produces local contrast).
         const state = createDefaultEffectsState();
-        state.colorAdjustments.clarity = 50;
+        state.colorAdjustments.clarity = 100;
 
-        // Access static midtoneMask
-        const EffectProcessorClass = processor.constructor as unknown as { midtoneMask: Float32Array | null };
+        const buildChecker = (lo: number, hi: number) => {
+          const w = 16;
+          const h = 16;
+          const data = new Uint8ClampedArray(w * h * 4);
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              const checker = ((x >> 1) + (y >> 1)) & 1;
+              const v = checker ? hi : lo;
+              const idx = (y * w + x) * 4;
+              data[idx] = v;
+              data[idx + 1] = v;
+              data[idx + 2] = v;
+              data[idx + 3] = 255;
+            }
+          }
+          return { data, w, h };
+        };
 
-        // Clear static cache to test initialization
-        EffectProcessorClass.midtoneMask = null;
+        // Each pair averages to the same target luminance with the same
+        // local-contrast amplitude (delta = 30), so any difference in
+        // clarity's effect comes from the midtone weighting.
+        const totalAbsChange = (lo: number, hi: number): number => {
+          const { data, w, h } = buildChecker(lo, hi);
+          const original = new Uint8ClampedArray(data);
+          const imageData = { data, width: w, height: h, colorSpace: 'srgb' } as ImageData;
+          processor.applyEffects(imageData, w, h, state, false);
+          let acc = 0;
+          for (let i = 0; i < imageData.data.length; i += 4) {
+            acc += Math.abs(imageData.data[i]! - original[i]!);
+          }
+          return acc;
+        };
 
-        // First call - initializes midtone mask
-        const imageData1 = createTestImageData(10, 10, { r: 128, g: 128, b: 128 });
-        processor.applyEffects(imageData1, 10, 10, state);
+        const midtoneChange = totalAbsChange(113, 143); // mean ~128
+        const shadowChange = totalAbsChange(5, 35); // mean ~20
+        const highlightChange = totalAbsChange(220, 250); // mean ~235
 
-        // Midtone mask should now be initialized
-        expect(EffectProcessorClass.midtoneMask).not.toBeNull();
-        const cachedMask = EffectProcessorClass.midtoneMask;
-
-        // Second call - should reuse same mask
-        const imageData2 = createTestImageData(10, 10, { r: 64, g: 64, b: 64 });
-        processor.applyEffects(imageData2, 10, 10, state);
-
-        // Same mask instance should be used
-        expect(EffectProcessorClass.midtoneMask).toBe(cachedMask);
+        // The midtone mask peaks at 0.5 luminance, so the midtone image
+        // should be modified more than either extreme.
+        expect(midtoneChange).toBeGreaterThan(shadowChange);
+        expect(midtoneChange).toBeGreaterThan(highlightChange);
       });
     });
 
