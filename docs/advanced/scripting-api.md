@@ -625,6 +625,8 @@ Supported setting types: `string`, `number`, `boolean`, `select`, `color`, `rang
 
 `HotReloadManager` is a **development-only** utility (under `src/plugin/dev/`, not exported from the public API) that lets plugin authors iterate on a plugin module and re-import it with cache-busting without restarting the host application. Production builds neither expose nor invoke it.
 
+See [Plugin Development → Implementing getState/restoreState](./plugin-development.md#implementing-getstate-restorestate) for the full guide.
+
 Plugins can opt in to state preservation across reloads by implementing two optional lifecycle hooks:
 
 | Hook | When called | Purpose |
