@@ -248,11 +248,15 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
     if (offset + 3 >= length) break;
     const segmentLength = view.getUint16(offset + 2);
 
-    // JPEG spec: APP/COM segment length includes the 2-byte length field
-    // itself, so the minimum valid value is 2. Values 0 or 1 would advance
-    // `offset` by less than the marker bytes already consumed, looping
-    // forever (or worse, re-interpreting the length field bytes as a new
-    // marker). Bail to the default orientation rather than getting stuck.
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so the minimum legal value is 2. A
+    // value < 2 violates the spec. The current loop body always advances
+    // `offset` by `2 + segmentLength`, so a literal infinite loop on `<2`
+    // is not reproducible here — but allowing parsing to continue past a
+    // spec-violating length means we re-interpret arbitrary bytes (whose
+    // alignment is now wrong) as further markers. Bail to the default
+    // orientation rather than producing garbage.
     if (segmentLength < 2) break;
 
     // APP1 marker (0xFFE1) — may contain EXIF
@@ -398,12 +402,16 @@ function findMPFMarkerOffset(view: DataView): number {
     if (offset + 3 >= length) break;
     const segmentLength = view.getUint16(offset + 2);
 
-    // JPEG spec: APP/COM segment length field is 2 bytes and includes itself,
-    // so values < 2 are invalid. Without this check, `offset += 2 + segmentLength`
-    // could advance by less than the marker bytes already consumed, causing
-    // an infinite loop. Treat as "no MPF marker found" and bail — the caller
-    // (isGainmapJPEG) will report the file as not a gainmap JPEG, which is
-    // the correct outcome for a corrupted file.
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so values < 2 are spec-violating. The
+    // existing `offset += 2 + segmentLength` always advances at least 2
+    // bytes per iteration, so a strict-`<2` value alone won't infinite-loop
+    // here — but continuing to parse past a corrupt length means we re-read
+    // misaligned bytes as new markers. For a hostile file where the length
+    // field bytes themselves form `0xFFxx`, that re-traversal can scan a
+    // large region many times. Bail with "no MPF found" — the caller
+    // (isGainmapJPEG) will correctly report the file as not a gainmap JPEG.
     if (segmentLength < 2) break;
 
     // APP2 marker (0xFFE2) - check for MPF identifier
@@ -619,9 +627,15 @@ function extractHeadroomFromXMP(
     if (offset + 3 >= scanEnd) break;
     const segmentLength = view.getUint16(offset + 2);
 
-    // JPEG spec: APP/COM segment length includes the 2-byte length field, so
-    // the minimum valid value is 2. A truncated/corrupt sub-segment shouldn't
-    // hang the parser — give up on this region and let the caller fall back.
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so values < 2 are spec-violating. Even
+    // though the loop's `offset += 2 + segmentLength` advances by at least
+    // 2 bytes (so a literal infinite loop on `<2` doesn't reproduce here),
+    // continuing past a corrupt length re-interprets misaligned bytes as
+    // further markers. Treat the whole region as "no headroom found" and
+    // let the caller fall back to the default rather than emit a parsed
+    // value derived from garbage.
     if (segmentLength < 2) return null;
 
     // APP1 marker (0xFFE1) - may contain XMP
@@ -680,9 +694,14 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
     if (offset + 3 >= scanEnd) break;
     const segmentLength = view.getUint16(offset + 2);
 
-    // JPEG spec: APP/COM segment length includes the 2-byte length field, so
-    // the minimum valid value is 2. Treat a corrupt sub-segment as "no XMP
-    // here" rather than spinning forever.
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so values < 2 are spec-violating. The
+    // loop already advances by at least 2 bytes per iteration, so this
+    // isn't a literal infinite-loop guard — but continuing past a corrupt
+    // length re-interprets misaligned bytes as further markers, which can
+    // produce phantom XMP matches on adversarial inputs. Treat the whole
+    // region as "no XMP here" so the caller falls back to the default.
     if (segmentLength < 2) return null;
 
     if (marker === 0xe1) {
@@ -707,9 +726,16 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
  * should not import from this namespace; it exists so unit tests can directly
  * exercise small internal helpers like `ensureMPFRange` without round-tripping
  * through crafted MPF buffers for every branch.
+ *
+ * `extractHeadroomFromXMP` and `extractXMPFromJPEG` are exposed here so unit
+ * tests can drive their `segmentLength < 2` defense-in-depth branches directly,
+ * without needing to fold a corrupt APP1 region into a structurally-valid MPF
+ * JPEG and rely on the parent parser to delegate.
  */
 export const _internal = {
   ensureMPFRange,
+  extractHeadroomFromXMP,
+  extractXMPFromJPEG,
 };
 
 /**

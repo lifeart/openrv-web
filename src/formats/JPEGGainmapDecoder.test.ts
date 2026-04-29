@@ -739,16 +739,26 @@ describe('JPEGGainmapDecoder', () => {
     });
   });
 
-  describe('MED-28: JPEG segment length minimum (>= 2) validation', () => {
+  describe('MED-28: JPEG segment length spec compliance (ITU-T T.81 §B.1.1.4)', () => {
     /**
-     * Build a JPEG with an arbitrary APP marker carrying a caller-chosen segment
-     * length. Used to exercise the `segmentLength < 2` corruption path in every
-     * marker-scanning loop without producing an infinite loop in the test runner.
+     * MED-28 background: the four marker-scanning loops (`findMPFMarkerOffset`,
+     * `extractJPEGOrientation`, `extractHeadroomFromXMP`, `extractXMPFromJPEG`)
+     * gained an explicit `if (segmentLength < 2) bail` defense-in-depth check.
      *
-     * Layout:
-     *   SOI (FFD8) | marker (FFXX) | length (2 bytes, LE-or-BE per spec=BE) | EOI (FFD9)
+     * Important caveat (round 2 of review): per ITU-T T.81 §B.1.1.4 the
+     * APP/COM segment length is 2 bytes BE and *includes its own 2 bytes*, so
+     * values < 2 violate the spec. However, the existing loop bodies always
+     * advance `offset` by `2 + segmentLength`, which is at least 2 even when
+     * the length is 0 — so a strict `< 2` value alone does NOT produce an
+     * infinite loop in this implementation. The genuine risk is re-traversal:
+     * past a corrupt length, the parser reads misaligned bytes and may
+     * re-interpret them as further markers, producing phantom matches or
+     * scanning the same region multiple times on adversarial inputs.
      *
-     * The JPEG spec stores segment length big-endian.
+     * These tests assert spec-compliant rejection of `< 2` lengths and clean
+     * acceptance of the `== 2` (empty payload) boundary. They are not a
+     * regression test for an infinite loop; the original commit message
+     * overstated that scenario.
      */
     function buildJPEGWithCorruptSegmentLength(opts: {
       marker: number; // e.g., 0xe1 for APP1, 0xe2 for APP2, 0xe0 for APP0
@@ -776,16 +786,17 @@ describe('JPEGGainmapDecoder', () => {
 
     // -- isGainmapJPEG / findMPFMarkerOffset (main marker scan) --
 
-    it('isGainmapJPEG terminates on segmentLength == 0 (no infinite loop)', () => {
-      // APP0 marker with segmentLength=0. Without the fix, `offset += 2 + 0`
-      // would land back on the length field bytes and could re-loop forever.
+    it('isGainmapJPEG bails on spec-violating segmentLength == 0 (returns false)', () => {
+      // APP0 marker with segmentLength=0 violates ITU-T T.81 §B.1.1.4. The
+      // post-fix code breaks out of the marker scan immediately rather than
+      // advancing into misaligned bytes. (Pre-fix the loop also terminated
+      // because `offset += 2 + 0` advances by 2 each iteration, but it would
+      // first re-traverse the corrupt region as if it contained more markers.)
       const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe0, segmentLength: 0 });
-      // Just calling this without timing out proves the loop terminates.
-      // It must return false because there's no MPF marker.
       expect(isGainmapJPEG(buf)).toBe(false);
     });
 
-    it('isGainmapJPEG terminates on segmentLength == 1 (no infinite loop)', () => {
+    it('isGainmapJPEG bails on spec-violating segmentLength == 1 (returns false)', () => {
       const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe0, segmentLength: 1 });
       expect(isGainmapJPEG(buf)).toBe(false);
     });
@@ -812,8 +823,8 @@ describe('JPEGGainmapDecoder', () => {
     // -- extractJPEGOrientation (main marker scan) --
 
     it('extractJPEGOrientation returns default (1) on segmentLength == 0', () => {
-      // APP1 marker with corrupt length — without the fix, the orientation
-      // scanner could loop forever before reaching the (missing) orientation tag.
+      // APP1 marker with spec-violating length — the orientation scanner bails
+      // to its default rather than continuing to interpret misaligned bytes.
       const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe1, segmentLength: 0 });
       expect(extractJPEGOrientation(buf)).toBe(1);
     });
@@ -837,68 +848,125 @@ describe('JPEGGainmapDecoder', () => {
       expect(extractJPEGOrientation(buf)).toBe(1);
     });
 
-    // -- All scans must terminate within a reasonable time even for crafted inputs --
+    // -- Adversarial buffer where the corrupt length field bytes form a fake
+    // marker prefix. Without the `segmentLength < 2` guard, the parser would
+    // re-interpret misaligned bytes as new markers, scanning the same region
+    // multiple times. The guard short-circuits this and the scan terminates
+    // immediately. (Round-1 reviewer note: the strict `<2` value alone does
+    // not infinite-loop in this implementation because each iteration always
+    // advances by at least 2 bytes — these tests assert spec compliance and
+    // bounded behavior on adversarial inputs, not "infinite-loop prevention".)
 
-    it('isGainmapJPEG terminates within 100ms on adversarial segmentLength=0 buffer', () => {
-      // Larger buffer with the corrupt segment near the start — fixes a
-      // concrete worst-case that, pre-fix, would scan-and-loop indefinitely.
+    it('isGainmapJPEG bails on adversarial buffer whose corrupt length resembles 0xFFxx markers', () => {
+      // Construct a buffer where after an APP0 with segmentLength=0, the next
+      // bytes look like additional 0xFFxx markers. Pre-fix, the parser would
+      // continue past the spec-violating length and re-traverse misaligned
+      // marker prefixes; post-fix, it bails immediately on the corrupt length.
       const parts: number[] = [];
       parts.push(0xff, 0xd8); // SOI
       parts.push(0xff, 0xe0); // APP0
-      parts.push(0x00, 0x00); // segmentLength = 0 (corrupt)
-      // Lots of padding so a runaway loop has time to misbehave
-      for (let i = 0; i < 8192; i++) parts.push(0x00);
+      parts.push(0x00, 0x00); // segmentLength = 0 (corrupt, < 2)
+      // Sprinkle in fake marker prefixes so re-traversal would have plenty
+      // of misaligned candidates to chew on.
+      for (let i = 0; i < 256; i++) {
+        parts.push(0xff, 0xe0, 0x00, 0x00);
+      }
       parts.push(0xff, 0xd9); // EOI
       const buf = new ArrayBuffer(parts.length);
       const u8 = new Uint8Array(buf);
       for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
-      const t0 = Date.now();
-      const result = isGainmapJPEG(buf);
-      const elapsed = Date.now() - t0;
-      expect(result).toBe(false);
-      expect(elapsed).toBeLessThan(100);
+      // Just call it — if the spec-compliance guard works, the call returns
+      // promptly. If it didn't, vitest's per-test timeout would fail us.
+      expect(isGainmapJPEG(buf)).toBe(false);
     });
 
-    it('extractJPEGOrientation terminates within 100ms on adversarial segmentLength=0 buffer', () => {
+    it('extractJPEGOrientation bails on adversarial buffer whose corrupt length resembles 0xFFxx markers', () => {
       const parts: number[] = [];
       parts.push(0xff, 0xd8); // SOI
       parts.push(0xff, 0xe1); // APP1
-      parts.push(0x00, 0x00); // segmentLength = 0 (corrupt)
-      for (let i = 0; i < 8192; i++) parts.push(0x00);
+      parts.push(0x00, 0x00); // segmentLength = 0 (corrupt, < 2)
+      for (let i = 0; i < 256; i++) {
+        parts.push(0xff, 0xe1, 0x00, 0x00);
+      }
       parts.push(0xff, 0xd9); // EOI
       const buf = new ArrayBuffer(parts.length);
       const u8 = new Uint8Array(buf);
       for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
-      const t0 = Date.now();
-      const result = extractJPEGOrientation(buf);
-      const elapsed = Date.now() - t0;
-      expect(result).toBe(1);
-      expect(elapsed).toBeLessThan(100);
+      expect(extractJPEGOrientation(buf)).toBe(1);
     });
 
-    // -- XMP sub-parsers (extractHeadroomFromXMP and extractXMPFromJPEG are
-    // internal, but they share the same scan pattern. Exercise them via
-    // parseGainmapJPEG which delegates to them after MPF parsing succeeds.) --
+    // -- Direct coverage of the XMP sub-parsers (lines 625, 686). These are
+    // exposed via `_internal` so the `segmentLength < 2` branch is tested
+    // without needing to wedge a corrupt APP1 segment into a structurally
+    // valid MPF JPEG and rely on parent-parser delegation. --
 
-    it('parseGainmapJPEG completes (does not hang) when XMP region has segmentLength == 0', () => {
-      // Build a valid MPF JPEG, then corrupt an APP1 marker before MPF so the
-      // XMP scan in extractXMPFromJPEG / extractHeadroomFromXMP encounters the
-      // bad length. The MPF scan happens first — but more importantly, the
-      // XMP fallback paths run after MPF parsing and would also loop forever
-      // without the fix. This test proves the full pipeline terminates.
-      const fullMPF = createMPFJPEGBuffer({
-        baseSize: 100,
-        gainmapSize: 50,
-        gainmapOffset: 100,
-        padToFit: true,
-      });
-      // The well-formed MPF returns valid info even without XMP — default
-      // headroom 2.0. The XMP scan finds nothing matching but must terminate.
-      const t0 = Date.now();
-      const info = parseGainmapJPEG(fullMPF);
-      const elapsed = Date.now() - t0;
-      expect(info).not.toBeNull();
-      expect(elapsed).toBeLessThan(100);
+    it('extractHeadroomFromXMP returns null when APP marker has segmentLength == 0', () => {
+      const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe1, segmentLength: 0, pad: 16 });
+      // startOffset = 0 means scan from the file start; default scan window
+      // (65536 bytes) covers the whole tiny buffer.
+      expect(_internal.extractHeadroomFromXMP(buf, 0, undefined)).toBeNull();
+    });
+
+    it('extractHeadroomFromXMP returns null when APP marker has segmentLength == 1', () => {
+      const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe1, segmentLength: 1, pad: 16 });
+      expect(_internal.extractHeadroomFromXMP(buf, 0, undefined)).toBeNull();
+    });
+
+    it('extractXMPFromJPEG returns null when APP marker has segmentLength == 0', () => {
+      const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe1, segmentLength: 0, pad: 16 });
+      expect(_internal.extractXMPFromJPEG(buf, 0, undefined)).toBeNull();
+    });
+
+    it('extractXMPFromJPEG returns null when APP marker has segmentLength == 1', () => {
+      const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe1, segmentLength: 1, pad: 16 });
+      expect(_internal.extractXMPFromJPEG(buf, 0, undefined)).toBeNull();
+    });
+
+    it('extractHeadroomFromXMP accepts segmentLength == 2 (empty payload) and returns null cleanly', () => {
+      // Spec-minimum length — must not trigger the corruption branch.
+      const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe1, segmentLength: 2, pad: 16 });
+      expect(() => _internal.extractHeadroomFromXMP(buf, 0, undefined)).not.toThrow();
+      expect(_internal.extractHeadroomFromXMP(buf, 0, undefined)).toBeNull();
+    });
+
+    it('extractXMPFromJPEG accepts segmentLength == 2 (empty payload) and returns null cleanly', () => {
+      const buf = buildJPEGWithCorruptSegmentLength({ marker: 0xe1, segmentLength: 2, pad: 16 });
+      expect(() => _internal.extractXMPFromJPEG(buf, 0, undefined)).not.toThrow();
+      expect(_internal.extractXMPFromJPEG(buf, 0, undefined)).toBeNull();
+    });
+
+    it('extractHeadroomFromXMP bails on adversarial buffer with corrupt length and 0xFFxx-shaped padding', () => {
+      // Same shape as the isGainmapJPEG adversarial test but for the XMP
+      // sub-parser specifically. Pre-fix, the scan would re-traverse
+      // misaligned bytes; post-fix, it returns null immediately on the
+      // spec-violating length.
+      const parts: number[] = [];
+      parts.push(0xff, 0xd8); // SOI (extractHeadroomFromXMP skips this when at startOffset)
+      parts.push(0xff, 0xe1); // APP1
+      parts.push(0x00, 0x00); // segmentLength = 0
+      for (let i = 0; i < 256; i++) {
+        parts.push(0xff, 0xe1, 0x00, 0x00);
+      }
+      parts.push(0xff, 0xd9); // EOI
+      const buf = new ArrayBuffer(parts.length);
+      const u8 = new Uint8Array(buf);
+      for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
+      expect(_internal.extractHeadroomFromXMP(buf, 0, undefined)).toBeNull();
+    });
+
+    it('extractXMPFromJPEG bails on adversarial buffer with corrupt length and 0xFFxx-shaped padding', () => {
+      const parts: number[] = [];
+      parts.push(0xff, 0xd8); // SOI
+      parts.push(0xff, 0xe1); // APP1
+      parts.push(0x00, 0x00); // segmentLength = 0
+      for (let i = 0; i < 256; i++) {
+        parts.push(0xff, 0xe1, 0x00, 0x00);
+      }
+      parts.push(0xff, 0xd9); // EOI
+      const buf = new ArrayBuffer(parts.length);
+      const u8 = new Uint8Array(buf);
+      for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
+      expect(_internal.extractXMPFromJPEG(buf, 0, undefined)).toBeNull();
     });
   });
 });
