@@ -362,7 +362,7 @@ describe('JPEGGainmapDecoder', () => {
 
       // Optionally write MP entries at the requested offset
       if (opts.mpEntries) {
-        const mpEntriesAbs = mpfDataStart + (opts.mpEntriesOffsetOverride ?? (parts.length - mpfDataStart));
+        const mpEntriesAbs = mpfDataStart + (opts.mpEntriesOffsetOverride ?? parts.length - mpfDataStart);
         while (parts.length < mpEntriesAbs) parts.push(0x00);
         for (const me of opts.mpEntries) {
           // attributes(4)
@@ -692,12 +692,7 @@ describe('JPEGGainmapDecoder', () => {
       parts.push(0x01, 0xb0);
       parts.push(0x04, 0x00);
       parts.push(0x01, 0x00, 0x00, 0x00);
-      parts.push(
-        numImages & 0xff,
-        (numImages >>> 8) & 0xff,
-        (numImages >>> 16) & 0xff,
-        (numImages >>> 24) & 0xff,
-      );
+      parts.push(numImages & 0xff, (numImages >>> 8) & 0xff, (numImages >>> 16) & 0xff, (numImages >>> 24) & 0xff);
       // Set APP2 segment length
       const segLen = parts.length - lenIdx;
       parts[lenIdx] = (segLen >> 8) & 0xff;
@@ -886,12 +881,7 @@ describe('JPEGGainmapDecoder', () => {
       // Entry: tag 0xB002 (MPEntry), type UNDEFINED(7), count=<arg>, valueOffset=64
       parts.push(0x02, 0xb0); // tag LE
       parts.push(0x07, 0x00); // type UNDEFINED
-      parts.push(
-        count & 0xff,
-        (count >>> 8) & 0xff,
-        (count >>> 16) & 0xff,
-        (count >>> 24) & 0xff,
-      ); // count LE
+      parts.push(count & 0xff, (count >>> 8) & 0xff, (count >>> 16) & 0xff, (count >>> 24) & 0xff); // count LE
       parts.push(0x40, 0x00, 0x00, 0x00); // valueOffset = 64 (rel. to mpfDataStart)
       // Set APP2 segment length
       const segLen = parts.length - lenIdx;

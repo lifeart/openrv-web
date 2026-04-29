@@ -359,8 +359,7 @@ describe('Worker Buffer Reuse (Task 05)', () => {
     it('LOW24-005: differs from the legacy uint8-quantized lookup on sub-pixel inputs', () => {
       // Reference: legacy integer-quantized lookup on the cached LUT.
       const mask = getMidtoneMask();
-      const legacy = (lum255: number) =>
-        mask[Math.min(255, Math.max(0, Math.round(lum255)))]!;
+      const legacy = (lum255: number) => mask[Math.min(255, Math.max(0, Math.round(lum255)))]!;
 
       // Pick luminances on the rising flank where the parabola is steep, both
       // landing in the same uint8 bin (round to 60). The legacy lookup yields

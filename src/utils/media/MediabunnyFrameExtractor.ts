@@ -79,10 +79,7 @@ export const _probeInternals = {
    * @param probeSample VideoSample returned by probeSink.getSample(0),
    *                    or null if getSample resolved with no sample.
    */
-  closeProbePair(
-    probeFrame: { close(): void } | null,
-    probeSample: { close(): void } | null,
-  ): void {
+  closeProbePair(probeFrame: { close(): void } | null, probeSample: { close(): void } | null): void {
     try {
       if (probeFrame) {
         try {
@@ -389,9 +386,7 @@ export class MediabunnyFrameExtractor {
                   primariesName === 'smpte432'
                 ) {
                   isHDR = true;
-                  log.info(
-                    `HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`,
-                  );
+                  log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
                 }
               }
             } finally {

@@ -697,11 +697,7 @@ export class PrerenderBufferManager {
         // stack, so logging the Error directly surfaces the full source
         // context (worker filename + line) instead of a bare message.
         const stack = error instanceof Error ? error.stack : undefined;
-        console.warn(
-          `Worker prerender failed for frame ${request.frame}:`,
-          error,
-          stack ? `\nStack: ${stack}` : '',
-        );
+        console.warn(`Worker prerender failed for frame ${request.frame}:`, error, stack ? `\nStack: ${stack}` : '');
         // Fall back to main thread
         this.prerenderOnMainThreadSync(request);
       }

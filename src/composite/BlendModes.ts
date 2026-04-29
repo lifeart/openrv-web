@@ -335,7 +335,7 @@ export function compositeMultipleLayers(
       const modes = layers.map((l) => l.blendMode);
       console.warn(
         '[BlendModes] compositeMultipleLayers: a non-first layer has blendMode=topmost ' +
-          "while layers[0] does not — topmost is a stack-level mode and must be uniform. " +
+          'while layers[0] does not — topmost is a stack-level mode and must be uniform. ' +
           'Falling through to per-layer compositing:',
         modes,
       );

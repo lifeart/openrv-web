@@ -222,5 +222,4 @@ export class ClippingOverlaySettingsMenu {
       check.textContent = checked ? '\u2713' : '';
     }
   }
-
 }

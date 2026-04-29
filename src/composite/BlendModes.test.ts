@@ -1165,11 +1165,7 @@ describe('BlendModes', () => {
     }
 
     it('BLD-TOPMOST-INV-001: uniform topmost across all layers triggers no warning', () => {
-      const layers: CompositeLayer[] = [
-        makeLayer(10, 'topmost'),
-        makeLayer(20, 'topmost'),
-        makeLayer(30, 'topmost'),
-      ];
+      const layers: CompositeLayer[] = [makeLayer(10, 'topmost'), makeLayer(20, 'topmost'), makeLayer(30, 'topmost')];
       compositeMultipleLayers(layers, 2, 2);
       // No warning when the invariant holds (all layers share 'topmost').
       const warnCalls = warnSpy.mock.calls.filter(
@@ -1215,11 +1211,7 @@ describe('BlendModes', () => {
     it('BLD-TOPMOST-INV-004: rendering still uses layers[0] decision when the invariant holds', () => {
       // Pin the layers[0]-only check produces the correct output for the
       // canonical (uniform) topmost case: the last visible layer wins.
-      const layers: CompositeLayer[] = [
-        makeLayer(10, 'topmost'),
-        makeLayer(20, 'topmost'),
-        makeLayer(30, 'topmost'),
-      ];
+      const layers: CompositeLayer[] = [makeLayer(10, 'topmost'), makeLayer(20, 'topmost'), makeLayer(30, 'topmost')];
       const result = compositeMultipleLayers(layers, 2, 2);
       expect(result.data[0]).toBe(30); // last visible (topmost) layer wins
       expect(result.data[1]).toBe(30);

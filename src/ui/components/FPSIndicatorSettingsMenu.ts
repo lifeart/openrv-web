@@ -299,5 +299,4 @@ export class FPSIndicatorSettingsMenu {
     const check = item.querySelector<HTMLElement>('.menu-check');
     if (check) check.textContent = checked ? '\u2713' : '';
   }
-
 }

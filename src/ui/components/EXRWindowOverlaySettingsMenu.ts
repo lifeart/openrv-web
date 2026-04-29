@@ -321,5 +321,4 @@ export class EXRWindowOverlaySettingsMenu {
       check.textContent = checked ? '\u2713' : '';
     }
   }
-
 }

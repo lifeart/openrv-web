@@ -1309,10 +1309,7 @@ describe('HDR Headroom Convention (MED-52)', () => {
   it('HDRTM-MED52-006: Filmic peak-white invariance', () => {
     for (const H of [2.0, 3.0, 5.0]) {
       for (const x of [0.05, 0.18, 0.5, 0.8]) {
-        expect(tonemapFilmicChannel(H * x, 2.0, 11.2, H) / H).toBeCloseTo(
-          tonemapFilmicChannel(x, 2.0, 11.2, 1.0),
-          9,
-        );
+        expect(tonemapFilmicChannel(H * x, 2.0, 11.2, H) / H).toBeCloseTo(tonemapFilmicChannel(x, 2.0, 11.2, 1.0), 9);
       }
     }
   });
@@ -1506,10 +1503,7 @@ describe('HDR Headroom Convention (MED-52)', () => {
       const Lwa = 0.2;
       const Lmax = 1.5;
       for (const L of [0.05, 0.5, 1.0, 5.0]) {
-        expect(tonemapDragoChannel(L, bias, Lwa, Lmax, 1.0)).toBeCloseTo(
-          tonemapDragoChannel(L, bias, Lwa, Lmax),
-          12,
-        );
+        expect(tonemapDragoChannel(L, bias, Lwa, Lmax, 1.0)).toBeCloseTo(tonemapDragoChannel(L, bias, Lwa, Lmax), 12);
       }
     });
 

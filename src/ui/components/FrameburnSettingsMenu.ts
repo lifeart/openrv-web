@@ -411,5 +411,4 @@ export class FrameburnSettingsMenu {
       box-sizing: border-box;
     `;
   }
-
 }

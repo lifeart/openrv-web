@@ -307,5 +307,4 @@ export class MatteOverlaySettingsMenu {
     `;
     return separator;
   }
-
 }

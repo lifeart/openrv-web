@@ -131,11 +131,9 @@ export class InfoPanelSettingsMenu {
     this._isVisible = true;
 
     this.deregisterDismiss = outsideClickRegistry.register({
-
       elements: [menu],
 
       onDismiss: () => this.hide(),
-
     });
   }
 
@@ -257,5 +255,4 @@ export class InfoPanelSettingsMenu {
     `;
     return sep;
   }
-
 }

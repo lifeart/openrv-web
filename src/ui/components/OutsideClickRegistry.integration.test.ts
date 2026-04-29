@@ -168,9 +168,7 @@ describe('OutsideClickRegistry — integration with migrated components', () => 
       // additional `register()` calls do not add more `addEventListener`
       // invocations to document. Filter for the event types the registry uses.
       const registryEventTypes = ['mousedown', 'click', 'keydown'];
-      const calls = addSpy.mock.calls.filter((c) =>
-        registryEventTypes.includes(c[0] as string),
-      );
+      const calls = addSpy.mock.calls.filter((c) => registryEventTypes.includes(c[0] as string));
       // At most one of each type from the registry. (Other code in the
       // component may add unrelated listeners — but we filter for the
       // global capture-phase listeners the registry installs.)

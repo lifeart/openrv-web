@@ -322,5 +322,4 @@ export class TimecodeOverlaySettingsMenu {
       if (check) check.textContent = checked ? '\u2713' : '';
     }
   }
-
 }

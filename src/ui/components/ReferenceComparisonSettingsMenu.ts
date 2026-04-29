@@ -259,5 +259,4 @@ export class ReferenceComparisonSettingsMenu {
       }
     });
   }
-
 }

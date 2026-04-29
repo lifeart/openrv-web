@@ -307,7 +307,7 @@ describe('HotReloadManager', () => {
       expect(restoredState).toEqual({ counter: 42, nested: { items: [1, 2, 3] } });
     });
 
-    it('PHOT-023: snapshot is independent of new plugin\'s mutations during restoreState', async () => {
+    it("PHOT-023: snapshot is independent of new plugin's mutations during restoreState", async () => {
       const liveState = { counter: 5 };
       const mockPlugin: Plugin = {
         manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
