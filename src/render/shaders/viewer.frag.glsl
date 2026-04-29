@@ -1293,13 +1293,41 @@
         }
 
         // 5e. Clarity (local contrast enhancement via unsharp mask on midtones)
-        // NOTE: Clarity samples neighboring pixels from u_texture (the original source image).
-        // In the CPU path, clarity operates on already-modified pixel data within the same
-        // imageData buffer. The GPU single-pass approach samples the original texture for
-        // the blur kernel, which means the high-frequency detail extraction is based on
-        // ungraded pixel differences. This is a known architectural difference between the
-        // GPU and CPU paths, accepted as a design trade-off for single-pass rendering
-        // performance. The visual difference is minimal for most grading scenarios.
+        //
+        // TRADE-OFF (LOW-07): Clarity samples the raw input texture (u_texture)
+        // for its 5x5 Gaussian blur kernel, NOT the post-color-pipeline color
+        // value computed earlier in this fragment. This is intentional and is
+        // the documented design for the single-pass GLSL renderer.
+        //
+        // Why raw texture sampling:
+        //   - Sampling a "post-color-pipeline" value would require routing the
+        //     intermediate pipeline result back through a texture, which is not
+        //     possible inside a single fragment invocation. The only correct
+        //     way to sample neighbours after color processing is to render the
+        //     color pipeline into an offscreen FBO first, then run a SECOND
+        //     pass that samples the FBO for the clarity blur kernel. That
+        //     extra render pass + FBO allocation is exactly the cost we are
+        //     avoiding here for performance and memory.
+        //   - Quality implications: the blur kernel therefore operates on the
+        //     INPUT encoding (whatever u_texture stores: sRGB/HLG/PQ-decoded
+        //     linear with input primaries), not on display-referred values.
+        //     For an unsharp-mask-style perceptual edge enhancer like clarity
+        //     this is acceptable because the effect is dominated by local
+        //     high-frequency differences, which survive the linear pipeline
+        //     transformations well. The CPU path operates on display-referred
+        //     8-bit pixels (it runs after color processing on the imageData
+        //     buffer); GPU/CPU output therefore differs by a small, expected
+        //     amount in heavily-graded scenes.
+        //   - The center pixel for the blend (origCenter) and the blurred
+        //     neighbours are sampled from the SAME texture so the high-freq
+        //     subtraction (origCenter - blurred) is self-consistent.
+        //
+        // If you are tempted to "fix" this by sampling color.rgb here: don't.
+        // The blur kernel needs neighbouring pixels, not the current pixel,
+        // and there is no way to sample post-pipeline neighbours without an
+        // additional render pass. Convert to a multi-pass pipeline (see the
+        // WebGPU backend's spatialEffects stage) if a true post-pipeline
+        // sample is required.
         if (u_clarityEnabled && u_clarity != 0.0) {
           // Compute blur and detail entirely in original texture space
           // to avoid cross-space artifacts between processed color and raw texture.
@@ -1482,13 +1510,34 @@
         }
 
         // 7b. Sharpen (unsharp mask, after tone mapping but before display transfer)
-        // NOTE: Sharpen samples neighboring pixels from u_texture (the original source image).
-        // In the CPU path, sharpen operates on already-modified pixel data within the same
-        // imageData buffer. The GPU single-pass approach samples the original texture for
-        // the convolution kernel, which means the sharpening detail is based on ungraded
-        // pixel differences. This is a known architectural difference between the GPU and
-        // CPU paths, accepted as a design trade-off for single-pass rendering performance.
-        // The visual difference is minimal for most grading scenarios.
+        //
+        // TRADE-OFF (LOW-07): Sharpen samples the raw input texture (u_texture)
+        // for its 4-tap Laplacian neighbours, NOT the post-color-pipeline
+        // value. Same intentional design as clarity above; see that block for
+        // the full rationale.
+        //
+        // Short version:
+        //   - True post-color-pipeline neighbour sampling would require an
+        //     extra FBO + render pass (run the whole color pipeline into a
+        //     texture, then sample THAT texture for the Laplacian kernel).
+        //     The single-pass GLSL renderer avoids that cost on purpose.
+        //   - Operating on the input encoding rather than display-referred
+        //     values is acceptable for an unsharp-mask edge enhancer:
+        //     local high-frequency detail (origCenter - neighbours) is
+        //     dominated by edges, which survive the linear transformations
+        //     in the color pipeline well. The CPU path samples the same
+        //     post-color buffer it writes back to, so it operates on
+        //     display-referred values; GPU/CPU output differs by a small,
+        //     expected amount in heavily-graded scenes.
+        //   - The center sample (origCenter) and the four neighbours come
+        //     from the SAME texture so the Laplacian (origCenter*4 - sum)
+        //     is self-consistent.
+        //
+        // Do not change this to sample color.rgb: the Laplacian needs
+        // NEIGHBOURING pixels, not the current pixel, and post-pipeline
+        // neighbours are unavailable in a single pass. Use the WebGPU
+        // multi-pass spatialEffectsPost stage if a true post-pipeline sample
+        // is required.
         if (u_sharpenEnabled && u_sharpenAmount > 0.0) {
           // Compute Laplacian detail entirely in original texture space
           // to avoid cross-space artifacts between processed color and raw texture.

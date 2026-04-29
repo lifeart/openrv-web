@@ -1139,6 +1139,17 @@ export class EffectProcessor {
    *
    * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
    * processes at half resolution for ~4x speedup with minimal quality loss.
+   *
+   * Sampling note (LOW-07): This CPU path snapshots the current imageData
+   * buffer (`original.set(data)`) and reads neighbours from that snapshot,
+   * so the blur kernel operates on whatever the prior CPU effects produced
+   * — i.e. display-referred 8-bit RGB at this point in the pipeline. This
+   * differs from the GLSL single-pass renderer, which samples the raw input texture
+   * (not the post-color-pipeline result) for the same kernel because
+   * post-pipeline neighbour sampling would require an extra FBO + render
+   * pass — see viewer.frag.glsl section 5e for the full rationale. The
+   * CPU/GPU output therefore differs by a small expected amount; both are
+   * intentional within their respective architectures.
    */
   applyClarity(
     imageData: ImageData,
@@ -1322,6 +1333,18 @@ export class EffectProcessor {
    * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
    * processes at half resolution for ~4x speedup. The sharpened detail is upsampled
    * and blended with the original at full resolution.
+   *
+   * Sampling note (LOW-07): This CPU path snapshots the current imageData
+   * buffer (`new Uint8ClampedArray(data)`) and applies the 3x3 kernel against
+   * that snapshot, so the convolution operates on the post-prior-effect
+   * display-referred values present in the buffer. The GLSL single-pass
+   * renderer samples the RAW input texture for its Laplacian kernel instead
+   * (see viewer.frag.glsl section 7b for the full rationale: post-pipeline
+   * neighbour sampling would require an extra FBO + render pass that the
+   * single-pass GPU renderer deliberately avoids). The WebGPU multi-pass
+   * pipeline samples the previous stage's output, which IS post-color-pipeline.
+   * Small CPU/GPU differences in heavily-graded scenes are therefore expected
+   * and intentional.
    */
   applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number, halfRes = false): void {
     // Half-resolution path
