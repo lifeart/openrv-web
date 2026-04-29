@@ -252,6 +252,63 @@ Effects are applied in the Viewer render pipeline in this order:
 - CurveLUTCache prevents rebuilding LUTs every frame
 - CDL processing is optimized for default detection (skip if unchanged)
 
+### LUT Pipeline Output-Color-Space Cascade (MED-51)
+
+Each LUT stage in the four-point pipeline (Pre-Cache, File, Look, Display) can
+declare what color space its output is encoded in. This is a **metadata
+declaration**, not a pixel transform — the GPU shader chain still performs the
+actual color math; the declaration tells downstream consumers (renderer
+transfer-function selection, scopes, observability) what the post-LUT pixels
+represent.
+
+State surface on `LUTPipeline` (`src/color/pipeline/LUTPipeline.ts`):
+
+- `setStageOutputColorPrimaries(sourceId, stage, primaries)` /
+  `getStageOutputColorPrimaries(sourceId, stage)` — primaries are one of
+  `'bt709' | 'bt2020' | 'p3'`, or `null` for "preserve input primaries".
+- `setStageOutputTransferFunction(sourceId, stage, transfer)` /
+  `getStageOutputTransferFunction(sourceId, stage)` — transfer functions are
+  `'srgb' | 'hlg' | 'pq' | 'smpte240m'`, or `null` for "preserve input
+  transfer function".
+- Equivalent setter / getter pair for the session-wide display stage
+  (`setDisplayLUTOutputColorPrimaries`, `getDisplayLUTOutputColorPrimaries`,
+  etc.).
+- `getStageState(sourceId, stage)` / `getDisplayLUTState()` return defensive
+  snapshots for UI / observability consumers that need the full stage state
+  (`enabled`, `intensity`, `lutName`, declared output color space, etc.).
+
+Cascade order — `LUTPipeline.computeOutputMetadata(sourceId, input)` walks the
+four stages in pipeline order:
+
+```
+Pre-Cache --> File --> Look --> Display
+```
+
+Each enabled, non-zero-intensity, LUT-loaded stage applies its declared output
+color space on top of the running metadata using the rule **"null = preserve,
+non-null = override"**. Disabled stages, stages with no LUT loaded, and
+zero-intensity stages contribute nothing — they are bypassed at render time, so
+they cannot alter the metadata either. The result is a fresh `ImageMetadata`
+that reflects the post-pipeline color space.
+
+`LUTPipeline.applyToIPImage(sourceId, image)` materializes this into an
+`IPImage` whose pixel buffer is shared with the input (zero-copy) and whose
+metadata carries the cascaded values. When the cascade is a no-op (the common
+case where no stage has declared an output color space) the input is returned
+by reference, so the steady-state path is allocation-free.
+
+For HDR video sources the `IPImage` holds a 4-byte placeholder `data` buffer
+and the real pixels live in a `VideoFrame` referenced via `managedVideoFrame`.
+The cascade uses `IPImage.cloneMetadataOnly()` (non-owning shallow clone) which
+shares the `VideoFrame` reference; `close()` on the clone is a no-op so the
+GPU resource is not double-released. This is what makes the cascade safe for
+HDR PQ/HLG video.
+
+The cascade is wired into the Viewer's three HDR render branches via
+`Viewer.applyLUTMetadataCascade()` so the renderer's `u_inputTransfer` shader
+uniform tracks the post-pipeline transfer function (e.g. when a Display LUT
+maps PQ -> sRGB the renderer applies the sRGB EOTF rather than the PQ EOTF).
+
 ## E2E Test Cases
 
 ### Existing Tests (`e2e/color-controls.spec.ts`)

@@ -179,6 +179,22 @@ The current codebase has a **partial foundation** for tone mapping:
 - **Implemented**: Browser HDR canvas support detection (`src/render/WebGPUBackend.ts`)
 - **Experimental (not yet user-facing)**: WebGPU rendering backend (`src/render/WebGPUBackend.ts`, `src/render/createRenderer.ts`). The full color-correction / tone-mapping pipeline ships only on the WebGL2 path today; production renderer construction in `ViewerGLRenderer.ts` and `renderWorker.worker.ts` calls `new Renderer()` directly and does not consult `createRenderer`. Phase 4 stage WGSL registration into `WebGPUShaderPipeline` is intentionally pending (see "WebGPU Tone-Mapping Operator Parity" below).
 - **Implemented**: Canvas2D HDR fallback path (srgb-linear, rec2100-hlg, float16)
+- **Implemented (MED-51)**: LUT output-color-space cascade. Each LUT stage
+  (Pre-Cache, File, Look, Display) can declare `outputColorPrimaries` /
+  `outputTransferFunction`, and the framework propagates the cascaded result
+  onto the IPImage handed to the renderer in all three HDR render branches
+  (HDR video, HDR file, HDR procedural). The renderer's `u_inputTransfer`
+  uniform tracks the post-pipeline transfer function — a Display LUT that
+  maps PQ -> sRGB causes the renderer to apply the sRGB EOTF rather than
+  PQ. HDR-video safety: the cascade uses `IPImage.cloneMetadataOnly()` so
+  the underlying `VideoFrame` reference is shared non-owningly and is not
+  double-released. See [Color Management](color-management.md#lut-pipeline-output-color-space-cascade-med-51)
+  and [Color Space Matrices](color-space-matrices.md#architectural-note-ipimage-metadata-flow-through-luts-med-51) for the cascade order, state-surface API, and the
+  HDR-video safety contract.
+  - **Known limitation**: the right-eye IPImage in `'separate'` multi-view
+    stereo (e.g. multi-view EXR) is not currently routed through the
+    cascade — see the TODO at `src/ui/components/Viewer.ts:1527-1535`.
+    Non-blocking; tracked as a separate follow-up.
 
 ##### WebGPU Tone-Mapping Operator Parity (MED-55)
 

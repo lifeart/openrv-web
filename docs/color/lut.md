@@ -87,6 +87,12 @@ OpenRV Web supports three independent LUT slots, each serving a distinct role in
 
 Each slot has its own intensity control and operates independently. The Look LUT is the slot exposed through the color controls panel Load button.
 
+::: info Output Color Space Declaration
+Each LUT stage (Pre-Cache, File, Look, and Display) can additionally declare what color space its output is encoded in -- specifically the output color primaries (`bt709`, `bt2020`, `p3`) and transfer function (`srgb`, `hlg`, `pq`, `smpte240m`). This is metadata, not a pixel transform: the GPU shader still performs the color math; the declaration tells the renderer and downstream tools (scopes, observability panels) what the post-LUT pixels actually represent. For example, declaring a Display LUT's output as `srgb` after a PQ source ensures the renderer applies the sRGB EOTF rather than treating the pixels as still-PQ-encoded.
+
+Declarations cascade through the pipeline in order **Pre-Cache -> File -> Look -> Display**, with `null` meaning "preserve input" and a concrete value meaning "override". Disabled, no-LUT-loaded, and zero-intensity stages are bypassed at render time and therefore do not contribute to the cascade. The framework propagates the cascaded metadata onto the `IPImage` handed to the renderer (issue MED-51), and is HDR-video-safe via a non-owning `cloneMetadataOnly()` clone that shares the underlying `VideoFrame` reference.
+:::
+
 ---
 
 ## Film Emulation Presets
