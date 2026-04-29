@@ -16,6 +16,15 @@ OpenRV uses CIE XYZ as the interchange color space for all color transformations
 
 ## GPU Pipeline Color Primaries Matrices (Canonical)
 
+> **MED-54 verification (2026-04-29).** This section was added as part of the
+> MED-54 documentation pass that documented ~10 inline shader matrices with
+> source/destination spaces, derivation references, and column-major storage
+> conventions, and corrected the misleading "Bradford CAT" JSDoc on
+> `COLOR_PRIMARIES_MATRICES`. The user-facing summary lives in
+> [`docs/color/display-profiles.md` "Supported Color Primaries"](../docs/color/display-profiles.md#supported-color-primaries).
+> Pinned-value tests: `MED-54-001..011` in
+> `src/render/__tests__/shaderMathColorPipeline.test.ts`.
+
 The render pipeline carries scene-referred RGB in a BT.709/sRGB linear working
 space and uses a small, fixed set of D65→D65 primary-conversion matrices for
 gamut mapping at stages 7a and 7d. These matrices are the source of truth used
