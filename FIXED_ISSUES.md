@@ -5449,3 +5449,43 @@ Each error is descriptive — names the actual count and the cap.
 - Reviewer numerically verified: REC2020→sRGB applied to (1,0,0) ≈ (1.66, -0.12, -0.02) — out-of-gamut signature confirmed; D65 preservation confirmed; SRGB→P3 narrowing confirmed.
 
 **Known cosmetic follow-up**: 4th-decimal precision discrepancy between `ShaderConstants.ts` REC2020_TO_SRGB[3] (-0.5877) and GLSL/CPU mirrors (-0.5876). Pre-existing, no functional impact.
+
+## Issue #381: CRIT-01 — HDR VideoFrame lifecycle unmanaged at call sites
+
+**Root cause**: `getFrameHDR()` in `MediabunnyFrameExtractor` transfers VideoFrame ownership to the caller, but call sites had partial cleanup:
+- `VideoSourceNode.fetchHDRFrame` closed the sample on the success path and in a `catch` block, but a dispose race (frameExtractor nulled while awaiting `getFrameHDR` or between `hdrSampleToIPImage` and `cache.set`) left the sample or IPImage leaking. Errors thrown by `cache.set` would also skip close().
+- The HDR probe path closed `probeSample` outside the try/finally for `probeFrame.close()` — would be skipped if `toVideoFrame()` or `probeFrame.close()` threw.
+
+VideoFrame is a GPU resource; missed close() leaks until process termination.
+
+**Fix**:
+- `VideoSourceNode.fetchHDRFrame` (`src/nodes/sources/VideoSourceNode.ts:1058-1113`): wrapped body in try/catch/finally so the VideoSample (always) and IPImage (when not yet transferred to cache) are released on every exit, including dispose-during-await races.
+- HDR probe path (`src/utils/media/MediabunnyFrameExtractor.ts:311-396`): extracted `_probeInternals.closeProbePair(probeFrame, probeSample)` helper that guarantees both close() calls run regardless of which (if any) throws. Each per-call error is swallowed so a failure on one cleanup doesn't skip the other.
+- JSDoc on `getFrameHDR` (`MediabunnyFrameExtractor.ts:782-810`) explicitly documents the ownership transfer with a recommended call pattern.
+
+**Tests added** (8 total, all pass on the fix and 4 fail on master without it):
+- `src/nodes/sources/VideoSourceNode.test.ts`:
+  - `CRIT-01-VSN-001`: N=5 samples extracted → N closes (success path)
+  - `CRIT-01-VSN-002` (sanity): sample closed when `hdrSampleToIPImage` throws
+  - `CRIT-01-VSN-003` (regression): sample closed when `getFrameHDR` resolves AFTER `frameExtractor` nulled (dispose race during await) — fails on master
+  - `CRIT-01-VSN-004` (sanity): graceful handling of `getFrameHDR` rejection
+  - `CRIT-01-VSN-005` (regression): IPImage and sample both closed when dispose nulls `frameExtractor` between `hdrSampleToIPImage` and `cache.set`
+  - `CRIT-01-VSN-006` (regression): sample closed when `frameExtractor` nulled while awaiting `getFrameHDR` — fails on master
+- `src/utils/media/MediabunnyFrameExtractor.test.ts`:
+  - `CRIT-01-MFE-001`: `closeProbePair` closes probeSample when `probeFrame.close()` throws — fails on master without try/finally
+  - `CRIT-01-MFE-002`: `closeProbePair` closes probeSample when probeFrame is null (`toVideoFrame()` failure path)
+  - `CRIT-01-MFE-003`: `closeProbePair` handles both close() failures without throwing — fails on master
+  - `CRIT-01-MFE-004`: `closeProbePair` is a no-op when both arguments are null
+
+**Files changed**:
+- `src/nodes/sources/VideoSourceNode.ts`
+- `src/utils/media/MediabunnyFrameExtractor.ts`
+- `src/nodes/sources/VideoSourceNode.test.ts`
+- `src/utils/media/MediabunnyFrameExtractor.test.ts`
+
+**Verification**:
+- `npx tsc --noEmit` clean.
+- `src/utils/media + src/nodes/sources + src/ui/components`: 9860 tests passing (Round 1 baseline) + 4 helper-direct MFE tests (Round 2).
+- Stash-revert confirms the fix is required: VSN-003, VSN-006, MFE-001, MFE-003 fail on pre-fix code.
+
+**Note**: `ManagedVideoFrame.creationStack` and `enableLeakDetection` (FinalizationRegistry) already exist for runtime leak observability — no additional instrumentation needed beyond the call-site fix.

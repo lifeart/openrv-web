@@ -40,9 +40,7 @@ These issues were found and fixed during the audit:
 
 ### Partially Confirmed (with caveats)
 
-#### CRIT-01: HDR VideoFrame lifecycle unmanaged (by design)
-- **File**: `src/utils/media/MediabunnyFrameExtractor.ts` ~lines 737-785
-- **Status**: By design — `getFrameHDR()` transfers ownership to caller. HDR probe path has proper try/finally cleanup. Risk is at call sites.
+#### ~~CRIT-01~~: HDR VideoFrame lifecycle unmanaged at call sites — **FIXED** (see FIXED_ISSUES.md #381)
 
 #### HIGH-25: Topmost blend mode checks only first layer
 - **File**: `src/composite/BlendModes.ts` ~lines 294-309
