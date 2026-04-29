@@ -138,6 +138,10 @@ The algorithm:
 
 Positive values increase local contrast (punchier midtones). Negative values decrease local contrast (softer, more diffused look).
 
+::: info Sampling Note (single-pass renderer)
+Clarity's 5x5 Gaussian blur kernel samples the **input texture** (the linearized source pixels), not a post-color-pipeline buffer. This is intentional in the single-pass GLSL renderer: routing intermediate pipeline colors back through a texture for neighbour sampling would require a second render pass and an additional FBO. The visual consequence is that clarity operates on the input encoding (linear with input primaries) rather than on display-referred values. For unsharp-mask-style edge enhancement this is acceptable -- local high-frequency detail dominates the effect and survives the linear pipeline well. HDR users on heavily-graded scenes may notice a small expected difference between the GPU path (input-referred sample) and the CPU fallback path (which operates on the post-color buffer). If a true post-pipeline sample is required, the WebGPU multi-pass `spatialEffects` stage provides it.
+:::
+
 ### Highlights
 
 | Property | Value |

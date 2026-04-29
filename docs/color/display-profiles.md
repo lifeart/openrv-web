@@ -129,6 +129,28 @@ When source content has a wider gamut than the display (for example, Rec. 2020 s
 
 Gamut mapping is applied at pipeline stage 7a, after tone mapping and before the display LUT. An optional **highlight out-of-gamut** mode overlays a diagnostic color on pixels that exceed the target gamut, helping identify problematic areas.
 
+### Supported Color Primaries
+
+OpenRV Web converts between three RGB working spaces, all sharing the D65 white point. Because all three share D65, the conversion is a direct 3x3 primary matrix with no chromatic adaptation transform involved.
+
+| Primary set | Reference | Use |
+|-------------|-----------|-----|
+| BT.709 / sRGB | ITU-R BT.709-6 Item 1.4 | HD/web standard, default working space |
+| Display-P3 | SMPTE EG 432-1 (DCI-P3 primaries with D65 white) | Modern Apple / wide-gamut displays |
+| BT.2020 / Rec. 2020 | ITU-R BT.2020-2 Table 4 | UHD/HDR broadcast |
+
+Available conversions used by the gamut mapping stage:
+
+- **BT.2020 → BT.709/sRGB** (narrowing — colors may go out of gamut)
+- **BT.2020 → Display-P3** (narrowing)
+- **Display-P3 → BT.709/sRGB** (narrowing)
+- **BT.709/sRGB → Display-P3** (widening — output stays in gamut)
+- **BT.709/sRGB → BT.2020** (widening)
+
+The same numerical matrices are mirrored across the WebGL2 shader, the WebGPU shader, and the CPU reference path so that all three render backends produce identical pixel values for a given input. The canonical source-of-truth values live in `src/render/ShaderConstants.ts` (`COLOR_PRIMARIES_MATRICES`); their derivation, references, and storage layout are documented in [`features/color-space-matrices.md`](https://github.com/lifeart/openrv-web/blob/master/features/color-space-matrices.md).
+
+For OCIO-based workflows that involve white-point changes (for example, ACES AP0/AP1 spaces with a D60-ish white) or camera-native log spaces, see [OCIO Integration](ocio.md) — those transforms include the appropriate chromatic adaptation step.
+
 ---
 
 ## Scripting API

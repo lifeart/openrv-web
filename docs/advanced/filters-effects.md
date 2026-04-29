@@ -34,6 +34,10 @@ The sharpen filter enhances edge contrast to restore apparent sharpness, compens
 
 The sharpen filter is implemented as an unsharp mask (USM) operation. Excessive sharpening amplifies noise, so applying sharpen after noise reduction is recommended when both are needed.
 
+::: info Sampling Note (single-pass renderer)
+Sharpen's 4-tap Laplacian kernel samples the **input texture** (the linearized source pixels), not a post-color-pipeline buffer. The center sample and its four neighbours all come from the same texture, so the Laplacian remains self-consistent. Sampling neighbouring post-color pixels in a single fragment shader is not possible without a second render pass and an additional FBO; the single-pass GLSL renderer avoids that cost on purpose. The practical consequence is that sharpen operates on the input encoding rather than on display-referred values -- acceptable for an edge enhancer because local high-frequency detail dominates the effect. HDR users grading aggressively may notice a small expected difference between the GPU path (input-referred sample) and the CPU fallback path (which samples the post-color buffer it writes back to). For a true post-pipeline sample, use the WebGPU multi-pass `spatialEffectsPost` stage.
+:::
+
 ---
 
 ## Deinterlace
