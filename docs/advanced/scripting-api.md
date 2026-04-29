@@ -140,6 +140,18 @@ openrv.media.loadProceduralSource('checkerboard', { width: 3840, height: 2160, c
 openrv.media.loadMovieProc('checkerboard,cellSize=32.movieproc');
 ```
 
+### HDR Video and `VideoFrame` Ownership
+
+HDR video (HLG / PQ) sources are loaded and decoded transparently through `VideoSourceNode` and `MediabunnyFrameExtractor`. The scripting API surface above does not currently expose raw `VideoFrame` or `VideoSample` handles -- HDR pixel data reaches the renderer via `IPImage` instances whose lifecycle is fully managed by `SessionMedia` and the HDR frame cache.
+
+If a future scripting / plugin extension exposes lower-level frame access (for example a hypothetical `media.getHDRFrame(frame)` returning a `VideoSample` or `VideoFrame`), external consumers MUST honour the same ownership contract that `MediabunnyFrameExtractor.getFrameHDR` documents in JSDoc:
+
+- The returned `VideoSample` is owned by the caller. Always wrap usage in `try { ... } finally { sample.close(); }`.
+- `sample.toVideoFrame()` produces a `VideoFrame` whose lifecycle is also the caller's responsibility -- either `close()` it directly when done, or transfer ownership to an `IPImage` whose `close()` will release it.
+- Missed `close()` leaks GPU memory until the page is torn down. This is enforced inside the engine by a `try/catch/finally` around every internal call site (`VideoSourceNode.fetchHDRFrame`, `_probeInternals.closeProbePair` -- see issue #381 / CRIT-01).
+
+Plugins should treat `IPImage.close()` as the canonical release entry point and not retain raw `IPImage.videoFrame` references beyond the lifetime of the owning `IPImage`.
+
 ---
 
 ## Audio Control
@@ -565,7 +577,16 @@ Supported setting types: `string`, `number`, `boolean`, `select`, `color`, `rang
 
 ### Hot-Reload State Preservation
 
-Plugins can implement `getState()` and `restoreState()` to preserve state across hot-reload cycles. The `HotReloadManager` calls `getState()` before disposing the old version and `restoreState()` after activating the new version.
+`HotReloadManager` is a **development-only** utility (under `src/plugin/dev/`, not exported from the public API) that lets plugin authors iterate on a plugin module and re-import it with cache-busting without restarting the host application. Production builds neither expose nor invoke it.
+
+Plugins can opt in to state preservation across reloads by implementing two optional lifecycle hooks:
+
+| Hook | When called | Purpose |
+|------|-------------|---------|
+| `getState(): unknown` | Before the old version is disposed | Return a snapshot of in-memory state to carry forward. Should return a **copy**, not a live reference. |
+| `restoreState(state: unknown): void` | After the new version is activated | Receive the snapshot from the previous version and rehydrate. Called once. |
+
+The reload flow is: capture state via `getState()` → re-import the module with cache-busting → dispose the old plugin → activate the new plugin → forward the captured snapshot to `restoreState()`. The new module loads **before** the old one is disposed, so a failed re-import leaves the running plugin intact.
 
 ```javascript
 openrv.plugins.register({
@@ -582,12 +603,12 @@ openrv.plugins.register({
     // ... register tools, set up UI
   },
 
-  // Called before hot-reload disposal
+  // Called before hot-reload disposal. Return a copy — not a live reference.
   getState() {
-    return { annotations: this._annotations };
+    return { annotations: [...this._annotations] };
   },
 
-  // Called after hot-reload activation
+  // Called after hot-reload activation with the snapshot from getState().
   restoreState(state) {
     this._annotations = state.annotations || [];
     // Re-render UI with restored data
@@ -597,6 +618,20 @@ openrv.plugins.register({
 // Activate the plugin after registration:
 openrv.plugins.activate('com.example.annotations');
 ```
+
+#### Defensive deep-clone of captured state
+
+The captured state is defensively passed through `structuredClone` before being forwarded to `restoreState()`. This protects the snapshot against:
+
+- A misbehaving `getState()` that returns a live reference instead of a copy.
+- Mutation of the source state during the dispose / re-import / re-activate window.
+- The new plugin's `restoreState()` mutating the snapshot back into the old plugin's live state.
+
+The snapshot is **single-use**: it is passed to `restoreState()` once and then discarded.
+
+`structuredClone` natively handles `Map`, `Set`, `ArrayBuffer`, typed arrays, and cyclic references. If your state contains values that cannot be structurally cloned — **functions, DOM nodes, class instances with private fields, WebGL/WebGPU resources, etc.** — the clone throws `DataCloneError`. In that case the manager logs a `[hot-reload:<pluginId>]` warning to the console (with the underlying error) and falls back to forwarding the raw reference, preserving prior behaviour. Treat the warning as a signal to refactor `getState()` to return a structurally cloneable copy.
+
+`null`, `undefined`, and primitive return values are passed through untouched. Returning `undefined` is the "no state" sentinel — `restoreState()` is not called in that case.
 
 ### Custom Plugin-to-Plugin Events
 
