@@ -45,6 +45,8 @@ import {
   applyToneMappingToRGB,
   // Curve interpolation
   evaluateCurveAtPoint,
+  // Clarity midtone mask (LOW-24): float-precision parabolic weight
+  computeMidtoneMaskValue,
   // Types - main types
   type WorkerColorAdjustments as ColorAdjustments,
   type WorkerCDLValues as CDLValues,
@@ -112,7 +114,8 @@ function ensureSharpenHalfResBuffers(halfLen: number): void {
 // Cached midtone mask (never changes, 256 entries).
 // Retained for backwards compatibility with tests/consumers that index by uint8
 // luminance. The hot clarity loops compute the mask in float precision via
-// computeMidtoneMaskValue() to avoid banding from index quantization.
+// computeMidtoneMaskValue() (imported from the shared module) to avoid banding
+// from index quantization.
 let midtoneMask: Float32Array | null = null;
 
 function ensureClarityBuffers(size: number): void {
@@ -122,21 +125,6 @@ function ensureClarityBuffers(size: number): void {
     clarityBlurResultBuffer = new Uint8ClampedArray(size);
     clarityBufferSize = size;
   }
-}
-
-/**
- * Compute the midtone mask weight for a given normalized luminance in [0, 1].
- *
- * Formula: 1 - (|n - 0.5| * 2)^2 — a smooth inverted parabola peaking at 0.5.
- *
- * Operates entirely in float precision so that smooth gradients produce smooth
- * mask values (no plateaus from int LUT quantization, see LOW-24).
- * Input is clamped to [0, 1] so the result is always in [0, 1].
- */
-function computeMidtoneMaskValue(normalizedLum: number): number {
-  const n = normalizedLum < 0 ? 0 : normalizedLum > 1 ? 1 : normalizedLum;
-  const dev = Math.abs(n - 0.5) * 2;
-  return 1.0 - dev * dev;
 }
 
 function getMidtoneMask(): Float32Array {

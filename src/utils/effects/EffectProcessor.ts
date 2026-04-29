@@ -1099,7 +1099,12 @@ export class EffectProcessor {
   // Note: prior versions cached a 256-entry midtone mask LUT and indexed it by
   // Math.round(luminance). That integer-rounded lookup produced banding in
   // smooth gradients (LOW-24). The clarity loops now compute the mask formula
-  // `1 - (|n - 0.5| * 2)^2` inline in float precision.
+  // `1 - (|n - 0.5| * 2)^2` inline in float precision. The canonical
+  // implementation is `computeMidtoneMaskValue` in
+  // `effectProcessing.shared.ts`; the inline copies here are kept verbatim
+  // (formula-identical) for tight-loop performance — the worker and the
+  // ViewerEffects.applyClarity callsite use the same shared helper /
+  // identical inline formula.
 
   /**
    * Ensure clarity buffers are allocated and sized correctly.

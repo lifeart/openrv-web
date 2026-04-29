@@ -6,6 +6,7 @@
 
 import { clamp } from '../../utils/math';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
+import { computeMidtoneMaskValue } from '../../utils/effects/effectProcessing.shared';
 
 export interface HighlightsShadowsParams {
   highlights: number; // -100 to +100
@@ -393,20 +394,18 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
   // Using separable filter for performance (horizontal then vertical pass)
   const blurred = applyGaussianBlur5x5(original, width, height);
 
-  // Pre-compute midtone mask LUT
-  // Full effect (1.0) at midtones (128), fading to 0 at extremes
-  const midtoneMask = new Float32Array(256);
-  for (let i = 0; i < 256; i++) {
-    // Bell curve centered at 128, with wider range for natural look
-    const normalized = i / 255;
-    // Use smooth bell curve: 1 at center, 0 at edges
-    // f(x) = 1 - (2x - 1)^2 gives a parabola from 0 to 1 to 0
-    const deviation = Math.abs(normalized - 0.5) * 2; // 0 at center, 1 at edges
-    midtoneMask[i] = 1.0 - deviation * deviation; // Quadratic falloff
-  }
-
   // Scale factor for the effect (reduced to avoid harsh artifacts)
   const effectScale = clarityNorm * 0.7;
+
+  // Float-precision midtone mask (LOW-24): the prior implementation cached a
+  // 256-entry uint8-indexed LUT and looked it up via `Math.round(luminance)`.
+  // That integer-rounded lookup produced visible banding on smooth gradients
+  // because adjacent sub-pixel luminances mapped to the same bin. We now
+  // compute the parabolic mask value directly via the shared helper
+  // `computeMidtoneMaskValue` (see `utils/effects/effectProcessing.shared.ts`),
+  // which is the same canonical implementation used by the worker and
+  // EffectProcessor.
+  const inv255 = 1 / 255;
 
   for (let i = 0; i < len; i += 4) {
     const r = original[i]!;
@@ -417,10 +416,10 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
     const blurredG = blurred[i + 1]!;
     const blurredB = blurred[i + 2]!;
 
-    // Calculate luminance for midtone mask (Rec. 709)
+    // Calculate luminance for midtone mask (Rec. 709) and feed it to the
+    // shared float-precision parabolic mask helper.
     const lum = luminanceRec709(r, g, b);
-    const lumIndex = clamp(Math.round(lum), 0, 255);
-    const mask = midtoneMask[lumIndex]!;
+    const mask = computeMidtoneMaskValue(lum * inv255);
 
     // Calculate high-frequency detail (original - blurred)
     const highR = r - blurredR;

@@ -27,6 +27,63 @@ import {
   COLOR_INVERSION_XOR_MASK,
 } from './effectProcessing.shared';
 
+/**
+ * Independent reference 5x5 separable Gaussian blur on RGBA Uint8ClampedArray.
+ * Used by EP-052 (LOW-24 round 2) to construct a legacy uint8-quantized
+ * clarity reference image without depending on EffectProcessor internals.
+ *
+ * Identical kernel to EffectProcessor.applyGaussianBlur5x5InPlace
+ * (kernel = [1, 4, 6, 4, 1]) so the only deliberate difference between the
+ * reference and the actual EP output is the midtone mask formula.
+ */
+function gaussianBlur5x5Reference(src: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+  const kernel = [1, 4, 6, 4, 1];
+  const temp = new Uint8ClampedArray(src.length);
+  const result = new Uint8ClampedArray(src.length);
+
+  // Horizontal pass
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        let weightSum = 0;
+        for (let k = -2; k <= 2; k++) {
+          const nx = Math.min(width - 1, Math.max(0, x + k));
+          const nidx = (y * width + nx) * 4 + c;
+          const weight = kernel[k + 2]!;
+          sum += src[nidx]! * weight;
+          weightSum += weight;
+        }
+        temp[idx + c] = sum / weightSum;
+      }
+      temp[idx + 3] = src[idx + 3]!;
+    }
+  }
+
+  // Vertical pass
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        let weightSum = 0;
+        for (let k = -2; k <= 2; k++) {
+          const ny = Math.min(height - 1, Math.max(0, y + k));
+          const nidx = (ny * width + x) * 4 + c;
+          const weight = kernel[k + 2]!;
+          sum += temp[nidx]! * weight;
+          weightSum += weight;
+        }
+        result[idx + c] = sum / weightSum;
+      }
+      result[idx + 3] = temp[idx + 3]!;
+    }
+  }
+
+  return result;
+}
+
 describe('EffectProcessor', () => {
   let processor: EffectProcessor;
   let defaultState: AllEffectsState;
@@ -903,6 +960,112 @@ describe('EffectProcessor', () => {
         // should be modified more than either extreme.
         expect(midtoneChange).toBeGreaterThan(shadowChange);
         expect(midtoneChange).toBeGreaterThan(highlightChange);
+      });
+
+      it('EP-052: clarity output diverges from legacy uint8-LUT reference (LOW-24 round 2)', () => {
+        // Mirror of worker test LOW24-005: prove that applyEffects routes
+        // clarity through the float-precision mask helper rather than the
+        // legacy uint8-quantized LUT lookup. This is an EffectProcessor-side
+        // precision test — EP-051 only proves the midtone mask still peaks
+        // on midtones, which a quantized LUT also does.
+        //
+        // Strategy: build a high-contrast checkerboard whose lo/hi RGB
+        // values produce luminances that sit near uint8 half-bin boundaries
+        // on the steep flanks of the parabolic mask (where the mask
+        // derivative |8(n-0.5)| is largest). At those luminances the
+        // legacy `LUT[round(luma)]` differs from the float
+        // `1 - (|luma/255 - 0.5| * 2)^2` by enough that, when amplified by
+        // the very large high-pass term in the high-contrast checker, the
+        // uint8 output also differs. Compute a reference image by applying
+        // clarity with the legacy `mask = LUT[round(luma)]` formula. The
+        // actual applyEffects output must NOT equal that reference (the
+        // float mask weights resolve the sub-pixel luma the LUT bin discards).
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 100;
+
+        // Rec.709 luma weights — must match utils/effects/effectProcessing.shared.ts
+        const LR = 0.2126;
+        const LG = 0.7152;
+        const LB = 0.0722;
+        const CLARITY_SCALE = 0.7; // CLARITY_EFFECT_SCALE in shared module
+
+        // High-contrast checkerboard. lo/hi RGB are chosen so:
+        //   luma(lo) = 0.2126*5 + 0.7152*5 + 0.0722*12 = 5.5054 (round → 6)
+        //   luma(hi) = 0.2126*250 + 0.7152*250 + 0.0722*243 = 249.55 (round → 250)
+        // Both luminances sit ~0.5 away from a uint8 bin boundary on the
+        // steep flank of the parabolic mask, where one full bin's worth of
+        // luma corresponds to a meaningful mask delta. Combined with the
+        // huge high-pass amplitude (|original - blurred| ~ 122), the LUT
+        // and float mask diverge by enough to flip uint8 output values.
+        const w = 16;
+        const h = 16;
+        const lo = { r: 5, g: 5, b: 12 };
+        const hi = { r: 250, g: 250, b: 243 };
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const checker = ((x >> 1) + (y >> 1)) & 1;
+            const px = checker ? hi : lo;
+            const idx = (y * w + x) * 4;
+            data[idx] = px.r;
+            data[idx + 1] = px.g;
+            data[idx + 2] = px.b;
+            data[idx + 3] = 255;
+          }
+        }
+        const original = new Uint8ClampedArray(data);
+
+        // Sanity: the two per-pixel luminances must NOT equal their
+        // rounded-bin centers — otherwise the legacy LUT and the float
+        // formula coincide and the test would be vacuous.
+        const lumaLo = LR * lo.r + LG * lo.g + LB * lo.b;
+        const lumaHi = LR * hi.r + LG * hi.g + LB * hi.b;
+        expect(lumaLo).not.toBe(Math.round(lumaLo));
+        expect(lumaHi).not.toBe(Math.round(lumaHi));
+
+        // Run real clarity through applyEffects.
+        const imageData = { data, width: w, height: h, colorSpace: 'srgb' } as ImageData;
+        processor.applyEffects(imageData, w, h, state, false);
+        const actual = new Uint8ClampedArray(imageData.data);
+
+        // Build the legacy uint8-quantized LUT reference. Independent
+        // implementation that mirrors the pre-LOW-24 algorithm:
+        //   1. Apply the same 5x5 separable Gaussian blur on `original`.
+        //   2. For each pixel, look up midtoneMaskLUT[round(luma)] (uint8 bin).
+        //   3. Add masked (original − blurred) high-pass back, scaled by
+        //      clarity * CLARITY_EFFECT_SCALE.
+        const lut = new Float32Array(256);
+        for (let i = 0; i < 256; i++) {
+          const dev = Math.abs(i / 255 - 0.5) * 2;
+          lut[i] = 1.0 - dev * dev;
+        }
+        const blurred = gaussianBlur5x5Reference(original, w, h);
+        const reference = new Uint8ClampedArray(original);
+        const effectScale = CLARITY_SCALE; // clarity / 100 = 1.0
+        for (let i = 0; i < reference.length; i += 4) {
+          const r = original[i]!;
+          const g = original[i + 1]!;
+          const b = original[i + 2]!;
+          const luma = LR * r + LG * g + LB * b;
+          const lumIdx = Math.max(0, Math.min(255, Math.round(luma)));
+          const mask = lut[lumIdx]!;
+          const adj = mask * effectScale;
+          // Uint8ClampedArray auto-clamps and rounds half-to-even on assignment,
+          // matching the actual applyClarity write semantics in EffectProcessor.
+          reference[i] = r + (r - blurred[i]!) * adj;
+          reference[i + 1] = g + (g - blurred[i + 1]!) * adj;
+          reference[i + 2] = b + (b - blurred[i + 2]!) * adj;
+        }
+
+        // The actual float-precision output must differ from the
+        // bin-quantized reference for at least some pixels.
+        let diffPixels = 0;
+        for (let i = 0; i < actual.length; i += 4) {
+          if (actual[i] !== reference[i] || actual[i + 1] !== reference[i + 1] || actual[i + 2] !== reference[i + 2]) {
+            diffPixels++;
+          }
+        }
+        expect(diffPixels).toBeGreaterThan(0);
       });
     });
 

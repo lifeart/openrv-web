@@ -278,6 +278,28 @@ export function bellCurve(x: number, center: number, width: number): number {
   return Math.exp(-d * d * 2);
 }
 
+/**
+ * Compute the clarity midtone mask weight for a given normalized luminance in [0, 1].
+ *
+ * Formula: `1 - (|n - 0.5| * 2)^2` — a smooth inverted parabola that peaks at
+ * 0.5 (full clarity effect on midtones) and falls to 0 at both extremes
+ * (no effect on pure black/pure white).
+ *
+ * Operates entirely in float precision so smooth gradients produce smooth
+ * mask values. Earlier implementations indexed a 256-entry uint8 LUT by
+ * `Math.round(luminance)`, which produced visible plateaus / banding on
+ * sub-pixel luminance variations (LOW-24). Use this helper for any new
+ * call site so worker, EffectProcessor, and ViewerEffects stay bit-for-bit
+ * consistent.
+ *
+ * Inputs outside [0, 1] are clamped, so the result is always in [0, 1].
+ */
+export function computeMidtoneMaskValue(normalizedLum: number): number {
+  const n = normalizedLum < 0 ? 0 : normalizedLum > 1 ? 1 : normalizedLum;
+  const dev = Math.abs(n - 0.5) * 2;
+  return 1.0 - dev * dev;
+}
+
 // Re-export color conversion utilities from the shared color module.
 // Kept here for backward compatibility so existing imports are unaffected.
 export { hueToRgb, rgbToHsl, hslToRgb } from '../color';
