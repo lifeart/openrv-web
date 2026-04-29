@@ -6,6 +6,10 @@ import type { StencilBox } from '../../core/types/wipe';
 
 export type { StencilBox };
 
+// 'topmost' is a stack-level mode; filtered from per-layer dropdown — surface
+// only via stack composite-type setter (StackGroupNode.setCompositeType).
+const PER_LAYER_BLEND_MODES: readonly BlendMode[] = BLEND_MODES.filter((m) => m !== 'topmost');
+
 export interface StackLayer {
   id: string;
   name: string;
@@ -519,7 +523,15 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       font-size: 11px;
       cursor: pointer;
     `;
-    for (const mode of BLEND_MODES) {
+    // Session-compat: if a layer was persisted with the stack-level 'topmost'
+    // mode (e.g. loaded from an older session), coerce to 'normal' AND emit
+    // layerChanged so the data model converges with the UI rather than
+    // silently displaying the first option without persisting (STACK-U103).
+    if (layer.blendMode === 'topmost') {
+      layer.blendMode = 'normal';
+      this.emit('layerChanged', { ...layer });
+    }
+    for (const mode of PER_LAYER_BLEND_MODES) {
       const opt = document.createElement('option');
       opt.value = mode;
       opt.textContent = BLEND_MODE_LABELS[mode];

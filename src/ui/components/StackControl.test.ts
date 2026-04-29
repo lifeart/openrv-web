@@ -412,7 +412,10 @@ describe('StackControl', () => {
   });
 
   describe('blend modes', () => {
-    BLEND_MODES.forEach((mode: BlendMode) => {
+    // 'topmost' is a stack-level mode and is coerced to 'normal' at render time
+    // by StackControl (see HIGH-25 follow-up); this parameterized test covers
+    // the per-layer modes the dropdown surfaces.
+    BLEND_MODES.filter((m) => m !== 'topmost').forEach((mode: BlendMode) => {
       it(`STACK-U100-${mode}: layer can have ${mode} blend mode`, () => {
         const layer = control.addLayer({
           name: 'Test Layer',
