@@ -1252,6 +1252,75 @@ dispose(): void {
 }
 ```
 
+### Outside-Click Dismiss (Canonical Pattern)
+
+**Use `OutsideClickRegistry` for all new dismissable surfaces** (popovers, dropdowns, settings menus, overlays). Do NOT add a per-component `document.addEventListener('mousedown'|'click', ...)` handler.
+
+**Module**: `src/utils/ui/OutsideClickRegistry.ts` exports the singleton `outsideClickRegistry`.
+
+**Why this exists** (MED-25 / Issue #373):
+Many components historically registered their own global `mousedown`/`click` listener for outside-click dismiss. With dozens of dismissable surfaces, every open popover added a fresh global listener, and any missed cleanup leaked listeners holding references to disposed components. The registry collapses this to ONE capture-phase listener per event type (`mousedown`, `click`, `keydown`) for the lifetime of the page and dispatches dismiss events to registered consumers.
+
+**Value**:
+- One listener per event type regardless of how many popovers are open (was: N popovers → N+ document listeners).
+- LIFO walk: clicking inside an inner popover protects it AND its outer ancestors.
+- Strict deregister-during-dispatch contract: "if I deregister, my `onDismiss` won't run."
+- Capture-phase: descendant `stopPropagation()` cannot block dismiss — deliberate, documented semantic change vs prior bubble-phase per-component handlers.
+- Auto-detach of all global listeners when the last entry is removed.
+
+**Usage**:
+
+```typescript
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+
+private deregisterDismiss: OutsideClickDeregister | null = null;
+
+show(): void {
+  // ...build/show the popover...
+  this.deregisterDismiss = outsideClickRegistry.register({
+    elements: [this.triggerButton, this.popoverElement],
+    onDismiss: () => this.hide(),
+    // dismissOn: 'mousedown' (default) — fires before click
+    // dismissOnEscape: true (default) — innermost-only Escape dismiss
+  });
+}
+
+hide(): void {
+  // ...hide the popover...
+  if (this.deregisterDismiss) {
+    this.deregisterDismiss();
+    this.deregisterDismiss = null;
+  }
+}
+
+dispose(): void {
+  this.hide(); // ensures deregister even on unexpected teardown
+}
+```
+
+**Footgun: trigger-element-inclusion (mousedown→close→click→reopen)**
+
+If the trigger button toggles the popover via a `click` listener, you MUST include the trigger element in `elements`. Otherwise:
+1. `mousedown` on trigger → registry sees target outside `elements` → fires `onDismiss` → popover closes.
+2. `click` on trigger → trigger's toggle handler runs → popover reopens.
+
+The user perceives the popover as "uncloseable by clicking the trigger." Either include the trigger in `elements`, or set `dismissOn: 'click'` so dismiss races after the toggle handler.
+
+**Other gotchas**:
+- Do NOT rely on `event.stopPropagation()` to suppress dismiss — the registry runs in capture phase, before any bubble-phase descendant. Deregister beforehand or include the relevant element in `elements`.
+- A `register()` call made from inside an `onDismiss` callback takes effect for FUTURE events but is NOT considered for the in-flight event.
+- A `deregister()` call made from inside another callback prevents the deregistered entry's `onDismiss` from firing for the current event — even if it was already in the dispatch snapshot.
+
+**Migration status**:
+14 components migrated as of MED-25 (round 1):
+- BugOverlaySettingsMenu, ClippingOverlaySettingsMenu, EXRWindowOverlaySettingsMenu, FPSIndicatorSettingsMenu, FrameburnSettingsMenu, InfoPanelSettingsMenu, InfoStripSettingsMenu, MatteOverlaySettingsMenu, ReferenceComparisonSettingsMenu, SpotlightOverlaySettingsMenu, TimecodeOverlaySettingsMenu, ShortcutCheatSheet, GotoFrameOverlay (plus the registry itself + tests).
+- Tests: 27 unit + 8 integration tests in `src/utils/ui/OutsideClickRegistry.test.ts` and `src/ui/components/OutsideClickRegistry.integration.test.ts`.
+
+**Known follow-up (~30 unmigrated controls still using hand-rolled `document.addEventListener('mousedown'|'click', ...)` handlers)**:
+AutoSaveIndicator, BackgroundPatternControl, CDLControl, ColorControls, CompareControl, CropControl, DeinterlaceControl, DisplayProfileControl, ExportControl, FalseColorControl, FilmEmulationControl, FilterControl, GamutMappingControl, GhostFrameControl, HSLQualifierControl, LUTPipelinePanel, LensControl, LuminanceVisualizationControl, MultiSourceLayoutControl, NetworkControl, OCIOControl, PARControl, PerspectiveCorrectionControl, SafeAreasControl, ScopesControl, StabilizationControl, StackControl, StereoAlignControl, StereoControl, StereoEyeTransformControl, TimelineContextMenu, TimelineEditor, ToneMappingControl, VolumeControl, ZebraControl, layout/HeaderBar, shared/DropdownMenu, shared/Panel.
+
+Each migration replaces the per-component listener bind/unbind pair with a single `register()`/`deregister()` and updates any test asserting `expect(document.addEventListener).toHaveBeenCalledWith(...)` to assert on `outsideClickRegistry.getRegistrationCount()` instead. Tracked as a follow-up batch — do not block new feature work, but new components should use the registry from day one.
+
 ### State Initialization Order
 
 **Problem**: Methods called before DOM elements are created.

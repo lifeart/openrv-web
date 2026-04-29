@@ -143,6 +143,22 @@ const effectiveSpeed = playDirection < 0
 - Frame accumulator pattern handles variable frame durations
 - Timing reset on speed/direction change to prevent jumps
 
+### FPS Detection Robustness (MED-42)
+
+`MediabunnyFrameExtractor` derives video FPS from actual decoded frame timestamps via the pure helper `computeDetectedFps(actualFrameCount, lastTimestamp): number | null`:
+
+- Returns `null` when FPS is **indeterminate**:
+  - `actualFrameCount < 2` — a single frame has no measurable interval (still-image videos may carry an arbitrary PTS, so any computed value would be meaningless).
+  - `lastTimestamp <= 0` — malformed or zero-duration timestamps.
+- Otherwise computes `(N - 1) / lastTimestamp`, treating the timeline as `N - 1` evenly-spaced intervals between the first frame at `t=0` and the last frame at `lastTimestamp`.
+- Snaps to a common cinematic / broadcast FPS (`23.976, 24, 25, 29.97, 30, 50, 59.94, 60`) when the raw value is within `0.5` of one.
+
+Consumers (`SessionMedia.detectVideoFpsAndDuration`, `VideoRepresentationLoader.load`, `VideoSourceNode.getDetectedFps`) **null-check the result** and fall back to the session / source default FPS rather than propagating a nonsensical value. This means a 1-frame "video" (e.g. a still image stored as MP4) cleanly retains the default FPS instead of producing artifacts like `2.0 FPS` from the older `N / lastTimestamp` formula.
+
+**Known follow-up — snap-to-common-FPS aliasing**: the current snap uses a wide tolerance (`0.5`) with first-match-wins ordering, so true `24`, `30`, and `60` FPS streams alias to `23.976`, `29.97`, and `59.94` respectively. The behavior is codified by tests; a future fix should switch to nearest-match.
+
+**Known follow-up — trimmed videos**: `(N - 1) / lastTimestamp` assumes the first decoded frame is at `t=0`. For trimmed videos whose first PTS is `t0 > 0`, the formula understates FPS. The "first frame at t=0" assumption is documented in the `computeDetectedFps` JSDoc.
+
 ## E2E Test Cases
 
 ### Existing Tests in `e2e/playback-controls.spec.ts`

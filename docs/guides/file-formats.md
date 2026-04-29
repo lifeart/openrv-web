@@ -121,15 +121,18 @@ JPEG XL is a next-generation image format designed for both lossy and lossless c
 
 ### JPEG Gainmap HDR (.jpg, .jpeg)
 
-Google's Ultra HDR / Adobe Gainmap HDR format embeds an HDR gain map within a standard JPEG file using the Multi-Picture Format (MPF) extension:
+Google's Ultra HDR (Pixel) and Apple iPhone HDR JPEG / Adobe Gainmap HDR formats embed an HDR gain map within a standard JPEG file using the Multi-Picture Format (MPF) extension:
 
 - **Decoder**: Pure JavaScript (`JPEGGainmapDecoder.ts`)
 - **Structure**: The file contains a standard SDR JPEG as the primary image, plus a secondary JPEG gain map image referenced via an APP2 MPF marker. XMP metadata describes the headroom and gain parameters
 - **HDR reconstruction**: The decoder applies the ISO 21496-1 exponential gain map formula: `HDR_linear = sRGB_to_linear(base) * exp2(gainmap * headroom)`, where `sRGB_to_linear(base)` is the sRGB-to-linear converted base image, `gainmap` is the decoded gain map, and `headroom` is extracted from XMP metadata
 - **Orientation**: EXIF orientation is extracted and applied via `extractJPEGOrientation()`
 - **Detection**: JPEG SOI marker (`0xFFD8`) followed by an APP2 segment containing `MPF\0` identifier
+- **Compliant with**: CIPA DC-007 (Multi-Picture Format), ITU-T T.81 §B.1.1.4 (JPEG marker segment encoding), ISO 21496-1 (Gain map standard for HDR reconstruction)
 
 **Color space**: Linear (after sRGB-to-linear conversion and gain application).
+
+**Robustness against corrupt or hostile input**: The MPF/IFD parser and JPEG marker walkers validate every untrusted offset, size, and segment length read from the file. Truncated MPF tables, out-of-bounds sub-image slices, spec-violating APP segment lengths (`<2` per ITU-T T.81 §B.1.1.4), non-finite or negative offsets, and pathological IFD entry counts (the practical cap is 256 entries; real gainmap JPEGs use 2-4) all surface as descriptive `DecoderError`s naming the structural element involved (IFD entry, MPEntry table, base image slice, etc.) rather than silent `ArrayBuffer.slice` clamps or opaque downstream failures. The 0xB001 NumberOfImages and 0xB002 MPEntry-table-size fields are bounded by the same practical cap so that adversarial files cannot force unbounded CPU work in the parsing loops.
 
 ### HEIC Gainmap HDR (.heic, .heif)
 
