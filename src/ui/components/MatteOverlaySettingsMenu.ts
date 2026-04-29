@@ -6,12 +6,13 @@
 
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import type { MatteOverlay } from './MatteOverlay';
+import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
 const VIEWPORT_MARGIN = 8;
 
 export class MatteOverlaySettingsMenu {
   private menuEl: HTMLDivElement | null = null;
-  private dismissHandlers: (() => void)[] = [];
+  private deregisterDismiss: (() => void) | null = null;
   private _isVisible = false;
   private overlay: MatteOverlay;
 
@@ -87,7 +88,10 @@ export class MatteOverlaySettingsMenu {
     menu.style.visibility = 'visible';
 
     this._isVisible = true;
-    this.setupDismissHandlers(menu);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [menu],
+      onDismiss: () => this.hide(),
+    });
   }
 
   hide(): void {
@@ -96,7 +100,10 @@ export class MatteOverlaySettingsMenu {
       this.menuEl = null;
     }
     this._isVisible = false;
-    this.cleanupDismissHandlers();
+    if (this.deregisterDismiss) {
+      this.deregisterDismiss();
+      this.deregisterDismiss = null;
+    }
   }
 
   isVisible(): boolean {
@@ -301,30 +308,4 @@ export class MatteOverlaySettingsMenu {
     return separator;
   }
 
-  private setupDismissHandlers(menu: HTMLDivElement): void {
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node) || !menu.contains(target)) {
-        this.hide();
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        this.hide();
-      }
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    this.dismissHandlers.push(() => document.removeEventListener('mousedown', onPointerDown));
-    this.dismissHandlers.push(() => document.removeEventListener('keydown', onKeyDown));
-  }
-
-  private cleanupDismissHandlers(): void {
-    for (const dispose of this.dismissHandlers) {
-      dispose();
-    }
-    this.dismissHandlers = [];
-  }
 }
