@@ -93,7 +93,7 @@ These findings were not yet verified against actual source code:
 
 #### Workers
 - ~~**LOW-22**~~: ImageBitmap close error handling incomplete — **FIXED** (see FIXED_ISSUES.md #369)
-- **LOW-23**: Effect processor error stack unavailable in production — `effectProcessor.worker.ts` ~lines 1088-1099
+- ~~**LOW-23**~~: Effect processor error stack unavailable in production — **FIXED** (see FIXED_ISSUES.md #379)
 - ~~**LOW-24**~~: Midtone mask integer rounding precision — **FIXED** (see FIXED_ISSUES.md #378)
 
 #### Format Decoders

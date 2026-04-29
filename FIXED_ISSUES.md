@@ -5385,3 +5385,35 @@ Each error is descriptive — names the actual count and the cap.
 - 26083 tests passing in full suite.
 - `npx tsc --noEmit` clean.
 - Stash-revert confirms 6 LOW24 tests fail on pre-fix code.
+
+## Issue #379: LOW-23 — Effect processor error stack unavailable in production
+
+**Root cause**: `Error.name`, `Error.message`, and `Error.stack` are non-enumerable on V8/SpiderMonkey, so the structured-clone algorithm used by `Worker.postMessage` silently drops them when posting Error instances across worker boundaries. The main thread previously received bare `Error: <message>` with no source context, making production debugging hard.
+
+**Fix**:
+- `src/workers/effectProcessor.worker.ts`: explicitly capture `error.name`, `error.message`, `error.stack` as plain string fields in the catch block; protocol documented in header comment.
+- `src/utils/WorkerPool.ts`: `handleWorkerMessage` rehydrates `Error.name` from the serialized payload alongside the already-rehydrated `stack`.
+- `src/utils/effects/PrerenderBufferManager.ts`: `WorkerResultMessage` interface extended with optional `name`/`stack` fields; failure logging surfaces the rehydrated stack.
+
+**Tests added (5)**:
+- `src/workers/effectProcessor.worker.errors.test.ts` (new file, 4 tests):
+  - EPW-ERR-001: error response includes message, name (`'TypeError'`), and stack as plain strings.
+  - EPW-ERR-002: error response is structured-clone-safe (round-trips through JSON).
+  - EPW-ERR-003: name field is always populated.
+  - EPW-ERR-004: successful processing does not populate error fields.
+- `src/utils/WorkerPool.test.ts`: WP-015b — consumer rehydrates `Error.name` and `Error.stack` from worker error payload.
+
+**Files changed**:
+- `src/workers/effectProcessor.worker.ts`
+- `src/utils/WorkerPool.ts`
+- `src/utils/effects/PrerenderBufferManager.ts`
+- `src/workers/effectProcessor.worker.errors.test.ts` (new)
+- `src/utils/WorkerPool.test.ts`
+
+**Verification**:
+- 588 tests across workers + utils/effects passing.
+- 26089 tests passing in full suite.
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 3 of 5 new tests would fail on pre-fix code (EPW-ERR-001, EPW-ERR-003, WP-015b); 2 are sanity checks that pass either way.
+
+**Known follow-up (separate ticket)**: `src/render/renderWorker.worker.ts` uses a different `renderError` protocol but has the same Error.stack-lost defect at lines ~258, 308, 336. Out of LOW-23 scope.
