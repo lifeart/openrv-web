@@ -5489,3 +5489,30 @@ VideoFrame is a GPU resource; missed close() leaks until process termination.
 - Stash-revert confirms the fix is required: VSN-003, VSN-006, MFE-001, MFE-003 fail on pre-fix code.
 
 **Note**: `ManagedVideoFrame.creationStack` and `enableLeakDetection` (FinalizationRegistry) already exist for runtime leak observability — no additional instrumentation needed beyond the call-site fix.
+
+## Issue #382: MED-19 — HotReloadManager state capture not deep-cloned
+
+**Root cause**: `HotReloadManager.reload()` captured plugin state via `plugin.getState()` and held the returned value across the dispose / re-import / re-activate window before passing it to the new plugin's `restoreState()`. The plugin contract states `getState()` should return a copy, but a misbehaving plugin returning a live reference would let:
+1. Mutations during dispose/re-import leak into the snapshot.
+2. The new plugin's `restoreState()` mutate the snapshot back into the old plugin's live state.
+3. Async work in dispose hooks race with the captured reference.
+
+**Fix**: Added `deepCloneState(state, pluginId)` helper that wraps the captured state in `structuredClone` before storing. Short-circuits `null`/`undefined`/primitives. On clone failure (functions, DOM nodes, classes — DataCloneError or other host errors), logs a `[hot-reload:${pluginId}]` warning with cause and falls back to the raw reference (preserves prior behavior, never silently swallows). Handles Maps, Sets, ArrayBuffers, typed arrays, and cycles natively via `structuredClone`. The snapshot is single-use: passed once to `restoreState()` then discarded, so post-restore mutation by the new plugin cannot leak back.
+
+**Tests added** (`src/plugin/dev/HotReloadManager.test.ts`):
+- `PHOT-022`: capture is independent of post-capture live mutations.
+- `PHOT-023`: snapshot mutations by new plugin's `restoreState` do not leak to old live state.
+- `PHOT-024`: `Map`, `Set`, `ArrayBuffer` survive the clone with new identities and equal contents.
+- `PHOT-025`: non-cloneable state (function) → console.warn + falls back to raw reference.
+- `PHOT-026`: `null` state passes through and is forwarded to `restoreState(null)`.
+- `PHOT-027`: `undefined` state preserves "no state" sentinel — `restoreState` is not called.
+- `PHOT-028`: primitives (number) pass through.
+
+**Files changed**:
+- `src/plugin/dev/HotReloadManager.ts`
+- `src/plugin/dev/HotReloadManager.test.ts`
+
+**Verification**:
+- 214 plugin tests passing across 8 files (including 24 in HotReloadManager.test.ts).
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 4 of 7 new tests fail on pre-fix code (PHOT-022/023/024/025); 3 are contract documentation that pass either way (null/undefined/primitive short-circuit paths).

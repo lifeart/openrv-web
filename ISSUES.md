@@ -48,9 +48,7 @@ These issues were found and fixed during the audit:
 
 #### ~~HIGH-31~~: MPF offset arithmetic partially unchecked — **FIXED** (see FIXED_ISSUES.md #374)
 
-#### MED-19: HotReloadManager state capture not deep-cloned
-- **File**: `src/plugin/dev/HotReloadManager.ts` ~lines 59-61
-- **Status**: Design-level concern — depends on plugin's `getState()` returning a copy (which is the contract).
+#### ~~MED-19~~: HotReloadManager state capture not deep-cloned — **FIXED** (see FIXED_ISSUES.md #382)
 
 #### ~~MED-28~~: JPEG marker segment length partially unchecked — **FIXED** (see FIXED_ISSUES.md #375)
 
