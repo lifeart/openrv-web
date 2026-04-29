@@ -273,6 +273,15 @@ fn agxDefaultContrastApprox(x: vec3f) -> vec3f {
 }
 
 fn tonemapAgX(color: vec3f, hdrHeadroom: f32) -> vec3f {
+  // AgX inset/outset matrices.
+  // Working space at call site: BT.709/sRGB linear (post input-primaries
+  // normalization). NOT classical primary conversions — they are the AgX
+  // "inner/outer gamut" pair: an inset (gentle compression toward white)
+  // and a near-inverse outset that contract/restore saturated values around
+  // the curve's sigmoid domain. Source: Troy Sobotka's AgX (Blender 4.x);
+  // values from MJP/Three.js port of AgX 0.13.5 LUT-free fit.
+  // Mirror of viewer.frag.glsl `tonemapAgX` and effectProcessing.shared.ts.
+  // Column-major: each `vec3f(...)` is one column.
   let AgXInsetMatrix = mat3x3f(
     vec3f(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
     vec3f(0.0784335999999992, 0.878468636469772, 0.0784336),
@@ -374,6 +383,17 @@ fn RRTAndODTFit(v: vec3f) -> vec3f {
 }
 
 fn tonemapACESHill(color: vec3f, hdrHeadroom: f32) -> vec3f {
+  // ACES Hill input/output matrices.
+  // ACESInputMat: BT.709 linear → ACES AP1 (ACEScg), Stephen Hill's
+  //   ODT-tuned composite (BT.709→AP0→AP1 with a slight desaturation pre-bake)
+  //   so the rational RRT+ODT fit on the next line matches the reference
+  //   ACES 1.0 Output Transform output for a BT.709 display.
+  // ACESOutputMat: AP1 → BT.709 linear, the tuned inverse companion.
+  // Working space at call site: BT.709 linear (post input-primaries).
+  // Reference: Stephen Hill, "ACES Filmic Tone Mapping Curve",
+  //   https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+  // Mirror of viewer.frag.glsl `tonemapACESHill` and effectProcessing.shared.ts.
+  // Column-major: each `vec3f(...)` is one column.
   let ACESInputMat = mat3x3f(
     vec3f(0.59719, 0.07600, 0.02840),
     vec3f(0.35458, 0.90834, 0.13383),

@@ -110,19 +110,42 @@ export const GAMUT_MODE_CODES: Record<string, number> = {
 };
 
 /**
- * Color primaries conversion matrices (column-major for GLSL mat3).
- * Derived from CIE xy chromaticity coordinates and the Bradford chromatic
- * adaptation transform.
+ * Color primaries conversion matrices for linear-light scene-referred RGB.
+ *
+ * Storage layout: column-major, matching GLSL `mat3` and WGSL `mat3x3f`
+ * (uploaded as a Float32Array uniform with 9 elements). For a column-major
+ * matrix `m` the math operation `M * v` is computed as:
+ *   r' = m[0]*r + m[3]*g + m[6]*b
+ *   g' = m[1]*r + m[4]*g + m[7]*b
+ *   b' = m[2]*r + m[5]*g + m[8]*b
+ *
+ * All entries below convert between RGB working spaces sharing the D65 white
+ * point (BT.709/sRGB, BT.2020, Display-P3), so derivation is RGB→XYZ→RGB
+ * directly from CIE xy chromaticity coordinates without any chromatic
+ * adaptation transform. Bradford CAT is only required when the source and
+ * destination white points differ (e.g. DCI-P3 theatrical with white at
+ * x=0.314,y=0.351); the entries here all share D65, so no CAT is folded in.
+ *
+ * References: ITU-R BT.709-6 Item 1.4, ITU-R BT.2020-2 Table 4,
+ * SMPTE EG 432-1 (Display-P3).
+ *
+ * Mirrors:
+ *   - GLSL `viewer.frag.glsl` (gamut mapping section, column-major mat3)
+ *   - WGSL `scene_analysis.wgsl` (column-major mat3x3f)
+ *   - CPU `effectProcessing.shared.ts` (row-major reinterpretation)
+ *
+ * Tests pinning matrix values: src/render/__tests__/shaderMathColorPipeline.test.ts
+ * (XE-MATRIX-002..006 plus MED-54 documentation tests).
  */
 export const COLOR_PRIMARIES_MATRICES = {
   IDENTITY: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-  // BT.2020 → BT.709/sRGB
+  /** BT.2020 (D65) → BT.709/sRGB (D65) */
   REC2020_TO_SRGB: new Float32Array([1.6605, -0.1246, -0.0182, -0.5877, 1.1329, -0.1006, -0.0728, -0.0083, 1.1187]),
-  // Display-P3 → BT.709/sRGB
+  /** Display-P3 (D65) → BT.709/sRGB (D65) */
   P3_TO_SRGB: new Float32Array([1.2249, -0.042, -0.0197, -0.2247, 1.0419, -0.0786, -0.0002, 0.0001, 1.0983]),
-  // BT.709/sRGB → Display-P3
+  /** BT.709/sRGB (D65) → Display-P3 (D65) */
   SRGB_TO_P3: new Float32Array([0.8225, 0.0332, 0.0171, 0.1774, 0.9669, 0.0724, 0.0001, -0.0001, 0.9105]),
-  // BT.709/sRGB → BT.2020
+  /** BT.709/sRGB (D65) → BT.2020 (D65) */
   SRGB_TO_REC2020: new Float32Array([0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.088, 0.0433, 0.0114, 0.8956]),
 } as const;
 

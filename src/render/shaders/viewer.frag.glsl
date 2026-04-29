@@ -360,6 +360,20 @@
       }
 
       vec3 tonemapAgX(vec3 color) {
+        // AgX inset/outset matrices.
+        // Working space: BT.709/sRGB linear (in the OpenRV pipeline AgX runs
+        // AFTER input primaries normalization, i.e. on BT.709 working space).
+        // These are NOT classical primary-conversion matrices: they are an
+        // "inset" (gamut compression toward white) and its near-inverse
+        // "outset" used to gently contract saturated values into the curve's
+        // sigmoid domain and restore them on output. The pair is sometimes
+        // called the AgX "inner/outer gamut" transforms. Source: Troy
+        // Sobotka's AgX (Blender 4.x / Filmic-2 pipeline). Reference values
+        // from MJP/Three.js port of the canonical AgX 0.13.5 LUT-free fit.
+        // Column-major for GLSL: each `vec3(...)` is one column.
+        // Mirrored in:
+        //   - src/render/webgpu/shaders/common.wgsl (column-major)
+        //   - src/utils/effects/effectProcessing.shared.ts (row-major reinterpretation)
         const mat3 AgXInsetMatrix = mat3(
           vec3(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
           vec3(0.0784335999999992, 0.878468636469772, 0.0784336),
@@ -464,6 +478,23 @@
       }
 
       vec3 tonemapACESHill(vec3 color) {
+        // ACES Hill input/output matrices.
+        // ACESInputMat: BT.709 linear → ACES AP1 (ACEScg) — NOT a pure primary
+        //   conversion; it is the Stephen Hill "ODT-tuned" composite matrix
+        //   that combines BT.709→AP0→AP1 with a slight desaturation pre-bake
+        //   so the rational RRT+ODT fit on the next line matches the
+        //   reference ACES 1.0 Output Transform output for BT.709 displays.
+        // ACESOutputMat: AP1 → BT.709 linear, the inverse companion (also
+        //   Stephen Hill's tuned form, not a strict mathematical inverse).
+        // Working space at the call site is BT.709 linear (post input-primaries
+        // normalization, MED-52 headroom convention applied).
+        // Reference: Stephen Hill, "ACES Filmic Tone Mapping Curve",
+        //   https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+        //   (originally derived from ACES 1.0 reference RRT+ODT in CTL).
+        // Column-major for GLSL: each `vec3(...)` is one column.
+        // Mirrored in:
+        //   - src/render/webgpu/shaders/common.wgsl (column-major)
+        //   - src/utils/effects/effectProcessing.shared.ts (row-major reinterpretation)
         const mat3 ACESInputMat = mat3(
           vec3(0.59719, 0.07600, 0.02840),
           vec3(0.35458, 0.90834, 0.13383),
@@ -511,22 +542,53 @@
       }
 
       // --- Gamut mapping matrices and functions ---
+      //
+      // These matrices convert linear-light scene-referred RGB between RGB
+      // working spaces sharing the D65 white point. They are pure 3x3 primary
+      // conversions (no chromatic adaptation needed, since all three spaces
+      // are D65); each row of the math matrix gives the destination primary
+      // contribution from each source primary.
+      //
+      // Storage convention: GLSL `mat3(...)` is COLUMN-MAJOR. The literal
+      // groups of 3 below are columns of the storage matrix, which means the
+      // numbers as you read them across each VISUAL row form one COLUMN of
+      // the math matrix. Thus `M * v` produces:
+      //   r' = m[0][0]*r + m[1][0]*g + m[2][0]*b
+      // where m[col][row] is the GLSL column-major access. Verified by the
+      // tests in src/render/__tests__/shaderMathColorPipeline.test.ts
+      // (XE-MATRIX-002..006) that pin matrix values against documented intent.
+      //
+      // These matrices are mirrored byte-for-byte in:
+      //   - src/render/webgpu/shaders/scene_analysis.wgsl (column-major)
+      //   - src/utils/effects/effectProcessing.shared.ts (row-major, see notes there)
+      //   - src/render/ShaderConstants.ts (COLOR_PRIMARIES_MATRICES, column-major)
 
-      // Rec.2020 to sRGB (derived from ITU-R BT.2020 and sRGB chromaticity coordinates)
-      // Column-major for GLSL: each group of 3 is one column
+      // Rec.2020 (ITU-R BT.2020) → sRGB / BT.709 (D65 → D65)
+      // Source primaries: BT.2020 (R: 0.708,0.292; G: 0.170,0.797; B: 0.131,0.046)
+      // Dest primaries:   BT.709 (R: 0.640,0.330; G: 0.300,0.600; B: 0.150,0.060)
+      // Both spaces share D65 (0.3127, 0.3290), so derivation is RGB→XYZ→RGB
+      // without chromatic adaptation. Reference: ITU-R BT.2020-2 Table 4 and
+      // ITU-R BT.709-6 Item 1.4. Column-major for GLSL: each group of 3 is one column.
       const mat3 REC2020_TO_SRGB = mat3(
          1.6605, -0.1246, -0.0182,
         -0.5876,  1.1329, -0.1006,
         -0.0728, -0.0083,  1.1187
       );
-      // Rec.2020 to Display-P3 (derived from ITU-R BT.2020 and DCI-P3 D65 chromaticity coordinates)
-      // Column-major for GLSL: each group of 3 is one column
+      // Rec.2020 (ITU-R BT.2020) → Display-P3 (D65 → D65)
+      // Source primaries: BT.2020. Dest primaries: Display-P3 / SMPTE RP 431-2 D65
+      // (R: 0.680,0.320; G: 0.265,0.690; B: 0.150,0.060). Both D65, no
+      // chromatic adaptation. Reference: SMPTE EG 432-1 / Apple Display P3
+      // (DCI-P3 primaries with sRGB-style D65 white point).
+      // Column-major for GLSL: each group of 3 is one column.
       const mat3 REC2020_TO_P3 = mat3(
          1.3436, -0.0653,  0.0028,
         -0.2822,  1.0758, -0.0196,
         -0.0614, -0.0105,  1.0168
       );
-      // Display-P3 to sRGB
+      // Display-P3 (D65) → sRGB / BT.709 (D65)
+      // Source primaries: Display-P3. Dest primaries: BT.709. Both D65.
+      // Reference: SMPTE EG 432-1 (Display-P3) and ITU-R BT.709-6.
+      // Column-major for GLSL: each group of 3 is one column.
       const mat3 P3_TO_SRGB = mat3(
          1.2249, -0.0420, -0.0197,
         -0.2247,  1.0419, -0.0786,

@@ -59,22 +59,38 @@ struct VSOut {
 // LUMA is provided by common.wgsl (prepended).
 
 // --- Gamut mapping matrices ---
+//
+// Linear-light primary conversions between RGB working spaces sharing D65.
+// Each row of the math matrix gives the destination primary contribution from
+// each source primary; no chromatic adaptation is needed (all D65 → D65).
+//
+// Storage convention: WGSL `mat3x3f(...)` is COLUMN-MAJOR (matches GLSL).
+// The literal groups of 3 below are columns of the storage matrix, so the
+// numbers read across each visual row form one COLUMN of the math matrix.
+// For `M * v` this gives r' = m[0][0]*r + m[1][0]*g + m[2][0]*b.
+//
+// Mirror of GLSL `viewer.frag.glsl` and CPU `effectProcessing.shared.ts`.
+// Tests pinning these values: src/render/__tests__/shaderMathColorPipeline.test.ts
+// (XE-MATRIX-002..006) and the new MED-54 documentation tests.
 
-// Rec.2020 to sRGB
+// Rec.2020 (ITU-R BT.2020) → sRGB / BT.709 (D65 → D65)
+// Reference: ITU-R BT.2020-2 Table 4 and ITU-R BT.709-6 Item 1.4.
 const REC2020_TO_SRGB = mat3x3f(
    1.6605, -0.1246, -0.0182,
   -0.5876,  1.1329, -0.1006,
   -0.0728, -0.0083,  1.1187
 );
 
-// Rec.2020 to Display-P3
+// Rec.2020 (ITU-R BT.2020) → Display-P3 (D65 → D65)
+// Reference: SMPTE EG 432-1 / Apple Display-P3 (DCI-P3 primaries with D65).
 const REC2020_TO_P3 = mat3x3f(
    1.3436, -0.0653,  0.0028,
   -0.2822,  1.0758, -0.0196,
   -0.0614, -0.0105,  1.0168
 );
 
-// Display-P3 to sRGB
+// Display-P3 (D65) → sRGB / BT.709 (D65)
+// Reference: SMPTE EG 432-1 (Display-P3) and ITU-R BT.709-6.
 const P3_TO_SRGB = mat3x3f(
    1.2249, -0.0420, -0.0197,
   -0.2247,  1.0419, -0.0786,

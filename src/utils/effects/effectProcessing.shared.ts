@@ -506,7 +506,13 @@ export function tonemapAgX(r: number, g: number, b: number, hdrHeadroom = 1.0): 
   g = g / headroom;
   b = b / headroom;
 
-  // AgX inset matrix (row-major interpretation of GLSL column-major mat3)
+  // AgX inset matrix.
+  // Working space: BT.709 linear (post input-primaries normalization).
+  // NOT a primary-conversion matrix: it is the AgX "inner gamut" inset that
+  // gently compresses saturated values toward white before the log2/sigmoid
+  // stage. Source: Troy Sobotka's AgX (Blender 4.x), MJP/Three.js port of
+  // AgX 0.13.5 LUT-free fit. Row-major reinterpretation of the column-major
+  // `AgXInsetMatrix` in viewer.frag.glsl and common.wgsl.
   let ir = 0.842479062253094 * r + 0.0784335999999992 * g + 0.0792237451477643 * b;
   let ig = 0.0423282422610123 * r + 0.878468636469772 * g + 0.0791661274605434 * b;
   let ib = 0.0423756549057051 * r + 0.0784336 * g + 0.879142973793104 * b;
@@ -534,7 +540,11 @@ export function tonemapAgX(r: number, g: number, b: number, hdrHeadroom = 1.0): 
   ig = sigmoid(ig);
   ib = sigmoid(ib);
 
-  // AgX outset matrix (row-major interpretation)
+  // AgX outset matrix.
+  // Near-inverse companion of the inset above ("outer gamut" / restoration).
+  // Returns sigmoid output back toward the original BT.709 linear basis.
+  // Row-major reinterpretation of column-major `AgXOutsetMatrix` in
+  // viewer.frag.glsl and common.wgsl.
   const or = 1.19687900512017 * ir + -0.0980208811401368 * ig + -0.0990297440797205 * ib;
   const og = -0.0528968517574562 * ir + 1.15190312990417 * ig + -0.0989611768448433 * ib;
   const ob = -0.0529716355144438 * ir + -0.0980434501171241 * ig + 1.15107367264116 * ib;
@@ -647,7 +657,14 @@ export function tonemapACESHill(
   g = g / headroom;
   b = b / headroom;
 
-  // ACES input matrix (sRGB → AP1, row-major interpretation)
+  // ACES Hill input matrix: BT.709 linear → ACES AP1 (ACEScg), Stephen Hill
+  // ODT-tuned composite (BT.709→AP0→AP1 with desaturation pre-bake) so the
+  // rational RRT+ODT fit below matches the reference ACES 1.0 Output
+  // Transform output for a BT.709 display. Working space at call site:
+  // BT.709 linear (post input-primaries). Reference: Stephen Hill,
+  // https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl .
+  // Row-major reinterpretation of column-major `ACESInputMat` in
+  // viewer.frag.glsl and common.wgsl.
   const ir = 0.59719 * r + 0.35458 * g + 0.04823 * b;
   const ig = 0.076 * r + 0.90834 * g + 0.01566 * b;
   const ib = 0.0284 * r + 0.13383 * g + 0.83777 * b;
@@ -657,7 +674,11 @@ export function tonemapACESHill(
   const fitG = (ig * (ig + 0.0245786) - 0.000090537) / (ig * (0.983729 * ig + 0.432951) + 0.238081);
   const fitB = (ib * (ib + 0.0245786) - 0.000090537) / (ib * (0.983729 * ib + 0.432951) + 0.238081);
 
-  // ACES output matrix (AP1 → sRGB, row-major interpretation)
+  // ACES Hill output matrix: ACES AP1 (ACEScg) → BT.709 linear, the Stephen
+  // Hill tuned inverse companion (not a strict mathematical inverse — paired
+  // with the tuned input matrix so the fit lands on the reference ODT
+  // output). Row-major reinterpretation of column-major `ACESOutputMat` in
+  // viewer.frag.glsl and common.wgsl.
   const or = 1.60475 * fitR + -0.53108 * fitG + -0.07367 * fitB;
   const og = -0.10208 * fitR + 1.10813 * fitG + -0.00605 * fitB;
   const ob = -0.00327 * fitR + -0.07276 * fitG + 1.07602 * fitB;
@@ -702,16 +723,37 @@ export function tonemapDragoChannel(value: number, bias = 0.85, Lwa = 0.2, Lmax 
 // ============================================================================
 // Gamut Mapping (CPU path)
 // ============================================================================
+//
+// Linear-light primary-conversion matrices between RGB working spaces sharing
+// D65. Each row of the math matrix is the destination primary contribution
+// from each source primary; no chromatic adaptation needed (D65 → D65 in all
+// three cases). The CPU storage convention is ROW-MAJOR (each group of 3 is
+// one row of the math matrix, consumed by `matMul3`). Note this differs from
+// the GPU shaders, which store the SAME logical matrix in COLUMN-MAJOR layout
+// for `mat3` / `mat3x3f`. The numeric reordering between the two layouts is
+// the standard transpose-of-transpose: visually the rows here equal the
+// visual columns in viewer.frag.glsl / scene_analysis.wgsl.
+//
+// Mirror of viewer.frag.glsl, scene_analysis.wgsl, and ShaderConstants.ts.
+// Tests pinning these values: src/render/__tests__/shaderMathColorPipeline.test.ts
+// (XE-MATRIX-002..006) and the MED-54 documentation tests in the same file.
 
-// Gamut conversion matrices (row-major for CPU matMul3: each group of 3 is one row)
-
-/** Rec.2020 → sRGB */
+/**
+ * Rec.2020 (ITU-R BT.2020) → sRGB / BT.709, both at D65.
+ * Reference: ITU-R BT.2020-2 Table 4 + ITU-R BT.709-6 Item 1.4. Row-major.
+ */
 const REC2020_TO_SRGB = [1.6605, -0.5876, -0.0728, -0.1246, 1.1329, -0.0083, -0.0182, -0.1006, 1.1187];
 
-/** Rec.2020 → Display-P3 (derived from ITU-R BT.2020 and DCI-P3 D65 chromaticity coordinates) */
+/**
+ * Rec.2020 (ITU-R BT.2020) → Display-P3, both at D65.
+ * Reference: SMPTE EG 432-1 (Display-P3) and ITU-R BT.2020-2. Row-major.
+ */
 const REC2020_TO_P3 = [1.3436, -0.2822, -0.0614, -0.0653, 1.0758, -0.0105, 0.0028, -0.0196, 1.0168];
 
-/** Display-P3 → sRGB */
+/**
+ * Display-P3 (D65) → sRGB / BT.709 (D65).
+ * Reference: SMPTE EG 432-1 + ITU-R BT.709-6. Row-major.
+ */
 const P3_TO_SRGB = [1.2249, -0.2247, -0.0002, -0.042, 1.0419, 0.0001, -0.0197, -0.0786, 1.0983];
 
 function matMul3(m: number[], r: number, g: number, b: number): [number, number, number] {
