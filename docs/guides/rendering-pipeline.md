@@ -680,6 +680,10 @@ When neither WebGL2 native HDR output nor WebGPU is available, OpenRV Web falls 
 
 The render worker offloads rendering to a background thread using `OffscreenCanvas`. When available, the main canvas is transferred to a Web Worker that runs the full WebGL2 rendering pipeline off the main thread. This keeps the UI responsive during heavy rendering operations such as large-image display, LUT application, or multi-stage color correction. The render worker communicates frame updates and state changes via structured-clone messages.
 
+::: info Worker error response shape (developer note)
+Worker error messages posted to the main thread use the shape `{ type: 'error', id, error: string, name: string, stack?: string }`. The `error` field carries `Error.message`, `name` carries `Error.name`, and `stack` carries `Error.stack`. All three are explicitly captured into plain string fields because `Error.message`, `Error.name`, and `Error.stack` are non-enumerable on V8 / SpiderMonkey and would otherwise be silently dropped by structured-clone when posting an `Error` instance directly. `WorkerPool.handleWorkerMessage` (`src/utils/WorkerPool.ts`) rehydrates an `Error` from this payload so the main thread sees the original name, message, and source-resolved stack for debugging. Any new worker that wants its errors to surface with full context in production must follow the same explicit-capture pattern.
+:::
+
 ## Adaptive Proxy Rendering
 
 Adaptive proxy rendering dynamically adjusts rendering quality based on interaction state to maintain smooth frame rates. During active interactions (panning, zooming, scrubbing), the renderer drops to a lower-resolution proxy by reducing the canvas backing store relative to the display DPI. When interaction stops, the full-resolution render is restored. The system also leverages GL mipmaps for static textures and cache-level resize to minimize GPU memory pressure on large images.

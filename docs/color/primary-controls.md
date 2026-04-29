@@ -138,6 +138,10 @@ The algorithm:
 
 Positive values increase local contrast (punchier midtones). Negative values decrease local contrast (softer, more diffused look).
 
+::: info Float-precision midtone mask
+The clarity midtone mask is computed in float precision using the smooth formula `1 - (|n - 0.5| * 2)^2`, where `n` is the normalized luminance. Earlier versions of the CPU paths sampled a 256-entry uint8-quantized lookup table indexed by `Math.round(luminance)`, which produced visible plateaus and banding on smooth gradients -- particularly noticeable in HDR / float pipelines where input precision exceeds 8 bits. Replacing the LUT with the float formula reduces the plateau count on a 1024-sample sweep from 769 to 1 (the mathematical peak at `n = 0.5`), giving smoother midtone enhancement on subtle gradients. The shared helper `computeMidtoneMaskValue` in `src/utils/effects/effectProcessing.shared.ts` is used (or formula-inlined verbatim) by the worker, the synchronous `EffectProcessor`, and the `ViewerEffects` path consumed by `ClarityNode`, so all three CPU paths stay bit-for-bit consistent.
+:::
+
 ::: info Sampling Note (single-pass renderer)
 Clarity's 5x5 Gaussian blur kernel samples the **input texture** (the linearized source pixels), not a post-color-pipeline buffer. This is intentional in the single-pass GLSL renderer: routing intermediate pipeline colors back through a texture for neighbour sampling would require a second render pass and an additional FBO. The visual consequence is that clarity operates on the input encoding (linear with input primaries) rather than on display-referred values. For unsharp-mask-style edge enhancement this is acceptable -- local high-frequency detail dominates the effect and survives the linear pipeline well. HDR users on heavily-graded scenes may notice a small expected difference between the GPU path (input-referred sample) and the CPU fallback path (which operates on the post-color buffer). If a true post-pipeline sample is required, the WebGPU multi-pass `spatialEffects` stage provides it.
 :::
