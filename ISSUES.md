@@ -86,7 +86,7 @@ These findings were not yet verified against actual source code:
 - ~~**MED-51**~~: Color primaries metadata lost through LUT stages — **FIXED** (see FIXED_ISSUES.md #370)
 - ~~**MED-52**~~: Tone mapping headroom inconsistent across operators — **FIXED** (see FIXED_ISSUES.md #371)
 - **MED-54**: Gamut mapping matrix working space undocumented — `viewer.frag.glsl` ~lines 1069, 1367
-- **MED-55**: WebGPU extended tone mapping not verified at runtime — `hdr-acceptance-criteria.test.ts`
+- ~~**MED-55**~~: WebGPU extended tone mapping not verified at runtime — **FIXED** (see FIXED_ISSUES.md #372)
 
 #### Node System
 - ~~**MED-10**~~: FileSourceNode properties inconsistent with defineNodeProperty — **FIXED** (see FIXED_ISSUES.md #355)

@@ -5147,3 +5147,42 @@ All four implementations now use the same `scaled = color/headroom; mapped = cur
 
 - The CPU `applyToneMappingToData` byte-array path is still SDR-only (`Uint8ClampedArray` clips above 1.0 by definition); the headroom plumbing is in place but no caller sets a non-default value yet. This is consistent with the current architecture (HDR CPU path uses Float32 buffers separately).
 - The `Renderer.setHDRHeadroom` NaN-propagation edge case noted in Round 1 is now fixed (Round 2): both the WebGL2 and WebGPU JS-side entry points sanitize non-finite headroom to 1.0 before clamping, and every shader operator additionally floors the divisor to `1e-6` defensively.
+
+## Issue #372: MED-55 — WebGPU extended tone mapping not verified at runtime
+
+**Root cause**: Phase 4 acceptance for "WebGPU extended tone mapping" relied on shader-compile checks alone. No test exercised real GPU pixels through any of the 8 operators with `hdrHeadroom > 1`, so a regression between WGSL and the CPU/GLSL reference would not be caught.
+
+Round 1 review surfaced five additional concerns: an implicit "common.wgsl is prepended" contract that the production `WebGPUShaderPipeline` did not honor (would break stage compilation when Phase 4 wires up); missing SDR-identity coverage for 6/8 operators; runtime tests that fail instead of skip in zero-readback environments; an unused TOL constant; a stale CPU docstring.
+
+**Fix**:
+- `WebGPUShaderPipeline.renderSingleStage` prepends `common.wgsl` when compiling stage shaders, enforcing the contract at runtime. Comment explains the single-point-of-contract pattern.
+- New per-operator runtime parity test under `src/render/__gpu__/tonemap-webgpu.gpu-test.ts` covers all 8 operators at `hdrHeadroom=1` (SDR identity) and `hdrHeadroom=3` (extended HDR), comparing real GPU output against the CPU reference within tolerance ~1/256.
+- One-shot GPU-readback canary (`ensureReadbackCanary` + `withReadback`) gracefully skips runtime pixel tests in environments with broken readback while leaving compile-only tests running.
+- Tolerance enforced via explicit `expectClose(actual, expected)` helper using `<= 1/256`; meta-test guards semantics.
+- Stage WGSL files deduplicated (LUMA, applyTemperature, applyLUT3DGeneric, all 8 tone-mapping operators); `common.wgsl` is the single source of truth.
+- `input_decode.wgsl` uniformity violation fixed (textureSample → textureSampleLevel with explicit LOD).
+- `XE-GAMUT-005` rewritten to assert CPU `softClipChannel` matches the unified tanh formula across the active range (replacing the previous "deliberate divergence" pin).
+- CPU `tonemapDragoChannel` docstring updated to reference `common.wgsl`; dead `applyLUT3DGeneric` helper removed.
+
+**Tests added**:
+- `src/render/__gpu__/tonemap-webgpu.gpu-test.ts`: 22 tests — 8 SDR-identity, 8 HDR-headroom, passthrough, dispatcher dispatch-table coverage, canary, tolerance meta.
+- `WGPU-SP-090` in `src/render/webgpu/WebGPUShaderPipeline.test.ts` verifying the common.wgsl prepend contract.
+- `AC-P4-4.3a/b/c` in `src/hdr-acceptance-criteria.test.ts`.
+
+**Files changed**:
+- `src/render/webgpu/WebGPUShaderPipeline.ts`
+- `src/render/webgpu/WebGPUShaderPipeline.test.ts`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/webgpu/shaders/scene_analysis.wgsl`
+- `src/render/webgpu/shaders/color_pipeline.wgsl`
+- `src/render/webgpu/shaders/diagnostics.wgsl`
+- `src/render/webgpu/shaders/display_output.wgsl`
+- `src/render/webgpu/shaders/input_decode.wgsl`
+- `src/render/webgpu/shaders/primary_grade.wgsl`
+- `src/render/webgpu/shaders/secondary_grade.wgsl`
+- `src/render/__gpu__/tonemap-webgpu.gpu-test.ts` (new)
+- `src/render/__tests__/shaderMathColorPipeline.test.ts`
+- `src/utils/effects/effectProcessing.shared.ts`
+- `src/hdr-acceptance-criteria.test.ts`
+
+**Known follow-up (non-blocking)**: When Phase 4 wiring registers stage WGSL into `WebGPUShaderPipeline`, the orchestrator must strip the per-stage `@vertex fn vs` declaration to avoid duplicate-symbol errors (the prepend pattern combines vertex + common + stage source). Track in a separate issue.
