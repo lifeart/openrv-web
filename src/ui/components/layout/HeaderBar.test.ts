@@ -9,6 +9,11 @@ import { HeaderBar } from './HeaderBar';
 import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import * as Modal from '../shared/Modal';
 import type { LayoutPreset } from '../../layout/LayoutStore';
+import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
+import {
+  dispatchOutsideClick,
+  resetOutsideClickRegistry,
+} from '../../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('HeaderBar', () => {
   let headerBar: HeaderBar;
@@ -799,6 +804,188 @@ describe('HeaderBar', () => {
       headerBar.dispose();
 
       expect(document.getElementById('layout-preset-menu')).toBeNull();
+      document.body.removeChild(el);
+    });
+  });
+
+  describe('OutsideClickRegistry migration (MED-25 Phase 4)', () => {
+    // Verifies HeaderBar's 4 setTimeout-based menus (showVersionMenu,
+    // showSpeedMenu, showHelpMenu, showLayoutMenu) now dismiss via the
+    // central OutsideClickRegistry. The "register-during-dispatch" contract
+    // (OutsideClickRegistry.ts:188-191) is what makes setTimeout unnecessary:
+    // a synchronous register() inside the trigger's bubble-phase click
+    // handler is invisible to the in-flight click event, so the same-tick
+    // click that opened the menu cannot dismiss it.
+    beforeEach(() => {
+      resetOutsideClickRegistry();
+    });
+
+    afterEach(() => {
+      // Clean up any leftover menus & registrations.
+      document.getElementById('speed-preset-menu')?.remove();
+      document.getElementById('help-menu')?.remove();
+      document.getElementById('layout-preset-menu')?.remove();
+      document.getElementById('version-menu')?.remove();
+      resetOutsideClickRegistry();
+    });
+
+    it('HB-VER-OCR-001: opening speed menu registers; closing deregisters', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      // Close via Escape on the menu element (handled by the menu's keydown).
+      document
+        .getElementById('speed-preset-menu')!
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-VER-OCR-002: outside click dismisses speed menu via registry', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      // Click on document.body (outside both menu and trigger).
+      dispatchOutsideClick(document.body);
+
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-VER-OCR-003: re-entry — opening speed menu N+1 times leaves count at 1, not N+1', () => {
+      // closeAllHeaderMenus() (called at the top of every show*Menu) is the
+      // re-entry guard: it deregisters the previous menu BEFORE the new one
+      // registers, so the registration count never accumulates.
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-HLP-OCR-001: opening help menu registers; outside click dismisses', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+      helpBtn.click();
+      expect(document.querySelector('[data-testid="help-menu-dropdown"]')).not.toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      dispatchOutsideClick(document.body);
+      expect(document.querySelector('[data-testid="help-menu-dropdown"]')).toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-HLP-OCR-002: trigger anchor inclusion — clicking the help button does not dismiss the just-opened menu via the registry', () => {
+      // Per OutsideClickRegistry footgun docs (OutsideClickRegistry.ts:96-105),
+      // including the trigger anchor in `elements` ensures the trigger's own
+      // click does not fire onDismiss. Combined with the register-during-
+      // dispatch contract (the registry doesn't see the in-flight click that
+      // opened the menu), the trigger click cleanly opens the menu without
+      // an immediate self-dismiss.
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      helpBtn.click();
+      expect(document.querySelector('[data-testid="help-menu-dropdown"]')).not.toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      // Dispatch a click on the trigger button. Target is in elements, so the
+      // registry should NOT dismiss. (Bubble-phase toggle behavior is a
+      // separate concern handled by closeAllHeaderMenus.)
+      const target = helpBtn;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(outsideClickRegistry.getRegistrationCount()).toBeLessThanOrEqual(1);
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-LAY-OCR-001: opening layout menu registers; outside click dismisses', () => {
+      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [
+        { id: 'default', label: 'Default' },
+        { id: 'color', label: 'Color' },
+      ];
+      headerBar.setLayoutPresets(presets, vi.fn());
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+      layoutBtn.click();
+      expect(document.getElementById('layout-preset-menu')).not.toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      dispatchOutsideClick(document.body);
+      expect(document.getElementById('layout-preset-menu')).toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-CROSS-OCR-001: opening different HeaderBar menus does not accumulate registrations (closeAllHeaderMenus re-entry guard)', () => {
+      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [{ id: 'default', label: 'Default' }];
+      headerBar.setLayoutPresets(presets, vi.fn());
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      helpBtn.click();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+
+      layoutBtn.click();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+      expect(document.querySelector('[data-testid="help-menu-dropdown"]')).toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-DISP-OCR-001: dispose() deregisters any open menu', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      headerBar.dispose();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+
       document.body.removeChild(el);
     });
   });

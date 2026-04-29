@@ -13,6 +13,7 @@ import { type SafeAreasOverlay, type SafeAreasState, type AspectRatioGuide, ASPE
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface SafeAreasControlEvents extends EventMap {
   stateChanged: SafeAreasState;
@@ -27,15 +28,13 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
   private unsubscribers: (() => void)[] = [];
 
   // Bound handlers for cleanup
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor(overlay: SafeAreasOverlay) {
     super();
     this.overlay = overlay;
 
-    // Bind handlers
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
 
     // Create container
@@ -606,19 +605,21 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     this.updateDropdownState();
     this.isOpen = true;
 
-    // Add listeners
-    setTimeout(() => {
-      document.addEventListener('click', this.boundHandleOutsideClick);
-      window.addEventListener('scroll', this.boundHandleReposition, true);
-      window.addEventListener('resize', this.boundHandleReposition);
-    }, 0);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.dropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+    });
+    window.addEventListener('scroll', this.boundHandleReposition, true);
+    window.addEventListener('resize', this.boundHandleReposition);
   }
 
   private closeDropdown(): void {
     this.dropdown.style.display = 'none';
     this.isOpen = false;
 
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }
@@ -627,12 +628,6 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     const rect = this.button.getBoundingClientRect();
     this.dropdown.style.top = `${rect.bottom + 4}px`;
     this.dropdown.style.left = `${rect.left}px`;
-  }
-
-  private handleOutsideClick(e: MouseEvent): void {
-    if (!this.dropdown.contains(e.target as Node) && !this.button.contains(e.target as Node)) {
-      this.closeDropdown();
-    }
   }
 
   /**

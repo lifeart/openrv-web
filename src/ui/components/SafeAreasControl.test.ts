@@ -7,12 +7,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SafeAreasControl } from './SafeAreasControl';
 import { SafeAreasOverlay } from './SafeAreasOverlay';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('SafeAreasControl', () => {
   let control: SafeAreasControl;
   let overlay: SafeAreasOverlay;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     overlay = new SafeAreasOverlay();
     control = new SafeAreasControl(overlay);
   });
@@ -20,6 +26,28 @@ describe('SafeAreasControl', () => {
   afterEach(() => {
     control.dispose();
     overlay.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('SAFE-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
+    });
+
+    it('SAFE-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('initialization', () => {

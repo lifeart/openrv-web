@@ -149,7 +149,8 @@ describe('HotReloadManager', () => {
       });
 
       manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
-      await expect(manager.reload('test.plugin')).resolves.toBeUndefined();
+      // reload() now returns the new plugin id (PR-2 / MED-19) instead of void.
+      await expect(manager.reload('test.plugin')).resolves.toBe('reloaded.plugin');
     });
 
     it('PHOT-017: warns and continues when getState throws', async () => {
@@ -237,14 +238,23 @@ describe('HotReloadManager', () => {
       expect(manager.isTracked('reloaded.plugin')).toBe(true);
     });
 
-    it('PHOT-020: rejects concurrent reload of same plugin', async () => {
+    it('PHOT-020: concurrent reload calls join the in-flight reload', async () => {
       manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
 
       // Start first reload but don't await
       const reload1 = manager.reload('test.plugin');
-      // Second reload should throw immediately
-      await expect(manager.reload('test.plugin')).rejects.toThrow('already being reloaded');
-      await reload1;
+      // Second concurrent call should NOT throw — instead it joins the same
+      // in-flight reload and resolves to the same new plugin id. The bridge
+      // layer adds a coalesce-with-trailing-replay policy on top of this.
+      const reload2 = manager.reload('test.plugin');
+      expect(reload2).toBe(reload1);
+
+      const [id1, id2] = await Promise.all([reload1, reload2]);
+      expect(id1).toBe('reloaded.plugin');
+      expect(id2).toBe('reloaded.plugin');
+
+      // loadFromURL should have run only once for the in-flight pair.
+      expect((registry.loadFromURL as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
     });
 
     it('PHOT-003: isTracked returns false for untracked plugin', () => {

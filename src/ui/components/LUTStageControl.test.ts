@@ -636,4 +636,113 @@ describe('LUTStageControl', () => {
       });
     });
   });
+
+  describe('output color space selectors (MED-51 PR-1)', () => {
+    it('LSC-OCS-001: dropdowns render by default with the expected option set', () => {
+      const c = new LUTStageControl(createDefaultConfig(), callbacks);
+      const el = c.render();
+      const primaries = el.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+      const transfer = el.querySelector('[data-testid="lut-file-output-transfer-select"]') as HTMLSelectElement;
+
+      expect(primaries).toBeTruthy();
+      expect(transfer).toBeTruthy();
+
+      const primValues = Array.from(primaries.options).map((o) => o.value);
+      expect(primValues).toEqual(['', 'bt709', 'bt2020', 'p3']);
+      // Auto option uses the empty string at the boundary
+      expect(primaries.options[0]!.textContent).toBe('Auto (passthrough)');
+
+      const trfValues = Array.from(transfer.options).map((o) => o.value);
+      expect(trfValues).toEqual(['', 'srgb', 'hlg', 'pq', 'smpte240m', 'linear']);
+      expect(transfer.options[0]!.textContent).toBe('Auto (passthrough)');
+    });
+
+    it('LSC-OCS-002: dropdowns are hidden when showOutputColorSpaceSelectors is false', () => {
+      const c = new LUTStageControl(createDefaultConfig({ showOutputColorSpaceSelectors: false }), callbacks);
+      const el = c.render();
+      expect(el.querySelector('[data-testid="lut-file-output-primaries-select"]')).toBeNull();
+      expect(el.querySelector('[data-testid="lut-file-output-transfer-select"]')).toBeNull();
+    });
+
+    it('LSC-OCS-003: changing primaries fires onOutputColorPrimariesChanged with parsed value', () => {
+      const onOutputColorPrimariesChanged = vi.fn();
+      const c = new LUTStageControl(createDefaultConfig(), createDefaultCallbacks({ onOutputColorPrimariesChanged }));
+      const el = c.render();
+      const primaries = el.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+
+      primaries.value = 'bt2020';
+      primaries.dispatchEvent(new Event('change'));
+      expect(onOutputColorPrimariesChanged).toHaveBeenCalledWith('bt2020');
+
+      // Empty (Auto) value maps to null at the boundary
+      primaries.value = '';
+      primaries.dispatchEvent(new Event('change'));
+      expect(onOutputColorPrimariesChanged).toHaveBeenLastCalledWith(null);
+    });
+
+    it('LSC-OCS-004: changing transfer fires onOutputTransferFunctionChanged with parsed value', () => {
+      const onOutputTransferFunctionChanged = vi.fn();
+      const c = new LUTStageControl(createDefaultConfig(), createDefaultCallbacks({ onOutputTransferFunctionChanged }));
+      const el = c.render();
+      const transfer = el.querySelector('[data-testid="lut-file-output-transfer-select"]') as HTMLSelectElement;
+
+      transfer.value = 'pq';
+      transfer.dispatchEvent(new Event('change'));
+      expect(onOutputTransferFunctionChanged).toHaveBeenCalledWith('pq');
+
+      transfer.value = 'linear';
+      transfer.dispatchEvent(new Event('change'));
+      expect(onOutputTransferFunctionChanged).toHaveBeenLastCalledWith('linear');
+
+      transfer.value = '';
+      transfer.dispatchEvent(new Event('change'));
+      expect(onOutputTransferFunctionChanged).toHaveBeenLastCalledWith(null);
+    });
+
+    it('LSC-OCS-005: setOutputColorPrimaries/setOutputTransferFunction sync the selector values', () => {
+      const c = new LUTStageControl(createDefaultConfig(), callbacks);
+      const el = c.render();
+      const primaries = el.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+      const transfer = el.querySelector('[data-testid="lut-file-output-transfer-select"]') as HTMLSelectElement;
+
+      c.setOutputColorPrimaries('p3');
+      c.setOutputTransferFunction('hlg');
+      expect(primaries.value).toBe('p3');
+      expect(transfer.value).toBe('hlg');
+
+      c.setOutputColorPrimaries(null);
+      c.setOutputTransferFunction(null);
+      expect(primaries.value).toBe('');
+      expect(transfer.value).toBe('');
+    });
+
+    it('LSC-OCS-006: dispose removes change listeners on output dropdowns', () => {
+      const onOutputColorPrimariesChanged = vi.fn();
+      const onOutputTransferFunctionChanged = vi.fn();
+      const c = new LUTStageControl(
+        createDefaultConfig(),
+        createDefaultCallbacks({ onOutputColorPrimariesChanged, onOutputTransferFunctionChanged }),
+      );
+      const el = c.render();
+      const primaries = el.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+      const transfer = el.querySelector('[data-testid="lut-file-output-transfer-select"]') as HTMLSelectElement;
+
+      c.dispose();
+
+      primaries.value = 'bt709';
+      primaries.dispatchEvent(new Event('change'));
+      transfer.value = 'pq';
+      transfer.dispatchEvent(new Event('change'));
+
+      expect(onOutputColorPrimariesChanged).not.toHaveBeenCalled();
+      expect(onOutputTransferFunctionChanged).not.toHaveBeenCalled();
+    });
+
+    it('LSC-OCS-007: setOutputColorPrimaries / setOutputTransferFunction are no-ops when dropdowns hidden', () => {
+      const c = new LUTStageControl(createDefaultConfig({ showOutputColorSpaceSelectors: false }), callbacks);
+      // Should not throw
+      expect(() => c.setOutputColorPrimaries('bt709')).not.toThrow();
+      expect(() => c.setOutputTransferFunction('srgb')).not.toThrow();
+    });
+  });
 });

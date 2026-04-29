@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import {
   type StereoMode,
   type StereoState,
@@ -38,23 +39,14 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
   private offsetLabel: HTMLSpanElement;
   private state: StereoState = { ...DEFAULT_STEREO_STATE };
   private isDropdownOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
 
-    // Bind event handlers for cleanup
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isDropdownOpen) {
-        this.closeDropdown();
-      }
-    };
+    // Outside-click and Escape dismiss are handled by OutsideClickRegistry.
 
     // Create container
     this.container = document.createElement('div');
@@ -252,16 +244,6 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.updateModeButtonLabel();
   }
 
-  private handleOutsideClick(e: MouseEvent): void {
-    if (
-      this.isDropdownOpen &&
-      !this.modeButton.contains(e.target as Node) &&
-      !this.modeDropdown.contains(e.target as Node)
-    ) {
-      this.closeDropdown();
-    }
-  }
-
   private positionDropdown(): void {
     if (!this.isDropdownOpen) return;
     const rect = this.modeButton.getBoundingClientRect();
@@ -370,9 +352,11 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.modeButton.style.background = 'var(--bg-hover)';
     this.modeButton.style.borderColor = 'var(--border-primary)';
 
-    // Add listeners
-    document.addEventListener('click', this.boundHandleOutsideClick);
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.modeButton, this.modeDropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+    });
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -382,9 +366,8 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.modeDropdown.style.display = 'none';
     this.updateModeButtonLabel();
 
-    // Remove listeners
-    document.removeEventListener('click', this.boundHandleOutsideClick);
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }

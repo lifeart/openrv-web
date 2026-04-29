@@ -565,10 +565,25 @@ export class LUTPipeline extends EventEmitter<PipelineEventMap> {
 
   /** Reset all stages including display LUT (preserves source registrations) */
   resetAll(): void {
-    // PR-1 follow-up (MED-51): decide reset event semantics — currently
-    // `resetAll` emits a per-stage `stageChanged` for each source plus a
-    // `displayChanged`, but `loadSerializableState` emits a single `'reset'`.
-    // Pick one convention so downstream listeners don't double-handle.
+    // Reset event semantics (resolved in PR-1 Phase 3, MED-51):
+    //
+    // `resetAll()` deliberately emits **per-stage** `stageChanged` events
+    // (one per stage per source) plus a `displayChanged`, NOT a single
+    // `'reset'` event. Rationale:
+    //
+    // - Per-source listeners (UI panels, the LUT linter cache, the GPU
+    //   chain rebuilder) are already wired to `stageChanged` /
+    //   `displayChanged` for incremental updates. Reusing the same
+    //   events for `resetAll()` lets them invalidate the right slice of
+    //   their state without a special "reset" code path.
+    // - `loadSerializableState()` is structurally different — it
+    //   wholesale replaces the source map and the active source pointer,
+    //   so per-source events would be misleading. It emits a single
+    //   `'reset'` event so listeners can fully rebuild.
+    //
+    // Listeners that need to handle both should subscribe to
+    // `stageChanged` + `displayChanged` + `'reset'` (see
+    // `LUTPipelineLinter` for the canonical pattern).
     for (const sourceId of this.sources.keys()) {
       this.resetSource(sourceId);
     }

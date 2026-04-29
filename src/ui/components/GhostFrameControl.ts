@@ -12,6 +12,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 // Configuration constants
 const FRAMES_MIN = 0;
@@ -56,22 +57,14 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
   private dropdown: HTMLElement;
   private state: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
   private isOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
 
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isOpen) {
-        this.closeDropdown();
-      }
-    };
+    // Outside-click and Escape dismiss are handled by OutsideClickRegistry.
 
     this.container = document.createElement('div');
     this.container.className = 'ghost-frame-control';
@@ -357,12 +350,6 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     }
   }
 
-  private handleOutsideClick(e: MouseEvent): void {
-    if (this.isOpen && !this.button.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      this.closeDropdown();
-    }
-  }
-
   private positionDropdown(): void {
     if (!this.isOpen) return;
     const rect = this.button.getBoundingClientRect();
@@ -390,8 +377,11 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.button.style.background = 'var(--bg-hover)';
     this.button.style.borderColor = 'var(--border-primary)';
 
-    document.addEventListener('click', this.boundHandleOutsideClick);
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.dropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+    });
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -402,8 +392,8 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonLabel();
 
-    document.removeEventListener('click', this.boundHandleOutsideClick);
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }

@@ -1,8 +1,13 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { pluginHotReload } from './scripts/vite/pluginHotReload';
 
 export default defineConfig({
   base: process.env.BASE_URL || '/',
+  // `apply: 'serve'` on each plugin gates them out of production builds.
+  // The matching production-safety test in `tests/build/no-dev-leak.test.ts`
+  // verifies this stays true.
+  plugins: [pluginHotReload()],
   resolve: {
     alias: {
       '@': resolve(import.meta.dirname, 'src'),

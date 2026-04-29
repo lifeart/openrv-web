@@ -753,4 +753,188 @@ describe('LUTPipelinePanel', () => {
       expect(handler).not.toHaveBeenCalled();
     });
   });
+
+  describe('output color space dropdowns (MED-51 PR-1)', () => {
+    const STAGES: Array<'precache' | 'file' | 'look' | 'display'> = ['precache', 'file', 'look', 'display'];
+
+    it('LPP-OCS-001: each stage renders an output-primaries dropdown with the expected option set', () => {
+      for (const stage of STAGES) {
+        const select = document.querySelector(
+          `[data-testid="lut-${stage}-output-primaries-select"]`,
+        ) as HTMLSelectElement | null;
+        expect(select, `stage ${stage} primaries select`).toBeTruthy();
+        const values = Array.from(select!.options).map((o) => o.value);
+        expect(values).toEqual(['', 'bt709', 'bt2020', 'p3']);
+      }
+    });
+
+    it('LPP-OCS-002: each stage renders an output-transfer dropdown with the expected option set', () => {
+      for (const stage of STAGES) {
+        const select = document.querySelector(
+          `[data-testid="lut-${stage}-output-transfer-select"]`,
+        ) as HTMLSelectElement | null;
+        expect(select, `stage ${stage} transfer select`).toBeTruthy();
+        const values = Array.from(select!.options).map((o) => o.value);
+        expect(values).toEqual(['', 'srgb', 'hlg', 'pq', 'smpte240m', 'linear']);
+      }
+    });
+
+    it('LPP-OCS-003: pre-cache row is wrapped in <details data-testid="lut-precache-advanced">', () => {
+      const details = document.querySelector('[data-testid="lut-precache-advanced"]');
+      expect(details).toBeTruthy();
+      expect(details!.tagName.toLowerCase()).toBe('details');
+      // Pre-cache section is a descendant of the <details>
+      expect(details!.querySelector('[data-testid="lut-precache-section"]')).toBeTruthy();
+    });
+
+    it('LPP-OCS-004: selecting bt2020 on file output-primaries reflects in pipeline.getStageOutputColorPrimaries', () => {
+      const select = document.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+      select.value = 'bt2020';
+      select.dispatchEvent(new Event('change'));
+
+      expect(pipeline.getStageOutputColorPrimaries('default', 'file')).toBe('bt2020');
+    });
+
+    it('LPP-OCS-005: selecting pq on display output-transfer reflects in pipeline.getDisplayLUTOutputTransferFunction', () => {
+      const select = document.querySelector('[data-testid="lut-display-output-transfer-select"]') as HTMLSelectElement;
+      select.value = 'pq';
+      select.dispatchEvent(new Event('change'));
+
+      expect(pipeline.getDisplayLUTOutputTransferFunction()).toBe('pq');
+    });
+
+    it('LPP-OCS-006: selecting Auto (empty value) writes null on per-stage and display setters', () => {
+      // Pre-seed a non-null value, then clear via Auto
+      const fileSelect = document.querySelector(
+        '[data-testid="lut-file-output-primaries-select"]',
+      ) as HTMLSelectElement;
+      fileSelect.value = 'bt709';
+      fileSelect.dispatchEvent(new Event('change'));
+      expect(pipeline.getStageOutputColorPrimaries('default', 'file')).toBe('bt709');
+
+      fileSelect.value = '';
+      fileSelect.dispatchEvent(new Event('change'));
+      expect(pipeline.getStageOutputColorPrimaries('default', 'file')).toBeNull();
+
+      const displaySelect = document.querySelector(
+        '[data-testid="lut-display-output-transfer-select"]',
+      ) as HTMLSelectElement;
+      displaySelect.value = 'hlg';
+      displaySelect.dispatchEvent(new Event('change'));
+      expect(pipeline.getDisplayLUTOutputTransferFunction()).toBe('hlg');
+
+      displaySelect.value = '';
+      displaySelect.dispatchEvent(new Event('change'));
+      expect(pipeline.getDisplayLUTOutputTransferFunction()).toBeNull();
+    });
+
+    it('LPP-OCS-007: getPipelineState() exposes outputColorPrimaries / outputTransferFunction per stage', () => {
+      const filePrim = document.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+      const lookTrf = document.querySelector('[data-testid="lut-look-output-transfer-select"]') as HTMLSelectElement;
+      const displayPrim = document.querySelector(
+        '[data-testid="lut-display-output-primaries-select"]',
+      ) as HTMLSelectElement;
+
+      filePrim.value = 'p3';
+      filePrim.dispatchEvent(new Event('change'));
+      lookTrf.value = 'linear';
+      lookTrf.dispatchEvent(new Event('change'));
+      displayPrim.value = 'bt2020';
+      displayPrim.dispatchEvent(new Event('change'));
+
+      const state = panel.getPipelineState();
+      expect(state.precache.outputColorPrimaries).toBeNull();
+      expect(state.precache.outputTransferFunction).toBeNull();
+      expect(state.file.outputColorPrimaries).toBe('p3');
+      expect(state.look.outputTransferFunction).toBe('linear');
+      expect(state.display.outputColorPrimaries).toBe('bt2020');
+    });
+
+    it('LPP-OCS-008: round-trip via getSerializableState/loadSerializableState preserves declarations and syncUI', () => {
+      // Set declarations on the panel side
+      const filePrim = document.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+      const lookPrim = document.querySelector('[data-testid="lut-look-output-primaries-select"]') as HTMLSelectElement;
+      const displayTrf = document.querySelector(
+        '[data-testid="lut-display-output-transfer-select"]',
+      ) as HTMLSelectElement;
+
+      filePrim.value = 'bt709';
+      filePrim.dispatchEvent(new Event('change'));
+      lookPrim.value = 'p3';
+      lookPrim.dispatchEvent(new Event('change'));
+      displayTrf.value = 'pq';
+      displayTrf.dispatchEvent(new Event('change'));
+
+      const serialized = pipeline.getSerializableState();
+
+      // Tear down, build a fresh pipeline+panel, and load the serialized state
+      panel.dispose();
+      const fresh = new LUTPipeline();
+      const freshPanel = new LUTPipelinePanel(fresh);
+      try {
+        fresh.loadSerializableState(serialized);
+        freshPanel.show();
+
+        const state = freshPanel.getPipelineState();
+        expect(state.file.outputColorPrimaries).toBe('bt709');
+        expect(state.look.outputColorPrimaries).toBe('p3');
+        expect(state.display.outputTransferFunction).toBe('pq');
+
+        // UI dropdowns mirror the loaded state after syncUIFromPipeline()
+        const fileSel = document.querySelector('[data-testid="lut-file-output-primaries-select"]') as HTMLSelectElement;
+        expect(fileSel.value).toBe('bt709');
+        const dispSel = document.querySelector(
+          '[data-testid="lut-display-output-transfer-select"]',
+        ) as HTMLSelectElement;
+        expect(dispSel.value).toBe('pq');
+      } finally {
+        freshPanel.dispose();
+      }
+    });
+  });
+
+  describe('dispose tears down child controls (MED-51 PR-1)', () => {
+    it('LPP-DISP-001: dispose calls dispose on each child LUTStageControl (no listener leak)', () => {
+      // Capture dropdown nodes BEFORE dispose detaches the panel.
+      const fileSelect = document.querySelector(
+        '[data-testid="lut-file-output-primaries-select"]',
+      ) as HTMLSelectElement;
+      const lookSelect = document.querySelector('[data-testid="lut-look-output-transfer-select"]') as HTMLSelectElement;
+      const displaySelect = document.querySelector(
+        '[data-testid="lut-display-output-primaries-select"]',
+      ) as HTMLSelectElement;
+      const precacheSelect = document.querySelector(
+        '[data-testid="lut-precache-output-transfer-select"]',
+      ) as HTMLSelectElement;
+
+      const before = {
+        file: pipeline.getStageOutputColorPrimaries('default', 'file'),
+        look: pipeline.getStageOutputTransferFunction('default', 'look'),
+        display: pipeline.getDisplayLUTOutputColorPrimaries(),
+        precache: pipeline.getStageOutputTransferFunction('default', 'precache'),
+      };
+
+      panel.dispose();
+
+      // After dispose, dispatching change events on the (now-orphaned) selects
+      // must NOT mutate pipeline state — the LUTStageControl listeners have
+      // been removed by the cascading dispose() call.
+      fileSelect.value = 'bt2020';
+      fileSelect.dispatchEvent(new Event('change'));
+      lookSelect.value = 'linear';
+      lookSelect.dispatchEvent(new Event('change'));
+      displaySelect.value = 'p3';
+      displaySelect.dispatchEvent(new Event('change'));
+      precacheSelect.value = 'pq';
+      precacheSelect.dispatchEvent(new Event('change'));
+
+      expect(pipeline.getStageOutputColorPrimaries('default', 'file')).toBe(before.file);
+      expect(pipeline.getStageOutputTransferFunction('default', 'look')).toBe(before.look);
+      expect(pipeline.getDisplayLUTOutputColorPrimaries()).toBe(before.display);
+      expect(pipeline.getStageOutputTransferFunction('default', 'precache')).toBe(before.precache);
+
+      // afterEach() will call panel.dispose() again; LPP-064 already covers the
+      // "no throw on second dispose" guarantee.
+    });
+  });
 });

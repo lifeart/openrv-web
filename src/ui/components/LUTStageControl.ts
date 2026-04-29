@@ -12,6 +12,7 @@
  */
 
 import { parseLUT, isLUT3D, type LUT } from '../../color/ColorProcessingFacade';
+import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import { showAlert } from './shared/Modal';
 
 export interface LUTStageControlConfig {
@@ -23,8 +24,14 @@ export interface LUTStageControlConfig {
   subtitle: string;
   /** Whether to show the source selector (manual/ocio) */
   showSourceSelector?: boolean;
-  /** Whether to show bit-depth selector (pre-cache only) */
-  showBitDepth?: boolean;
+  /**
+   * Whether to render the per-stage output-color-space dropdowns
+   * (output primaries + output transfer function). Defaults to true so
+   * every stage row exposes the cascade declarations introduced in
+   * MED-51 PR-1; pass `false` when embedding the row in a context that
+   * doesn't allow declaring output color space.
+   */
+  showOutputColorSpaceSelectors?: boolean;
   /** Whether this is session-wide (display LUT) */
   sessionWide?: boolean;
 }
@@ -35,7 +42,19 @@ export interface LUTStageControlCallbacks {
   onEnabledChanged: (enabled: boolean) => void;
   onIntensityChanged: (intensity: number) => void;
   onSourceChanged?: (source: 'manual' | 'ocio') => void;
-  onBitDepthChanged?: (bitDepth: 'auto' | '8bit' | '16bit' | 'float') => void;
+  /**
+   * Fired when the user picks an output-primaries value. The empty-string
+   * "Auto (passthrough)" option is mapped to `null` at this boundary, so
+   * upstream pipeline code only has to handle `ColorPrimaries | null`.
+   */
+  onOutputColorPrimariesChanged?: (primaries: ColorPrimaries | null) => void;
+  /**
+   * Fired when the user picks an output-transfer-function value. The
+   * empty-string "Auto (passthrough)" option is mapped to `null` at this
+   * boundary, so upstream pipeline code only has to handle
+   * `TransferFunction | null`.
+   */
+  onOutputTransferFunctionChanged?: (transfer: TransferFunction | null) => void;
 }
 
 export class LUTStageControl {
@@ -48,6 +67,8 @@ export class LUTStageControl {
   private fileInput: HTMLInputElement;
   private loadButton: HTMLButtonElement | null = null;
   private sourceSelect: HTMLSelectElement | null = null;
+  private outputPrimariesSelect: HTMLSelectElement | null = null;
+  private outputTransferSelect: HTMLSelectElement | null = null;
 
   private config: LUTStageControlConfig;
   private callbacks: LUTStageControlCallbacks;
@@ -59,6 +80,8 @@ export class LUTStageControl {
   private handleClearClick: () => void;
   private handleIntensityInput: () => void;
   private handleSourceChange: (() => void) | null = null;
+  private handleOutputPrimariesChange: (() => void) | null = null;
+  private handleOutputTransferChange: (() => void) | null = null;
 
   constructor(config: LUTStageControlConfig, callbacks: LUTStageControlCallbacks) {
     this.config = config;
@@ -302,6 +325,123 @@ export class LUTStageControl {
       this.element.appendChild(sourceRow);
     }
 
+    // --- Output color-space declaration dropdowns (default: visible) ---
+    // The empty-string "Auto (passthrough)" value is mapped to `null` at the
+    // change-event boundary. Upstream pipeline code (validated by
+    // sanitizers) only ever sees `ColorPrimaries | null` /
+    // `TransferFunction | null` — never `'auto'` or invalid strings.
+    if (config.showOutputColorSpaceSelectors !== false) {
+      // Output primaries row
+      const primariesRow = document.createElement('div');
+      primariesRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+      `;
+
+      const primariesLabel = document.createElement('span');
+      primariesLabel.textContent = 'Out Pri:';
+      primariesLabel.title = 'Output Color Primaries declared by this LUT stage';
+      primariesLabel.style.cssText = `
+        font-size: 11px;
+        color: var(--text-secondary);
+        width: 55px;
+        flex-shrink: 0;
+      `;
+
+      this.outputPrimariesSelect = document.createElement('select');
+      this.outputPrimariesSelect.dataset.testid = `lut-${config.stageId}-output-primaries-select`;
+      this.outputPrimariesSelect.style.cssText = `
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-primary);
+        color: var(--text-primary);
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-size: 10px;
+        cursor: pointer;
+        flex: 1;
+      `;
+      const primariesOptions: Array<{ value: string; label: string }> = [
+        { value: '', label: 'Auto (passthrough)' },
+        { value: 'bt709', label: 'Rec. 709' },
+        { value: 'bt2020', label: 'Rec. 2020' },
+        { value: 'p3', label: 'DCI-P3' },
+      ];
+      for (const { value, label } of primariesOptions) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        this.outputPrimariesSelect.appendChild(opt);
+      }
+      this.handleOutputPrimariesChange = () => {
+        const raw = this.outputPrimariesSelect!.value;
+        const primaries = raw === '' ? null : (raw as ColorPrimaries);
+        this.callbacks.onOutputColorPrimariesChanged?.(primaries);
+      };
+      this.outputPrimariesSelect.addEventListener('change', this.handleOutputPrimariesChange);
+
+      primariesRow.appendChild(primariesLabel);
+      primariesRow.appendChild(this.outputPrimariesSelect);
+      this.element.appendChild(primariesRow);
+
+      // Output transfer row
+      const transferRow = document.createElement('div');
+      transferRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+      `;
+
+      const transferLabel = document.createElement('span');
+      transferLabel.textContent = 'Out Trf:';
+      transferLabel.title = 'Output Transfer Function declared by this LUT stage';
+      transferLabel.style.cssText = `
+        font-size: 11px;
+        color: var(--text-secondary);
+        width: 55px;
+        flex-shrink: 0;
+      `;
+
+      this.outputTransferSelect = document.createElement('select');
+      this.outputTransferSelect.dataset.testid = `lut-${config.stageId}-output-transfer-select`;
+      this.outputTransferSelect.style.cssText = `
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-primary);
+        color: var(--text-primary);
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-size: 10px;
+        cursor: pointer;
+        flex: 1;
+      `;
+      const transferOptions: Array<{ value: string; label: string }> = [
+        { value: '', label: 'Auto (passthrough)' },
+        { value: 'srgb', label: 'sRGB' },
+        { value: 'hlg', label: 'HLG' },
+        { value: 'pq', label: 'PQ' },
+        { value: 'smpte240m', label: 'SMPTE 240M' },
+        { value: 'linear', label: 'Linear' },
+      ];
+      for (const { value, label } of transferOptions) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        this.outputTransferSelect.appendChild(opt);
+      }
+      this.handleOutputTransferChange = () => {
+        const raw = this.outputTransferSelect!.value;
+        const transfer = raw === '' ? null : (raw as TransferFunction);
+        this.callbacks.onOutputTransferFunctionChanged?.(transfer);
+      };
+      this.outputTransferSelect.addEventListener('change', this.handleOutputTransferChange);
+
+      transferRow.appendChild(transferLabel);
+      transferRow.appendChild(this.outputTransferSelect);
+      this.element.appendChild(transferRow);
+    }
+
     // --- Session-wide label ---
     if (config.sessionWide) {
       const scopeLabel = document.createElement('div');
@@ -345,6 +485,26 @@ export class LUTStageControl {
     }
   }
 
+  /**
+   * Update the output-primaries selector. Pass `null` to select
+   * "Auto (passthrough)". No-op when the selector is hidden.
+   */
+  setOutputColorPrimaries(primaries: ColorPrimaries | null): void {
+    if (this.outputPrimariesSelect) {
+      this.outputPrimariesSelect.value = primaries ?? '';
+    }
+  }
+
+  /**
+   * Update the output-transfer-function selector. Pass `null` to select
+   * "Auto (passthrough)". No-op when the selector is hidden.
+   */
+  setOutputTransferFunction(transfer: TransferFunction | null): void {
+    if (this.outputTransferSelect) {
+      this.outputTransferSelect.value = transfer ?? '';
+    }
+  }
+
   /** Clean up all event listeners */
   dispose(): void {
     this.toggleCheckbox.removeEventListener('change', this.handleToggleChange);
@@ -354,6 +514,12 @@ export class LUTStageControl {
     this.intensitySlider.removeEventListener('input', this.handleIntensityInput);
     if (this.sourceSelect && this.handleSourceChange) {
       this.sourceSelect.removeEventListener('change', this.handleSourceChange);
+    }
+    if (this.outputPrimariesSelect && this.handleOutputPrimariesChange) {
+      this.outputPrimariesSelect.removeEventListener('change', this.handleOutputPrimariesChange);
+    }
+    if (this.outputTransferSelect && this.handleOutputTransferChange) {
+      this.outputTransferSelect.removeEventListener('change', this.handleOutputTransferChange);
     }
   }
 

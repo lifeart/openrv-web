@@ -42,6 +42,26 @@ pluginRegistry.setAllowedOrigins([window.location.origin]);
 // Wire plugin settings into the unified preferences backup flow
 getCorePreferencesManager().setPluginSettingsProvider(pluginRegistry.settingsStore);
 
+// Dev-only: wire up the in-tree sample plugin and the Vite-driven hot-reload
+// bridge. The dynamic imports keep `SamplePlugin`, `clientBridge`, and
+// `HotReloadManager` out of production bundles entirely — verified by
+// `tests/build/no-dev-leak.test.ts`.
+if (import.meta.env.DEV) {
+  void (async () => {
+    try {
+      const [{ default: SamplePlugin }, { installPluginHotReloadBridge }] = await Promise.all([
+        import('./plugin/builtins/SamplePlugin'),
+        import('./plugin/dev/clientBridge'),
+      ]);
+      pluginRegistry.register(SamplePlugin);
+      await pluginRegistry.activate(SamplePlugin.manifest.id);
+      installPluginHotReloadBridge();
+    } catch (err) {
+      console.warn('[main] DEV plugin hot-reload setup failed:', err);
+    }
+  })();
+}
+
 // Mount the app and mark the API as ready once all async initialization completes.
 // This ensures isReady() returns false until persistence and URL bootstrap are done.
 app.mount('#app').then(() => {

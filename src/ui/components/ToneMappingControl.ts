@@ -11,6 +11,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import type { DisplayCapabilities } from '../../color/ColorProcessingFacade';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type {
   ToneMappingOperator,
@@ -46,7 +47,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private toggleButton: HTMLButtonElement;
   private operatorButtons: Map<ToneMappingOperator, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   private state: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
@@ -63,13 +64,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     super();
     this.capabilities = capabilities;
     this.boundHandleReposition = () => this.positionDropdown();
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isDropdownOpen) {
-        this.toggleDropdown();
-      }
-    };
+    // Outside-click and Escape dismiss are handled by OutsideClickRegistry.
 
     // Create container
     this.container = document.createElement('div');
@@ -652,17 +647,26 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
-      document.addEventListener('click', this.handleOutsideClick);
-      document.addEventListener('keydown', this.boundHandleKeyDown);
+      this.deregisterDismiss = outsideClickRegistry.register({
+        elements: [this.container, this.dropdown],
+        onDismiss: () => this.closeDropdown(),
+        dismissOn: 'click',
+      });
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
-      this.dropdown.style.display = 'none';
-      document.removeEventListener('click', this.handleOutsideClick);
-      document.removeEventListener('keydown', this.boundHandleKeyDown);
-      window.removeEventListener('resize', this.boundHandleReposition);
-      window.removeEventListener('scroll', this.boundHandleReposition, true);
+      this.closeDropdown();
     }
+  }
+
+  private closeDropdown(): void {
+    this.isDropdownOpen = false;
+    this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.dropdown.style.display = 'none';
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
+    window.removeEventListener('resize', this.boundHandleReposition);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
   }
 
   private positionDropdown(): void {
@@ -692,20 +696,6 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     this.dropdown.style.top = `${top}px`;
     this.dropdown.style.left = `${left}px`;
   }
-
-  private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      if (this.isDropdownOpen) {
-        this.isDropdownOpen = false;
-        this.toggleButton.setAttribute('aria-expanded', 'false');
-        this.dropdown.style.display = 'none';
-        document.removeEventListener('click', this.handleOutsideClick);
-        document.removeEventListener('keydown', this.boundHandleKeyDown);
-        window.removeEventListener('resize', this.boundHandleReposition);
-        window.removeEventListener('scroll', this.boundHandleReposition, true);
-      }
-    }
-  };
 
   /**
    * Set tone mapping enabled state
@@ -864,8 +854,8 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
    * Dispose
    */
   dispose(): void {
-    document.removeEventListener('click', this.handleOutsideClick);
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

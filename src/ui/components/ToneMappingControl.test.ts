@@ -6,16 +6,47 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ToneMappingControl, DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from './ToneMappingControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('ToneMappingControl', () => {
   let control: ToneMappingControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ToneMappingControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('TONE-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
+    });
+
+    it('TONE-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('block');
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('initialization', () => {
@@ -750,60 +781,6 @@ describe('ToneMappingControl', () => {
     });
   });
 
-  describe('outside click listener lifecycle', () => {
-    it('TONE-M21a: outside click listener should NOT be registered when dropdown is closed', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      control.dispose();
-      addSpy.mockClear();
-
-      control = new ToneMappingControl();
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(0);
-      addSpy.mockRestore();
-    });
-
-    it('TONE-M21b: outside click listener should be registered when dropdown opens', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
-
-      addSpy.mockClear();
-      button.click(); // open
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      addSpy.mockRestore();
-    });
-
-    it('TONE-M21c: outside click listener should be removed when dropdown closes', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
-
-      button.click(); // open
-      removeSpy.mockClear();
-      button.click(); // close
-
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
-    });
-
-    it('TONE-M21d: dispose should remove outside click listener regardless of dropdown state', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
-
-      button.click(); // open dropdown
-      removeSpy.mockClear();
-      control.dispose();
-
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
-    });
-  });
 
   describe('dispose', () => {
     it('TONE-U120: dispose can be called without error', () => {

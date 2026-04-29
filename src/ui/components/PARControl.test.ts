@@ -1,12 +1,44 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PARControl } from './PARControl';
 import { type PARState } from '../../utils/media/PixelAspectRatio';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('PARControl', () => {
   let control: PARControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new PARControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('PAR-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="par-control-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
+    });
+
+    it('PAR-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="par-control-button"]') as HTMLButtonElement;
+      button.click();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('Initial state', () => {

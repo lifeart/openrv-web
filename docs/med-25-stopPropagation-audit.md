@@ -26,6 +26,7 @@ During each component migration, the implementer audits that component's `stopPr
 | `src/ui/components/shared/DropdownMenu.ts` | 453 | `e.stopPropagation()` for Enter | **safe** | Stops the Enter from triggering global shortcuts after item selection. Left in place. |
 | `src/ui/components/shared/DropdownMenu.ts` | 464 | `e.stopPropagation()` for Space | **safe** | Same as Enter — left in place. |
 | `src/ui/components/shared/DropdownMenu.ts` | (pre-migration) 477 | `e.stopPropagation()` for Escape | **must-remove-Escape** | Removed in MED-25 Phase 1. Registry's `dismissOnEscape: true` with innermost-wins semantics replaces this. The whole `case 'Escape':` branch was deleted from `handleKeydown`. |
+| `src/ui/components/layout/HeaderBar.ts` | n/a | (no `stopPropagation` / `stopImmediatePropagation` sites) | **n/a** | Audited as part of MED-25 Phase 4 (HeaderBar setTimeout-menu migration). HeaderBar contained four `setTimeout(() => document.addEventListener('click', closeMenu), 0)` shims that worked around the same-tick self-dismiss problem; none used `stopPropagation`. The shims were replaced with `outsideClickRegistry.register({ elements: [menu, anchor], … })`, relying on the register-during-dispatch contract (`OutsideClickRegistry.ts:188-191`) so the synchronous register is invisible to the in-flight click that opened the menu. The trigger anchor is included in `elements` per the footgun docs at `OutsideClickRegistry.ts:96-105`. The existing `closeAllHeaderMenus()` (called at the top of every `show*Menu`) is the re-entry guard. |
 
 ---
 

@@ -12,6 +12,7 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
 import { type PARState, DEFAULT_PAR_STATE, PAR_PRESETS, isPARActive } from '../../utils/media/PixelAspectRatio';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface PARControlEvents extends EventMap {
   stateChanged: PARState;
@@ -23,13 +24,12 @@ export class PARControl extends EventEmitter<PARControlEvents> {
   private dropdown: HTMLElement;
   private state: PARState = { ...DEFAULT_PAR_STATE };
   private isOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
 
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
 
     this.container = document.createElement('div');
@@ -374,7 +374,11 @@ export class PARControl extends EventEmitter<PARControlEvents> {
     // Rebuild to reflect current state
     this.buildDropdown();
 
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.dropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+    });
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -384,7 +388,8 @@ export class PARControl extends EventEmitter<PARControlEvents> {
     this.isOpen = false;
     this.updateButtonStyle();
 
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }
@@ -393,13 +398,6 @@ export class PARControl extends EventEmitter<PARControlEvents> {
     const rect = this.button.getBoundingClientRect();
     this.dropdown.style.top = `${rect.bottom + 4}px`;
     this.dropdown.style.left = `${rect.left}px`;
-  }
-
-  private handleOutsideClick(e: MouseEvent): void {
-    const target = e.target as HTMLElement;
-    if (!this.dropdown.contains(target) && !this.button.contains(target)) {
-      this.closeDropdown();
-    }
   }
 
   // --- Public API ---

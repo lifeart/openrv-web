@@ -13,8 +13,16 @@ export class HotReloadManager {
   /** Track URL -> pluginId for reload */
   private pluginURLs = new Map<PluginId, string>();
 
-  /** Guard against concurrent reloads */
-  private reloading = new Set<PluginId>();
+  /**
+   * Track in-flight reloads so that concurrent callers can join the same
+   * promise instead of triggering parallel re-imports of the same module.
+   *
+   * The bridge layer ({@link installPluginHotReloadBridge}) layers a
+   * coalesce-with-trailing-replay policy on top of this so that bursts of
+   * file-change events collapse into at most one in-flight reload plus one
+   * trailing replay.
+   */
+  private inflightReloads = new Map<PluginId, Promise<PluginId>>();
 
   /** Reference to the plugin registry */
   private registry: PluginRegistry;
@@ -40,74 +48,92 @@ export class HotReloadManager {
    * 4. Unregister the old plugin
    * 5. Activate the new version
    * 6. Restore state (if captured and plugin implements restoreState())
+   *
+   * Returns the new plugin id (which may differ from the input when the
+   * reloaded module changes its `manifest.id`).
+   *
+   * Concurrency: if a reload for this id is already in-flight, the same
+   * promise is returned — callers join that reload instead of triggering a
+   * parallel re-import. The bridge layer handles trailing replays so that
+   * file edits made during an in-flight reload are not lost.
    */
-  async reload(pluginId: PluginId): Promise<void> {
+  reload(pluginId: PluginId): Promise<PluginId> {
     const url = this.pluginURLs.get(pluginId);
     if (!url) {
-      throw new Error(`No URL tracked for plugin "${pluginId}". Use trackURL() first.`);
+      return Promise.reject(new Error(`No URL tracked for plugin "${pluginId}". Use trackURL() first.`));
     }
 
-    if (this.reloading.has(pluginId)) {
-      throw new Error(`Plugin "${pluginId}" is already being reloaded`);
+    const existing = this.inflightReloads.get(pluginId);
+    if (existing) {
+      return existing;
     }
 
-    this.reloading.add(pluginId);
-    try {
-      // 1. Capture state if available.
-      //
-      // The plugin contract says getState() should return a copy, but defensively
-      // structuredClone the captured state. This protects against:
-      //   - Plugins that accidentally return a reference to live state
-      //   - Concurrent mutation of state during the capture/restore window
-      //   - Subsequent code paths (or the new plugin's restoreState) mutating
-      //     the snapshot back into the old plugin's live state
-      //
-      // structuredClone handles Maps, Sets, ArrayBuffers, typed arrays, etc.
-      // If state contains non-cloneable values (functions, DOM nodes, class
-      // instances), structuredClone throws DataCloneError; we fall back to the
-      // raw reference with a console.warn so dev can fix their getState().
-      const plugin = this.registry.getPlugin(pluginId);
-      let savedState: unknown = undefined;
-      if (plugin && 'getState' in plugin && typeof plugin.getState === 'function') {
+    // Note: we do NOT mark this method `async`. An async wrapper would
+    // implicitly create a new Promise per call, breaking referential
+    // equality so concurrent callers couldn't observe that they joined
+    // the same reload via `inflightReloads`.
+    const run = this.runReload(pluginId, url).finally(() => {
+      this.inflightReloads.delete(pluginId);
+    });
+    this.inflightReloads.set(pluginId, run);
+    return run;
+  }
+
+  private async runReload(pluginId: PluginId, url: string): Promise<PluginId> {
+    // 1. Capture state if available.
+    //
+    // The plugin contract says getState() should return a copy, but defensively
+    // structuredClone the captured state. This protects against:
+    //   - Plugins that accidentally return a reference to live state
+    //   - Concurrent mutation of state during the capture/restore window
+    //   - Subsequent code paths (or the new plugin's restoreState) mutating
+    //     the snapshot back into the old plugin's live state
+    //
+    // structuredClone handles Maps, Sets, ArrayBuffers, typed arrays, etc.
+    // If state contains non-cloneable values (functions, DOM nodes, class
+    // instances), structuredClone throws DataCloneError; we fall back to the
+    // raw reference with a console.warn so dev can fix their getState().
+    const plugin = this.registry.getPlugin(pluginId);
+    let savedState: unknown = undefined;
+    if (plugin && 'getState' in plugin && typeof plugin.getState === 'function') {
+      try {
+        const rawState = plugin.getState();
+        savedState = deepCloneState(rawState, pluginId);
+      } catch (err) {
+        console.warn(`[hot-reload:${pluginId}] getState() threw:`, err);
+      }
+    }
+
+    // 2. Re-import with cache-busting BEFORE disposing old plugin
+    const cacheBustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+    const newId = await this.registry.loadFromURL(cacheBustUrl);
+
+    // 3. Deactivate and dispose old plugin (only after new one loaded successfully)
+    await this.registry.dispose(pluginId);
+
+    // 4. Unregister old plugin
+    this.registry.unregister(pluginId);
+
+    // 5. Activate new plugin
+    await this.registry.activate(newId);
+
+    // 6. Restore state if available
+    if (savedState !== undefined) {
+      const newPlugin = this.registry.getPlugin(newId);
+      if (newPlugin && 'restoreState' in newPlugin && typeof newPlugin.restoreState === 'function') {
         try {
-          const rawState = plugin.getState();
-          savedState = deepCloneState(rawState, pluginId);
+          newPlugin.restoreState(savedState);
         } catch (err) {
-          console.warn(`[hot-reload:${pluginId}] getState() threw:`, err);
+          console.warn(`[hot-reload:${pluginId}] restoreState() threw:`, err);
         }
       }
-
-      // 2. Re-import with cache-busting BEFORE disposing old plugin
-      const cacheBustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-      const newId = await this.registry.loadFromURL(cacheBustUrl);
-
-      // 3. Deactivate and dispose old plugin (only after new one loaded successfully)
-      await this.registry.dispose(pluginId);
-
-      // 4. Unregister old plugin
-      this.registry.unregister(pluginId);
-
-      // 5. Activate new plugin
-      await this.registry.activate(newId);
-
-      // 6. Restore state if available
-      if (savedState !== undefined) {
-        const newPlugin = this.registry.getPlugin(newId);
-        if (newPlugin && 'restoreState' in newPlugin && typeof newPlugin.restoreState === 'function') {
-          try {
-            newPlugin.restoreState(savedState);
-          } catch (err) {
-            console.warn(`[hot-reload:${pluginId}] restoreState() threw:`, err);
-          }
-        }
-      }
-
-      // Update tracked URL (same base, new plugin version)
-      this.pluginURLs.delete(pluginId);
-      this.pluginURLs.set(newId, url);
-    } finally {
-      this.reloading.delete(pluginId);
     }
+
+    // Update tracked URL (same base, new plugin version)
+    this.pluginURLs.delete(pluginId);
+    this.pluginURLs.set(newId, url);
+
+    return newId;
   }
 
   /**
