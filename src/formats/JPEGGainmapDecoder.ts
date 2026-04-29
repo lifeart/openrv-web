@@ -248,6 +248,13 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
     if (offset + 3 >= length) break;
     const segmentLength = view.getUint16(offset + 2);
 
+    // JPEG spec: APP/COM segment length includes the 2-byte length field
+    // itself, so the minimum valid value is 2. Values 0 or 1 would advance
+    // `offset` by less than the marker bytes already consumed, looping
+    // forever (or worse, re-interpreting the length field bytes as a new
+    // marker). Bail to the default orientation rather than getting stuck.
+    if (segmentLength < 2) break;
+
     // APP1 marker (0xFFE1) — may contain EXIF
     if (marker === 0xe1) {
       // Check for 'Exif\0\0' identifier (6 bytes at offset+4)
@@ -390,6 +397,14 @@ function findMPFMarkerOffset(view: DataView): number {
     // Read segment length
     if (offset + 3 >= length) break;
     const segmentLength = view.getUint16(offset + 2);
+
+    // JPEG spec: APP/COM segment length field is 2 bytes and includes itself,
+    // so values < 2 are invalid. Without this check, `offset += 2 + segmentLength`
+    // could advance by less than the marker bytes already consumed, causing
+    // an infinite loop. Treat as "no MPF marker found" and bail — the caller
+    // (isGainmapJPEG) will report the file as not a gainmap JPEG, which is
+    // the correct outcome for a corrupted file.
+    if (segmentLength < 2) break;
 
     // APP2 marker (0xFFE2) - check for MPF identifier
     if (marker === 0xe2) {
@@ -604,6 +619,11 @@ function extractHeadroomFromXMP(
     if (offset + 3 >= scanEnd) break;
     const segmentLength = view.getUint16(offset + 2);
 
+    // JPEG spec: APP/COM segment length includes the 2-byte length field, so
+    // the minimum valid value is 2. A truncated/corrupt sub-segment shouldn't
+    // hang the parser — give up on this region and let the caller fall back.
+    if (segmentLength < 2) return null;
+
     // APP1 marker (0xFFE1) - may contain XMP
     if (marker === 0xe1) {
       const dataLen = Math.min(segmentLength - 2, buffer.byteLength - offset - 4);
@@ -659,6 +679,11 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
 
     if (offset + 3 >= scanEnd) break;
     const segmentLength = view.getUint16(offset + 2);
+
+    // JPEG spec: APP/COM segment length includes the 2-byte length field, so
+    // the minimum valid value is 2. Treat a corrupt sub-segment as "no XMP
+    // here" rather than spinning forever.
+    if (segmentLength < 2) return null;
 
     if (marker === 0xe1) {
       const dataLen = Math.min(segmentLength - 2, buffer.byteLength - offset - 4);
