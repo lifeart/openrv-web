@@ -12,7 +12,11 @@
  * Message Protocol:
  * - Input: { type: 'process', id: number, imageData: Uint8ClampedArray, width: number, height: number, effectsState: AllEffectsState }
  * - Output: { type: 'result', id: number, imageData: Uint8ClampedArray } (with transferred buffer)
- * - Error: { type: 'error', id: number, error: string }
+ * - Error: { type: 'error', id: number, error: string, name?: string, stack?: string }
+ *   Note: Error.stack is non-enumerable on V8/SpiderMonkey, so structured-clone
+ *   silently drops it when posting Errors directly. We explicitly capture
+ *   name/message/stack into the response payload so the main thread receives
+ *   actionable source context for production debugging (LOW-23).
  * - Ready: { type: 'ready' } (sent on initialization)
  */
 
@@ -1116,12 +1120,27 @@ workerSelf.onmessage = function (event: MessageEvent<ProcessMessage>) {
     processEffects(imageData, width, height, effectsState, halfRes ?? false);
     workerSelf.postMessage({ type: 'result', id, imageData }, [imageData.buffer]);
   } catch (error) {
-    workerSelf.postMessage({
-      type: 'error',
-      id,
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    // LOW-23: Error.stack is non-enumerable on V8/SpiderMonkey, so it would be
+    // silently dropped by structured-clone if we posted the Error directly.
+    // Capture name/message/stack into plain string fields so the main thread
+    // can reconstruct an Error with the full source context for debugging.
+    if (error instanceof Error) {
+      workerSelf.postMessage({
+        type: 'error',
+        id,
+        error: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+    } else {
+      workerSelf.postMessage({
+        type: 'error',
+        id,
+        error: String(error),
+        name: 'Error',
+        stack: undefined,
+      });
+    }
   }
 };
 

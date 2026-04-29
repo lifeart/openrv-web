@@ -414,6 +414,55 @@ describe('WorkerPool', () => {
       await expect(errorPool.submit({ type: 'test' })).rejects.toThrow('Test error');
       errorPool.dispose();
     });
+
+    it('WP-015b: rehydrates Error name and stack from worker error payload (LOW-23)', async () => {
+      // The worker explicitly serializes name/message/stack as plain string
+      // fields because Error.stack is non-enumerable and would be dropped by
+      // structured-clone. The pool must rehydrate these onto the rejected
+      // Error so production debugging gets full source context.
+      const fakeStack = 'TypeError: boom\n    at processEffects (worker.js:42:7)';
+      const errorConfig: WorkerPoolConfig = {
+        maxWorkers: 1,
+        workerFactory: () => {
+          const worker = new MockWorker();
+          worker.postMessage = (message: unknown) => {
+            worker.lastMessage = message;
+            setTimeout(() => {
+              const errorResponse = {
+                type: 'error',
+                id: (message as { id: number }).id,
+                error: 'boom',
+                name: 'TypeError',
+                stack: fakeStack,
+              };
+              (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers.forEach(
+                (h) => h(new MessageEvent('message', { data: errorResponse })),
+              );
+            }, 10);
+          };
+          setTimeout(() => worker.simulateReady(), 5);
+          return worker as unknown as Worker;
+        },
+      };
+
+      const errorPool = new WorkerPool(errorConfig);
+      await errorPool.init();
+
+      let caught: Error | null = null;
+      try {
+        await errorPool.submit({ type: 'test' });
+      } catch (e) {
+        caught = e as Error;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught!.message).toBe('boom');
+      expect(caught!.name).toBe('TypeError');
+      // Stack should be preserved (prefixed with worker context per WorkerPool impl)
+      expect(typeof caught!.stack).toBe('string');
+      expect(caught!.stack!.length).toBeGreaterThan(0);
+      expect(caught!.stack).toContain(fakeStack);
+      errorPool.dispose();
+    });
   });
 
   describe('transferables', () => {
