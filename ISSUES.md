@@ -42,9 +42,7 @@ These issues were found and fixed during the audit:
 
 #### ~~CRIT-01~~: HDR VideoFrame lifecycle unmanaged at call sites — **FIXED** (see FIXED_ISSUES.md #381)
 
-#### HIGH-25: Topmost blend mode checks only first layer
-- **File**: `src/composite/BlendModes.ts` ~lines 294-309
-- **Status**: Likely correct — topmost is a stack-level mode set uniformly on all layers. Checking `layers[0]` suffices.
+#### ~~HIGH-25~~: Topmost blend mode checks only first layer — **FIXED** (see FIXED_ISSUES.md #384)
 
 #### ~~HIGH-31~~: MPF offset arithmetic partially unchecked — **FIXED** (see FIXED_ISSUES.md #374)
 

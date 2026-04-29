@@ -5549,3 +5549,29 @@ Existing AudioCoordinator tests `AC-090` and `AC-094` updated to reflect the new
 - `npx vitest run src/audio src/core/session`: 3212 tests passing across 78 files.
 - `npx vitest run src/audio/AudioPlaybackManager.test.ts`: 80 tests passing (73 existing + 7 new MED-35).
 - `npx tsc --noEmit` clean.
+
+## Issue #384: HIGH-25 — Topmost blend mode checks only first layer
+
+**Root cause**: `compositeMultipleLayers` in `src/composite/BlendModes.ts` decided whether to take the "topmost" branch by reading `layers[0].blendMode` only. The check is correct under the documented stack-level uniformity invariant (`StackGroupNode` sets the composite mode at stack level via `getCompositeType()`, never per-layer divergently). However, a future bug that set `blendMode = 'topmost'` per-layer divergently would silently produce surprising rendering with no diagnostic.
+
+**Fix**: Documented the stack-level uniformity invariant inline. Added a dev-mode-only invariant check (gated behind `import.meta.env?.DEV` so production build tree-shakes it away) that emits `console.warn` if either:
+- `layers[0].blendMode === 'topmost'` but not every layer agrees, or
+- A non-first layer carries `'topmost'` while `layers[0]` does not.
+Each warning includes the offending mode list for debuggability. Production hot path is unchanged — `layers[0]` remains authoritative for the topmost branch.
+
+**Tests added** (`src/composite/BlendModes.test.ts`, `BLD-TOPMOST-INV-001..005`):
+- `001`: uniform `topmost` across all layers triggers no warning.
+- `002`: `layers[0]='topmost'` with mixed modes warns in dev mode (and reports the offending mode list).
+- `003`: a non-first layer `'topmost'` while `layers[0]` is something else also warns.
+- `004`: rendering still uses `layers[0]` decision when the invariant holds (last visible layer wins).
+- `005`: rendering still takes the topmost branch when `layers[0]='topmost'` even with divergent peers — production behavior unaffected by the warning.
+
+**Files changed**:
+- `src/composite/BlendModes.ts`
+- `src/composite/BlendModes.test.ts`
+
+**Verification**:
+- 333 tests passing in `src/composite` + `src/nodes/groups`.
+- `npx tsc --noEmit` clean.
+- Reviewer confirmed test integrity: removing the invariant code causes BLD-TOPMOST-INV-002 and BLD-TOPMOST-INV-003 to fail; other three are contract pins that hold either way.
+- StackGroupNode (`src/nodes/groups/StackGroupNode.ts:285-294`) short-circuits topmost via `getCompositeType()`, structurally guaranteeing the invariant for in-tree callers.
