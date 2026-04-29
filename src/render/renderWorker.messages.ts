@@ -408,10 +408,11 @@ export const TRANSFER_FUNCTION_CODES = {
   hlg: 1,
   pq: 2,
   smpte240m: 3,
+  linear: 4,
 } as const;
 
 /** Map numeric code back to TransferFunction string. */
-export const TRANSFER_FUNCTION_FROM_CODE = ['srgb', 'hlg', 'pq', 'smpte240m'] as const;
+export const TRANSFER_FUNCTION_FROM_CODE = ['srgb', 'hlg', 'pq', 'smpte240m', 'linear'] as const;
 
 /** Map ColorPrimaries string to numeric code for transfer. */
 export const COLOR_PRIMARIES_CODES = {

@@ -2,7 +2,18 @@ import { ManagedVideoFrame } from './ManagedVideoFrame';
 
 export type DataType = 'uint8' | 'uint16' | 'float32';
 
-export type TransferFunction = 'srgb' | 'hlg' | 'pq' | 'smpte240m';
+/**
+ * Transfer function (EOTF) describing how pixel values map to light.
+ *
+ * - `'srgb'`: sRGB EOTF (standard SDR display).
+ * - `'hlg'`: Hybrid Log-Gamma (HDR broadcast).
+ * - `'pq'`: Perceptual Quantizer / SMPTE ST 2084 (HDR streaming).
+ * - `'smpte240m'`: SMPTE 240M (early HDTV).
+ * - `'linear'`: Linear-light data with no EOTF curve. The renderer treats
+ *   this as a pass-through (no input transfer applied) — used for
+ *   already-linearized HDR sources (e.g. EXR, float TIFF, decoded raw).
+ */
+export type TransferFunction = 'srgb' | 'hlg' | 'pq' | 'smpte240m' | 'linear';
 export type ColorPrimaries = 'bt709' | 'bt2020' | 'p3';
 
 export interface ImageMetadata {

@@ -620,6 +620,10 @@ export class Renderer implements RendererBackend {
       inputTransferCode = INPUT_TRANSFER_PQ;
     } else if (image.metadata.transferFunction === 'smpte240m') {
       inputTransferCode = INPUT_TRANSFER_SMPTE240M;
+    } else if (image.metadata.transferFunction === 'linear') {
+      // Linear-light data — no EOTF curve. Maps to INPUT_TRANSFER_SRGB
+      // (which the shader treats as identity per RenderConfig comment).
+      inputTransferCode = INPUT_TRANSFER_SRGB;
     }
     this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
 

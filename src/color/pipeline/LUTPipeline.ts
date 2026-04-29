@@ -51,7 +51,18 @@ export const DEFAULT_LUT_STAGE: LUTStageState = {
  * persisted state without losing the rest of the stage.
  */
 const VALID_COLOR_PRIMARIES = new Set(['bt709', 'bt2020', 'p3'] as const);
-const VALID_TRANSFER_FUNCTIONS = new Set(['srgb', 'hlg', 'pq', 'smpte240m'] as const);
+/**
+ * Allowed transfer-function values. Mirrors `TransferFunction` from
+ * `IPImage`. Exported so tests can assert parity with the union type
+ * (see `MLUT-LIN-PARITY` in `LUTPipeline.test.ts`).
+ */
+export const VALID_TRANSFER_FUNCTIONS: ReadonlySet<TransferFunction> = new Set<TransferFunction>([
+  'srgb',
+  'hlg',
+  'pq',
+  'smpte240m',
+  'linear',
+]);
 
 /** Default state for the pre-cache stage */
 export const DEFAULT_PRECACHE_STAGE: PreCacheStageState = {
@@ -554,6 +565,10 @@ export class LUTPipeline extends EventEmitter<PipelineEventMap> {
 
   /** Reset all stages including display LUT (preserves source registrations) */
   resetAll(): void {
+    // PR-1 follow-up (MED-51): decide reset event semantics — currently
+    // `resetAll` emits a per-stage `stageChanged` for each source plus a
+    // `displayChanged`, but `loadSerializableState` emits a single `'reset'`.
+    // Pick one convention so downstream listeners don't double-handle.
     for (const sourceId of this.sources.keys()) {
       this.resetSource(sourceId);
     }

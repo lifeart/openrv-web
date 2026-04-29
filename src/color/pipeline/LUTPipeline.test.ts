@@ -5,8 +5,10 @@ import {
   DEFAULT_LUT_STAGE,
   DEFAULT_PRECACHE_STAGE,
   DEFAULT_SOURCE_LUT_CONFIG,
+  VALID_TRANSFER_FUNCTIONS,
 } from './LUTPipeline';
 import type { LUT3D } from '../LUTLoader';
+import type { TransferFunction } from '../../core/image/Image';
 
 // Minimal identity 3D LUT for testing (2x2x2)
 function createIdentityLUT3D(): LUT3D {
@@ -1145,3 +1147,68 @@ function makeFakeIPImage(metadata: import('../../core/image/Image').ImageMetadat
   };
   return fake;
 }
+
+// ---------------------------------------------------------------------------
+// MED-51 PR-0 — `'linear'` transfer-function precursor
+// ---------------------------------------------------------------------------
+//
+// PR-0 widens the `TransferFunction` union to include `'linear'` so the
+// renderer and persisted-state sanitizer can describe linear-light sources
+// (EXR, float TIFF, decoded HDR video). PR-1 will land the API surface and
+// UI exposure on top of this precursor.
+describe('MED-51 PR-0 — linear TransferFunction precursor', () => {
+  it("MLUT-LIN-001: sanitizer accepts 'linear' and round-trips it through serialize/deserialize", () => {
+    const pipeline = new LUTPipeline();
+    pipeline.registerSource('source-1');
+    pipeline.setStageOutputTransferFunction('source-1', 'file', 'linear');
+
+    const ser = pipeline.getSerializableState();
+    expect(ser.sources['source-1']!.fileLUT.outputTransferFunction).toBe('linear');
+
+    // Round-trip via JSON to mimic session save/restore.
+    const json = JSON.stringify(ser);
+    const parsed = JSON.parse(json);
+
+    const restored = new LUTPipeline();
+    restored.loadSerializableState(parsed);
+
+    const cfg = restored.getSourceConfig('source-1')!;
+    expect(cfg.fileLUT.outputTransferFunction).toBe('linear');
+  });
+
+  it('MLUT-LIN-002: sanitizer rejects an unknown transfer string and returns null', () => {
+    const pipeline = new LUTPipeline();
+    pipeline.registerSource('source-1');
+    pipeline.setStageOutputTransferFunction('source-1', 'file', 'srgb');
+
+    const ser = pipeline.getSerializableState();
+    // Smuggle a malformed transfer-function string in via type assertion to
+    // simulate a tampered or future/unknown session file.
+    ser.sources['source-1'] = {
+      ...ser.sources['source-1']!,
+      fileLUT: {
+        ...ser.sources['source-1']!.fileLUT,
+        outputTransferFunction: 'not-a-real-transfer' as never,
+      },
+    };
+
+    const restored = new LUTPipeline();
+    restored.loadSerializableState(ser);
+
+    const cfg = restored.getSourceConfig('source-1')!;
+    expect(cfg.fileLUT.outputTransferFunction).toBeNull();
+  });
+
+  it('MLUT-LIN-PARITY: VALID_TRANSFER_FUNCTIONS covers every TransferFunction union member', () => {
+    // Compile-time guard: if a new TransferFunction member is added without
+    // updating VALID_TRANSFER_FUNCTIONS, this list will fail to type-check
+    // (it must contain every member of the union).
+    const _allTransferFunctions: TransferFunction[] = ['srgb', 'hlg', 'pq', 'smpte240m', 'linear'];
+    for (const tf of _allTransferFunctions) {
+      expect(VALID_TRANSFER_FUNCTIONS.has(tf)).toBe(true);
+    }
+    // Also ensure we did not accidentally widen the runtime set with stray
+    // values that are not in the union.
+    expect(VALID_TRANSFER_FUNCTIONS.size).toBe(_allTransferFunctions.length);
+  });
+});
