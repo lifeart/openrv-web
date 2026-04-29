@@ -188,25 +188,16 @@ fn applyHueRotation(color: vec3f, hueMatrix: mat3x3f) -> vec3f {
 }
 
 // ---------------------------------------------------------------------------
-// 3D LUT sampling with domain clamping
+// 3D LUT sampling
+//
+// Note: stages that need 3D LUT sampling (color_pipeline.wgsl,
+// display_output.wgsl) define stage-local helpers that bind their own
+// sampler/texture variables — a generic "takes sampler+texture as args"
+// helper is unused here because WGSL does not allow passing texture/sampler
+// resources as function arguments across stages with the layout: 'auto'
+// pipeline reflection. Keeping a dead helper in this prelude would also
+// break the deduplication invariant the file documents.
 // ---------------------------------------------------------------------------
-
-fn applyLUT3DGeneric(
-  lut: texture_3d<f32>,
-  lutSampler: sampler,
-  color: vec3f,
-  lutSize: f32,
-  intensity: f32,
-  domainMin: vec3f,
-  domainMax: vec3f
-) -> vec3f {
-  let normalized = clamp((color - domainMin) / (domainMax - domainMin), vec3f(0.0), vec3f(1.0));
-  let offset = 0.5 / lutSize;
-  let scale = (lutSize - 1.0) / lutSize;
-  let lutCoord = normalized * scale + offset;
-  let lutColor = textureSample(lut, lutSampler, lutCoord).rgb;
-  return mix(color, lutColor, intensity);
-}
 
 // ---------------------------------------------------------------------------
 // Tone mapping operators (all 8 + drago = 9 total)

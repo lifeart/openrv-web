@@ -451,25 +451,31 @@ describe('Gamut Soft Clip (XE-GAMUT)', () => {
     expect(softClipChannel(1.0)).toBeCloseTo(expected, 10);
   });
 
-  it('XE-GAMUT-005: scene_analysis.wgsl discrepancy (smoothstep vs tanh) documented', () => {
-    // CPU (effectProcessing.shared.ts) and GLSL (viewer.frag.glsl) use:
-    //   0.8 + 0.2 * tanh((x - 0.8) / 0.2)  for all x > 0.8
+  it('XE-GAMUT-005: gamut soft-clip is unified across CPU, GLSL, and WGSL (tanh)', () => {
+    // Historical context (round-1 of MED-55): scene_analysis.wgsl had its
+    // own smoothstep-based soft-clip that diverged from the CPU/GLSL tanh
+    // formula. The deduplication during MED-55 deleted that local
+    // implementation; scene_analysis.wgsl now references the shared
+    // gamutSoftClip() in common.wgsl, which uses the same tanh formula.
     //
-    // scene_analysis.wgsl uses a different formula:
-    //   if x in [0.8, 1.0]: smoothstep Hermite → t = (x-0.8)/0.2; s = t*t*(3-2*t); result = 0.8 + s*0.2
-    //   if x > 1.0: clamp to 1.0
-    //
-    // common.wgsl uses the tanh formula matching CPU/GLSL.
-    //
-    // At x=0.9, the two formulas diverge:
-    const x = 0.9;
-    const tanhResult = 0.8 + 0.2 * Math.tanh((x - 0.8) / 0.2);
-
-    const t = (x - 0.8) / 0.2; // = 0.5
-    const smoothstepResult = 0.8 + t * t * (3.0 - 2.0 * t) * 0.2;
-
-    // They are different
-    expect(Math.abs(tanhResult - smoothstepResult)).toBeGreaterThan(0.001);
+    // This test guards the unification by asserting CPU == WGSL-source
+    // expectation across the soft-clip's active range. We re-implement the
+    // expected formula here (single source of truth: tanh) and verify the
+    // CPU function `softClipChannel` matches it. The compile-time check
+    // that scene_analysis.wgsl picks up common.wgsl's gamutSoftClip lives
+    // in src/render/__gpu__/wgsl-compile.gpu-test.ts.
+    const cases = [0.0, 0.4, 0.8, 0.9, 1.0, 1.5, 2.0, 5.0];
+    for (const x of cases) {
+      let expected: number;
+      if (x <= 0.0) {
+        expected = 0.0;
+      } else if (x <= 0.8) {
+        expected = x;
+      } else {
+        expected = 0.8 + 0.2 * Math.tanh((x - 0.8) / 0.2);
+      }
+      expect(softClipChannel(x), `softClipChannel(${x}) should match unified tanh formula`).toBeCloseTo(expected, 10);
+    }
   });
 
   it('XE-GAMUT-006: monotonically increasing', () => {

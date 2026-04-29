@@ -1,6 +1,9 @@
 // Stage 3: Primary Grade — exposure, scale/offset, gamma, contrast,
 // temperature/tint, brightness, saturation, inline 1D LUT, curves LUT.
 // Ports sections 1-5 (color grading primaries) from viewer.frag.glsl.
+//
+// NOTE: This shader expects common.wgsl to be prepended, which provides:
+//   LUMA, applyTemperature
 
 struct Uniforms {
   // Exposure per-channel (in stops, applied as exp2)
@@ -47,28 +50,7 @@ struct VSOut {
 
 @group(1) @binding(0) var<uniform> u: Uniforms;
 
-// Luminance coefficients (Rec. 709)
-const LUMA = vec3f(0.2126, 0.7152, 0.0722);
-
-// Temperature/tint adjustment (simplified Kelvin shift)
-fn applyTemperature(color: vec3f, temp: f32, tintVal: f32) -> vec3f {
-  // Temperature shifts blue-orange
-  // Tint shifts green-magenta
-  let t = temp / 100.0;
-  let g = tintVal / 100.0;
-
-  var c = color;
-  c.r += t * 0.1;
-  c.b -= t * 0.1;
-  c.g += g * 0.1;
-  c.r -= g * 0.05;
-  c.b -= g * 0.05;
-
-  // Clamp negative values: negative color is physically meaningless and
-  // corrupts downstream stages (HSL conversion, contrast amplification).
-  // Values > 1.0 are preserved for HDR headroom.
-  return max(c, vec3f(0.0));
-}
+// LUMA and applyTemperature are provided by common.wgsl (prepended).
 
 // Apply inline 1D LUT (from RVColor luminanceLUT)
 fn applyInlineLUT(color: vec3f) -> vec3f {

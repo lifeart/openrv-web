@@ -26,6 +26,7 @@ import type {
 import { GPUBufferUsage } from './WebGPUTypes';
 import { WebGPUPingPong } from './WebGPUPingPong';
 import type { PingPongFormat } from './WebGPUPingPong';
+import commonSrc from './shaders/common.wgsl?raw';
 
 // ---------------------------------------------------------------------------
 // Stage descriptor for WebGPU pipeline
@@ -506,9 +507,18 @@ export class WebGPUShaderPipeline {
     let pipeline = this.pipelineCache.get(cacheKey);
 
     if (!pipeline) {
-      // Build combined WGSL: vertex (viewer or passthrough) + stage fragment
+      // Build combined WGSL: common (shared helpers) + vertex (viewer or
+      // passthrough) + stage fragment.
+      //
+      // common.wgsl provides shared symbols (LUMA, applyTemperature, all 8
+      // tone mapping operators, gamutSoftClip, EOTF helpers, etc.) that
+      // stage shaders rely on. Prepending it here mirrors the pattern in
+      // wgsl-compile.gpu-test.ts and tonemap-webgpu.gpu-test.ts and is the
+      // single point that enforces the implicit "common is prepended"
+      // contract at runtime — without it, every stage that references a
+      // common symbol would fail compilation with `unresolved identifier`.
       const vertSource = isFirstStage ? VIEWER_VERT_WGSL : PASSTHROUGH_VERT_WGSL;
-      const combined = vertSource + '\n' + stage.wgslSource;
+      const combined = commonSrc + '\n' + vertSource + '\n' + stage.wgslSource;
       const shaderModule = device.createShaderModule({ code: combined });
 
       pipeline = device.createRenderPipeline({

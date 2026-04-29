@@ -408,6 +408,68 @@ describe('WebGPUShaderPipeline', () => {
     });
   });
 
+  describe('shader prelude (MED-55 round 2)', () => {
+    it('WGPU-SP-090: renderSingleStage prepends common.wgsl into shader source', () => {
+      // The deduplication in common.wgsl created an implicit "common is
+      // prepended" contract: stage shaders reference symbols (LUMA,
+      // tonemapReinhard, gamutSoftClip, ...) that live in common.wgsl.
+      // If the pipeline doesn't prepend it at compile time, every
+      // production stage registration will fail with `unresolved
+      // identifier`. This test guards that contract.
+      const device = createMockDevice();
+      const pipeline = new WebGPUShaderPipeline();
+      pipeline.initializeSharedResources(device);
+
+      // Register a stage whose WGSL references a common.wgsl symbol.
+      const stageReferencingCommon: WebGPUStageDescriptor = {
+        id: 'primaryGrade',
+        name: 'primaryGrade',
+        wgslSource: `
+struct VSOutTest {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+}
+@group(0) @binding(0) var samp: sampler;
+@group(0) @binding(1) var tex: texture_2d<f32>;
+@fragment fn fs(in: VSOutTest) -> @location(0) vec4f {
+  // Reference symbols that ONLY exist in common.wgsl. If common is not
+  // prepended, the shader compile would fail with unresolved identifier.
+  let c = textureSample(tex, samp, in.uv);
+  let lum = dot(c.rgb, LUMA);
+  let mapped = tonemapReinhard(c.rgb, 4.0, 1.0);
+  return vec4f(mapped * lum, c.a);
+}`,
+        isIdentity: () => false,
+      };
+      pipeline.registerStage(stageReferencingCommon);
+
+      const state = createDefaultInternalState();
+      pipeline.execute(device, createMockTextureView(), createMockTextureView(), state, 100, 100);
+
+      // Verify createShaderModule was called with source that contains
+      // both a common.wgsl marker AND the stage's wgslSource.
+      const calls = device.createShaderModule.mock.calls;
+      // The first call may be the passthrough shader; find the one with
+      // the stage's source embedded.
+      const stageCall = calls.find((call) => {
+        const code = (call[0] as { code: string }).code;
+        return code.includes('tonemapReinhard(c.rgb, 4.0, 1.0)');
+      });
+      expect(stageCall, 'stage compile call should exist').toBeDefined();
+      const stageCode = (stageCall![0] as { code: string }).code;
+
+      // common.wgsl should be present (look for definitions, not just usages).
+      expect(stageCode).toContain('fn tonemapReinhard');
+      expect(stageCode).toContain('const LUMA');
+      expect(stageCode).toContain('fn gamutSoftClip');
+
+      // common must come before the stage source for declaration-before-use.
+      const commonIdx = stageCode.indexOf('fn tonemapReinhard');
+      const stageIdx = stageCode.indexOf('tonemapReinhard(c.rgb, 4.0, 1.0)');
+      expect(commonIdx).toBeLessThan(stageIdx);
+    });
+  });
+
   describe('global uniforms', () => {
     it('WGPU-SP-080: setGlobalHDRHeadroom/setGlobalOutputMode store values', () => {
       const pipeline = new WebGPUShaderPipeline();

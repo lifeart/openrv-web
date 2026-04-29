@@ -1,6 +1,9 @@
 // Stage 10: Diagnostics — channel isolation, false color, contour visualization,
 // dither/quantize, and zebra stripes.
 // Ports diagnostic/visualization logic from viewer.frag.glsl (steps 10-12c).
+//
+// NOTE: This shader expects common.wgsl to be prepended, which provides:
+//   LUMA
 
 struct Uniforms {
   channelModeCode: i32,       // 0=rgb, 1=red, 2=green, 3=blue, 4=alpha, 5=luminance
@@ -37,8 +40,7 @@ struct VSOut {
 
 @group(1) @binding(0) var<uniform> u: Uniforms;
 
-// Luminance coefficients (Rec. 709)
-const LUMA = vec3f(0.2126, 0.7152, 0.0722);
+// LUMA is provided by common.wgsl (prepended).
 
 // --- Bayer 8x8 dither matrix (normalized to [0,1] range) ---
 fn bayerDither8x8(pos: vec2i) -> f32 {

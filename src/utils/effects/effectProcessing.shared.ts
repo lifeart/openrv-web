@@ -441,12 +441,7 @@ export function filmicCurveShared(x: number): number {
  * Uniform headroom convention: normalize by hdrHeadroom, apply curve,
  * re-scale by hdrHeadroom. At hdrHeadroom=1.0 reduces to the bare formula.
  */
-export function tonemapFilmicChannel(
-  value: number,
-  exposureBias = 2.0,
-  whitePoint = 11.2,
-  hdrHeadroom = 1.0,
-): number {
+export function tonemapFilmicChannel(value: number, exposureBias = 2.0, whitePoint = 11.2, hdrHeadroom = 1.0): number {
   if (!Number.isFinite(value) || value < 0) return 0;
   const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
   const scaled = value / headroom;
@@ -480,12 +475,7 @@ export function tonemapACESChannel(value: number, hdrHeadroom = 1.0): number {
  * Best hue preservation in saturated highlights.
  * Uniform headroom convention: normalize by hdrHeadroom, apply curve, re-scale.
  */
-export function tonemapAgX(
-  r: number,
-  g: number,
-  b: number,
-  hdrHeadroom = 1.0,
-): { r: number; g: number; b: number } {
+export function tonemapAgX(r: number, g: number, b: number, hdrHeadroom = 1.0): { r: number; g: number; b: number } {
   if (!Number.isFinite(r) || r < 0) r = 0;
   if (!Number.isFinite(g) || g < 0) g = 0;
   if (!Number.isFinite(b) || b < 0) b = 0;
@@ -666,20 +656,15 @@ export function tonemapACESHill(
  * shared by the other operators. It is physically parameterized by Lwa
  * (scene average luminance) and Lmax (scene peak luminance); display
  * headroom is folded into Lmax by multiplying `Lmax * hdrHeadroom` before
- * the log-domain mapping (matches the GPU formula:
- *   GLSL viewer.frag.glsl:486
- *   WGSL common.wgsl:399
- *   WGSL scene_analysis.wgsl:264
+ * the log-domain mapping (matches the GPU formula in
+ * `src/render/shaders/viewer.frag.glsl` and the unified WGSL implementation
+ * in `src/render/webgpu/shaders/common.wgsl` — `tonemapDragoChannel`. The
+ * scene_analysis.wgsl dispatcher forwards to `tonemapDrago` from
+ * common.wgsl; there is no longer a stage-local copy.
  * ). The post-multiplier dragoBrightness then scales normalized output
  * to display range. Invalid hdrHeadroom (NaN/Infinity/≤0) sanitizes to 1.0.
  */
-export function tonemapDragoChannel(
-  value: number,
-  bias = 0.85,
-  Lwa = 0.2,
-  Lmax = 1.5,
-  hdrHeadroom = 1.0,
-): number {
+export function tonemapDragoChannel(value: number, bias = 0.85, Lwa = 0.2, Lmax = 1.5, hdrHeadroom = 1.0): number {
   if (!Number.isFinite(value) || value < 0) return 0;
   const headroom = Number.isFinite(hdrHeadroom) && hdrHeadroom > 0 ? hdrHeadroom : 1.0;
   const safeWa = Math.max(Lwa, 1e-6);
@@ -788,9 +773,7 @@ export function applyToneMappingToChannel(value: number, operator: string, param
       return tonemapGTChannel(value, headroom);
     case 'drago': {
       const brightness = params?.dragoBrightness ?? 2.0;
-      return (
-        tonemapDragoChannel(value, params?.dragoBias, params?.dragoLwa, params?.dragoLmax, headroom) * brightness
-      );
+      return tonemapDragoChannel(value, params?.dragoBias, params?.dragoLwa, params?.dragoLmax, headroom) * brightness;
     }
     default:
       return value;

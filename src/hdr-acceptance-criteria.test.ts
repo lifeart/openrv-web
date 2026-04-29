@@ -1519,4 +1519,67 @@ describe('Phase 4: WebGPU Migration Path', () => {
       expect(webgl2.getColorInversion()).toBe(webgpu.getColorInversion());
     });
   });
+
+  // =====================================================================
+  // 4.3 WebGPU extended tone mapping — runtime verification (MED-55)
+  // =====================================================================
+  // The Phase 4 acceptance for "extended tone mapping" requires more than
+  // shader-compile checks: each operator must produce output consistent
+  // with the CPU reference (and with WebGL2's GLSL path) when running on
+  // a real GPU device with hdrHeadroom > 1. That test lives at
+  //   src/render/__gpu__/tonemap-webgpu.gpu-test.ts
+  // and runs under `pnpm test:gpu` (vitest.browser.config.ts).
+  //
+  // The criteria below verify the contract from this side: the WebGPU
+  // backend exposes the API the runtime test exercises, and the WGSL
+  // shader source containing the tone mapping dispatcher is reachable.
+  describe('4.3 WebGPU extended tone mapping (MED-55) — contract', () => {
+    it('AC-P4-4.3a: WebGPUBackend exposes tone mapping setters required for runtime test', () => {
+      const backend = new WebGPUBackend();
+      expect(typeof backend.setToneMappingState).toBe('function');
+      expect(typeof backend.getToneMappingState).toBe('function');
+      // Default state must be operable: enabling and reading round-trips.
+      backend.setToneMappingState({ enabled: true, operator: 'reinhard' });
+      const state = backend.getToneMappingState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).toBe('reinhard');
+      // Reset for hygiene.
+      backend.resetToneMappingState();
+    });
+
+    it('AC-P4-4.3b: scene_analysis.wgsl source is shipped as the tone mapping shader and can be loaded', async () => {
+      // Vite ?raw imports work in the test environment too. If this throws,
+      // the runtime tone mapping test cannot run either, so it is a useful
+      // pre-flight check that lives in the regular (non-GPU) test suite.
+      const sceneAnalysis = (await import('./render/webgpu/shaders/scene_analysis.wgsl?raw')).default;
+      expect(typeof sceneAnalysis).toBe('string');
+      expect(sceneAnalysis.length).toBeGreaterThan(0);
+      // The MED-52 dispatcher must be present.
+      expect(sceneAnalysis).toContain('applyToneMapping');
+      // All 8 operator cases must be wired in the dispatcher.
+      for (let op = 1; op <= 8; op++) {
+        expect(sceneAnalysis).toContain(`case ${op}:`);
+      }
+      // hdrHeadroom is the load-bearing uniform for MED-52/MED-55.
+      expect(sceneAnalysis).toContain('hdrHeadroom');
+    });
+
+    it('AC-P4-4.3c: common.wgsl exports every tone mapping operator the dispatcher forwards to', async () => {
+      const common = (await import('./render/webgpu/shaders/common.wgsl?raw')).default;
+      for (const fn of [
+        'tonemapReinhard',
+        'tonemapFilmic',
+        'tonemapACES',
+        'tonemapAgX',
+        'tonemapPBRNeutral',
+        'tonemapGT',
+        'tonemapACESHill',
+        'tonemapDrago',
+      ]) {
+        expect(common).toContain(`fn ${fn}(`);
+      }
+      // Headroom must be a parameter of every non-Drago operator (MED-52).
+      expect(common).toContain('hdrHeadroom: f32');
+    });
+  });
 });

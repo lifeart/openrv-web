@@ -1,5 +1,8 @@
 // Stage 4: Secondary Grade — highlights/shadows, vibrance, hue rotation.
 // Ports the highlights/shadows, vibrance, and hue rotation logic from viewer.frag.glsl.
+//
+// NOTE: This shader expects common.wgsl to be prepended, which provides:
+//   LUMA
 
 struct Uniforms {
   highlights: f32,             // -1.0 to +1.0
@@ -23,8 +26,7 @@ struct VSOut {
 
 @group(1) @binding(0) var<uniform> u: Uniforms;
 
-// Luminance coefficients (Rec. 709)
-const LUMA = vec3f(0.2126, 0.7152, 0.0722);
+// LUMA is provided by common.wgsl (prepended).
 
 // --- RGB to HSL conversion ---
 // Returns vec3(h: 0-360, s: 0-1, l: 0-1)

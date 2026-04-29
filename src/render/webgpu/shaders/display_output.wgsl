@@ -1,6 +1,11 @@
 // Stage 9: Display Output — output primaries, display LUT 3D, display transfer,
 // gamma override, brightness, and color inversion.
 // Ports the display pipeline from viewer.frag.glsl (steps 7c, 7d, 8a-8d, 9).
+//
+// NOTE: This shader expects common.wgsl to be prepended. The applyDisplayLUT3D
+// helper is stage-local because it binds the per-stage `displayLUT3D` texture
+// and `lutSamp` sampler directly — WGSL with `layout: 'auto'` pipelines does
+// not allow sharing resource-bound helpers from a generic prelude.
 
 struct Uniforms {
   outputPrimariesEnabled: i32,        // 0=off, 1=on
@@ -75,7 +80,7 @@ fn applyDisplayTransfer(color: vec3f, tf: i32) -> vec3f {
 }
 
 // --- Generic 3D LUT application with domain mapping and trilinear interpolation ---
-fn applyLUT3DGeneric(color: vec3f, lutSize: f32, intensity: f32,
+fn applyDisplayLUT3D(color: vec3f, lutSize: f32, intensity: f32,
                      domainMin: vec3f, domainMax: vec3f) -> vec3f {
   var normalized = (color - domainMin) / (domainMax - domainMin);
   normalized = clamp(normalized, vec3f(0.0), vec3f(1.0));
@@ -106,7 +111,7 @@ fn applyLUT3DGeneric(color: vec3f, lutSize: f32, intensity: f32,
   // 7d. Display LUT (session-wide display calibration)
   if (u.displayLUT3DEnabled != 0) {
     color = vec4f(
-      applyLUT3DGeneric(color.rgb, u.displayLUT3DSize, u.displayLUT3DIntensity,
+      applyDisplayLUT3D(color.rgb, u.displayLUT3DSize, u.displayLUT3DIntensity,
                         u.displayLUT3DDomainMin, u.displayLUT3DDomainMax),
       color.a
     );
