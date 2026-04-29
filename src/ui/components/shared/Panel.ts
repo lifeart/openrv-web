@@ -4,6 +4,7 @@
  * Creates dropdown panels that render at body level to avoid z-index issues.
  */
 
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../../utils/ui/OutsideClickRegistry';
 import { getIconSvg } from './Icons';
 import { SHADOWS } from './theme';
 
@@ -48,6 +49,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
   let isVisible = false;
   let currentAnchor: HTMLElement | null = null;
   let previouslyFocusedElement: HTMLElement | null = null;
+  let deregisterDismiss: OutsideClickDeregister | null = null;
   const visibilityListeners = new Set<PanelVisibilityListener>();
 
   function notifyVisibilityChange(visible: boolean): void {
@@ -56,23 +58,13 @@ export function createPanel(options: PanelOptions = {}): Panel {
     }
   }
 
-  // Close on outside click
-  const handleOutsideClick = (e: MouseEvent) => {
-    if (isVisible && currentAnchor && !currentAnchor.contains(e.target as Node) && !panel.contains(e.target as Node)) {
-      hide();
-    }
-  };
+  // Outside-click and Escape dismiss are handled by OutsideClickRegistry
+  // (registered in show(), deregistered in hide()). The registry's
+  // capture-phase listener replaces the previously hand-rolled
+  // bubble-phase handlers and provides "innermost wins" Escape semantics.
 
-  // Close on Escape key
-  const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && isVisible) {
-      e.stopPropagation();
-      e.preventDefault();
-      hide();
-    }
-  };
-
-  // Reposition on scroll/resize
+  // Reposition on scroll/resize — these listeners are NOT migrated to the
+  // registry (the registry only handles dismissal, not position updates).
   const handleReposition = () => {
     if (isVisible && currentAnchor) {
       positionPanel(currentAnchor);
@@ -106,9 +98,19 @@ export function createPanel(options: PanelOptions = {}): Panel {
     isVisible = true;
     notifyVisibilityChange(true);
 
-    // Add listeners
-    document.addEventListener('click', handleOutsideClick);
-    document.addEventListener('keydown', handleKeydown);
+    // Register outside-click + Escape dismiss with the central registry.
+    // dismissOn: 'click' (Pattern B) matches the previous hand-rolled
+    // semantic — the anchor uses click-toggle, so we listen for click
+    // (after the toggle handler has run). This also means a right-click
+    // (contextmenu) does NOT dismiss the panel.
+    deregisterDismiss = outsideClickRegistry.register({
+      elements: [anchor, panel],
+      onDismiss: () => hide(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
+
+    // Reposition listeners are NOT migrated — registry only handles dismissal.
     window.addEventListener('scroll', handleReposition, true);
     window.addEventListener('resize', handleReposition);
 
@@ -120,14 +122,16 @@ export function createPanel(options: PanelOptions = {}): Panel {
   }
 
   function hide(): void {
+    // Deregister BEFORE the rest of teardown so a re-entrant onDismiss is a no-op.
+    deregisterDismiss?.();
+    deregisterDismiss = null;
+
     panel.style.display = 'none';
     isVisible = false;
     currentAnchor = null;
     notifyVisibilityChange(false);
 
-    // Remove listeners
-    document.removeEventListener('click', handleOutsideClick);
-    document.removeEventListener('keydown', handleKeydown);
+    // Remove reposition listeners (not owned by the registry).
     window.removeEventListener('scroll', handleReposition, true);
     window.removeEventListener('resize', handleReposition);
 

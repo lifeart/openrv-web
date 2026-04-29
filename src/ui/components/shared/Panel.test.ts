@@ -6,6 +6,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
+import {
+  dispatchOutsideClick,
+  resetOutsideClickRegistry,
+} from '../../../utils/ui/__test-helpers__/outsideClickTestUtils';
 import { createPanel, createPanelHeader, createSliderRow, type Panel } from './Panel';
 
 describe('createPanel', () => {
@@ -355,19 +360,53 @@ describe('createPanel', () => {
       expect(panel.isVisible()).toBe(false);
     });
 
-    it('PANEL-U055: Escape calls stopPropagation to prevent double-close', () => {
+    // PANEL-U055 (Escape stopPropagation/preventDefault assertions) was deleted
+    // as part of the MED-25 Phase 1 migration: the local Escape handler is gone;
+    // OutsideClickRegistry's "innermost wins" semantics replace the previous
+    // stopPropagation guarantee, and the registry runs in capture phase so the
+    // event object passed to the panel's old handler no longer exists.
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    let anchor: HTMLElement;
+
+    beforeEach(() => {
+      resetOutsideClickRegistry();
+      anchor = document.createElement('button');
+      document.body.appendChild(anchor);
+    });
+
+    afterEach(() => {
+      if (document.body.contains(anchor)) {
+        document.body.removeChild(anchor);
+      }
+      resetOutsideClickRegistry();
+    });
+
+    it('PANEL-U060: opening a panel registers exactly 1 entry; closing deregisters', () => {
+      panel = createPanel();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+
+      panel.show(anchor);
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      panel.hide();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+    });
+
+    it('PANEL-U061: outside-click dispatched after open dismisses the panel', () => {
       panel = createPanel();
       panel.show(anchor);
+      expect(panel.isVisible()).toBe(true);
 
-      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
-      const stopPropagationSpy = vi.spyOn(event, 'stopPropagation');
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+      // Click somewhere outside the panel and anchor.
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      document.body.removeChild(outside);
 
-      document.dispatchEvent(event);
-
-      expect(stopPropagationSpy).toHaveBeenCalled();
-      expect(preventDefaultSpy).toHaveBeenCalled();
       expect(panel.isVisible()).toBe(false);
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
     });
   });
 });

@@ -8,6 +8,7 @@
  * - Focus management
  */
 
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../../utils/ui/OutsideClickRegistry';
 import { COLORS, Z_INDEX, TRANSITIONS } from './theme';
 
 // Global z-index counter for stacking multiple dropdowns
@@ -72,12 +73,15 @@ export class DropdownMenu {
   private isOpen = false;
   private currentAnchor: HTMLElement | null = null;
   private options: DropdownMenuOptions;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
+  // Navigation keydown listener (ArrowUp/Down/Home/End/Enter/Space/Tab) — the
+  // OutsideClickRegistry handles Escape and outside-click dismiss but NOT
+  // navigation keys, so this stays.
   private boundHandleKeydown: (e: KeyboardEvent) => void;
   private boundHandleReposition: () => void;
   private itemButtons: HTMLButtonElement[] = [];
   private dropdownId: string;
   private selectedValues: Set<string> = new Set();
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor(options: DropdownMenuOptions = {}) {
     this.options = {
@@ -89,7 +93,6 @@ export class DropdownMenu {
       ...options,
     };
 
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleKeydown = (e: KeyboardEvent) => this.handleKeydown(e);
     this.boundHandleReposition = () => this.positionDropdown();
 
@@ -415,16 +418,11 @@ export class DropdownMenu {
     }
   }
 
-  private handleOutsideClick(e: MouseEvent): void {
-    if (
-      this.isOpen &&
-      this.currentAnchor &&
-      !this.currentAnchor.contains(e.target as Node) &&
-      !this.dropdown.contains(e.target as Node)
-    ) {
-      this.close();
-    }
-  }
+  // Outside-click dismiss is now owned by the OutsideClickRegistry
+  // (registered in open(), deregistered in close()). The previous
+  // hand-rolled handleOutsideClick was removed in the MED-25 Phase 1
+  // migration. Escape is also routed through the registry — only
+  // navigation keys remain in handleKeydown below.
 
   private handleKeydown(e: KeyboardEvent): void {
     if (!this.isOpen) return;
@@ -472,11 +470,8 @@ export class DropdownMenu {
           }
         }
         break;
-      case 'Escape':
-        e.preventDefault();
-        e.stopPropagation();
-        this.close();
-        break;
+      // Escape is handled by OutsideClickRegistry (dismissOnEscape: true).
+      // Removed in MED-25 Phase 1 — registry owns innermost-wins semantics.
       case 'Tab':
         // Close on tab but don't prevent default
         this.close();
@@ -600,9 +595,19 @@ export class DropdownMenu {
     // Focus the dropdown for keyboard events
     this.dropdown.focus();
 
-    // Add event listeners
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    // Register outside-click + Escape dismiss with the central registry.
+    // dismissOn: 'click' (Pattern B) matches existing semantics where the
+    // anchor toggles via a click handler; right-click does not dismiss.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [anchor, this.dropdown],
+      onDismiss: () => this.close(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
+
+    // Navigation keydown listener stays — registry only handles Escape.
     document.addEventListener('keydown', this.boundHandleKeydown, true);
+    // Reposition listeners are NOT migrated — registry only handles dismissal.
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
 
@@ -622,8 +627,11 @@ export class DropdownMenu {
     this.dropdown.style.display = 'none';
     this.currentAnchor = null;
 
-    // Remove event listeners
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    // Deregister outside-click/Escape from the central registry.
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
+
+    // Remove navigation + reposition listeners (not owned by registry).
     document.removeEventListener('keydown', this.boundHandleKeydown, true);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);

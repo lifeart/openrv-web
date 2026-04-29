@@ -17,7 +17,15 @@ During each component migration, the implementer audits that component's `stopPr
 
 | File | Line | Code | Bucket | Notes |
 |---|---|---|---|---|
-| TBD | | | | |
+| `src/ui/components/shared/Panel.ts` | (pre-migration) ~69 | `e.stopPropagation()` in `handleKeydown` Escape branch | **must-remove-Escape** | Removed in MED-25 Phase 1. The local handler stopped Escape so a sibling/ancestor keydown wouldn't double-close. After migration the registry owns Escape with innermost-wins semantics, so the local handler and its `stopPropagation` are gone. |
+| `src/ui/components/shared/DropdownMenu.ts` | 241 | `e.stopPropagation()` in item-button `click` | **unrelated** | Bubble-phase listener on a menu item. Registry runs in capture phase first, so this cannot interfere with dismiss logic. Left in place — it prevents the click from bubbling to ancestor click handlers (e.g. the parent's toggle button) and reopening the menu. |
+| `src/ui/components/shared/DropdownMenu.ts` | 433 | `e.stopPropagation()` for ArrowDown | **safe** | Navigation key. Stops bubbling so global shortcuts don't also receive the key while the menu is focused. Capture-phase registry ignores stopPropagation. Left in place. |
+| `src/ui/components/shared/DropdownMenu.ts` | 438 | `e.stopPropagation()` for ArrowUp | **safe** | Same as ArrowDown — left in place. |
+| `src/ui/components/shared/DropdownMenu.ts` | 443 | `e.stopPropagation()` for Home | **safe** | Same as ArrowDown — left in place. |
+| `src/ui/components/shared/DropdownMenu.ts` | 448 | `e.stopPropagation()` for End | **safe** | Same as ArrowDown — left in place. |
+| `src/ui/components/shared/DropdownMenu.ts` | 453 | `e.stopPropagation()` for Enter | **safe** | Stops the Enter from triggering global shortcuts after item selection. Left in place. |
+| `src/ui/components/shared/DropdownMenu.ts` | 464 | `e.stopPropagation()` for Space | **safe** | Same as Enter — left in place. |
+| `src/ui/components/shared/DropdownMenu.ts` | (pre-migration) 477 | `e.stopPropagation()` for Escape | **must-remove-Escape** | Removed in MED-25 Phase 1. Registry's `dismissOnEscape: true` with innermost-wins semantics replaces this. The whole `case 'Escape':` branch was deleted from `handleKeydown`. |
 
 ---
 
