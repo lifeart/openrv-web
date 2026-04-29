@@ -398,7 +398,7 @@ describe('VideoSourceNode', () => {
       testNode.dispose();
     });
 
-    it('CRIT-01-VSN-002: sample is closed even when hdrSampleToIPImage throws (sync error during use)', async () => {
+    it('CRIT-01-VSN-002 (sanity): sample close on hdrSampleToIPImage conversion error', async () => {
       const { testNode, internal, mockFrameExtractor } = setupHDRNode();
       const { mockSample, mockVideoFrame } = createMockSample();
       mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
@@ -449,7 +449,7 @@ describe('VideoSourceNode', () => {
       expect(mockSample.close).toHaveBeenCalledTimes(1);
     });
 
-    it('CRIT-01-VSN-004: getFrameHDR rejection -> sample close not called (no sample to close)', async () => {
+    it('CRIT-01-VSN-004 (sanity): graceful handling of getFrameHDR rejection (no sample to close)', async () => {
       const { testNode, mockFrameExtractor } = setupHDRNode();
       mockFrameExtractor.getFrameHDR.mockRejectedValue(new Error('async extraction failure'));
 
@@ -461,7 +461,7 @@ describe('VideoSourceNode', () => {
       expect(() => testNode.dispose()).not.toThrow();
     });
 
-    it('CRIT-01-VSN-005: ipImage and sample closed when dispose nulls frameExtractor after hdrSampleToIPImage', async () => {
+    it('CRIT-01-VSN-005 (regression): IPImage release after dispose-race nulls frameExtractor pre-cache.set', async () => {
       const { testNode, internal, mockFrameExtractor } = setupHDRNode();
       const { mockSample } = createMockSample();
       mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);

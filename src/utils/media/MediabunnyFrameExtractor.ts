@@ -53,6 +53,56 @@ async function detectCreateImageBitmapResize(): Promise<boolean> {
   return createImageBitmapResizeSupported;
 }
 
+/**
+ * Internal helpers exposed for unit testing.
+ *
+ * These are not part of the public API. They are exported as a single
+ * namespace object so test files can exercise lifecycle/close logic
+ * without going through the full mediabunny load() path (which is
+ * gated by isSupported() and unavailable in jsdom).
+ */
+export const _probeInternals = {
+  /**
+   * CRIT-01: Closes the probeFrame and probeSample pair with guaranteed
+   * cleanup of BOTH, even if one close attempt throws.
+   *
+   * Used by the HDR probe path (`load()` in MediabunnyFrameExtractor).
+   * The probe creates a transient VideoSample + VideoFrame pair to read
+   * codec-bitstream colorSpace metadata; both must be released regardless
+   * of which one (if any) fails to close.
+   *
+   * Errors from individual close() calls are swallowed (they typically
+   * mean "already closed"). The function never throws.
+   *
+   * @param probeFrame  VideoFrame produced by probeSample.toVideoFrame(),
+   *                    or null if toVideoFrame() was never called / failed.
+   * @param probeSample VideoSample returned by probeSink.getSample(0),
+   *                    or null if getSample resolved with no sample.
+   */
+  closeProbePair(
+    probeFrame: { close(): void } | null,
+    probeSample: { close(): void } | null,
+  ): void {
+    try {
+      if (probeFrame) {
+        try {
+          probeFrame.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    } finally {
+      if (probeSample) {
+        try {
+          probeSample.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    }
+  },
+};
+
 export interface VideoMetadata {
   width: number;
   height: number;
@@ -311,56 +361,41 @@ export class MediabunnyFrameExtractor {
           const probeSink = new VideoSampleSink(this.videoTrack);
           const probeSample = await probeSink.getSample(0);
           if (probeSample) {
-            // CRIT-01: outer try/finally guarantees probeSample.close() runs even if
-            // probeSample.toVideoFrame() or probeFrame.close() throws. The inner
-            // try/finally ensures probeFrame.close() runs if reading colorSpace throws.
+            // CRIT-01: closeProbePair() guarantees probeSample.close() runs even if
+            // probeSample.toVideoFrame() throws or probeFrame.close() throws.
+            let probeFrame: VideoFrame | null = null;
             try {
-              let probeFrame: VideoFrame | null = null;
-              try {
-                probeFrame = probeSample.toVideoFrame();
-                const cs = probeFrame.colorSpace;
-                if (cs) {
-                  const transfer = cs.transfer ?? undefined;
-                  const primaries = cs.primaries ?? undefined;
-                  const transferName = transfer as string | undefined;
-                  const primariesName = primaries as string | undefined;
-                  if (transfer || primaries || cs.matrix || (cs.fullRange !== null && cs.fullRange !== undefined)) {
-                    videoColorSpace = {
-                      transfer,
-                      primaries,
-                      matrix: cs.matrix ?? undefined,
-                      fullRange: cs.fullRange ?? undefined,
-                    };
-                  }
-                  if (
-                    transferName === 'pq' ||
-                    transferName === 'hlg' ||
-                    transferName === 'smpte2084' ||
-                    transferName === 'arib-std-b67' ||
-                    primariesName === 'bt2020' ||
-                    primariesName === 'smpte432'
-                  ) {
-                    isHDR = true;
-                    log.info(
-                      `HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`,
-                    );
-                  }
+              probeFrame = probeSample.toVideoFrame();
+              const cs = probeFrame.colorSpace;
+              if (cs) {
+                const transfer = cs.transfer ?? undefined;
+                const primaries = cs.primaries ?? undefined;
+                const transferName = transfer as string | undefined;
+                const primariesName = primaries as string | undefined;
+                if (transfer || primaries || cs.matrix || (cs.fullRange !== null && cs.fullRange !== undefined)) {
+                  videoColorSpace = {
+                    transfer,
+                    primaries,
+                    matrix: cs.matrix ?? undefined,
+                    fullRange: cs.fullRange ?? undefined,
+                  };
                 }
-              } finally {
-                if (probeFrame) {
-                  try {
-                    probeFrame.close();
-                  } catch {
-                    /* already closed */
-                  }
+                if (
+                  transferName === 'pq' ||
+                  transferName === 'hlg' ||
+                  transferName === 'smpte2084' ||
+                  transferName === 'arib-std-b67' ||
+                  primariesName === 'bt2020' ||
+                  primariesName === 'smpte432'
+                ) {
+                  isHDR = true;
+                  log.info(
+                    `HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`,
+                  );
                 }
               }
             } finally {
-              try {
-                probeSample.close();
-              } catch {
-                /* already closed */
-              }
+              _probeInternals.closeProbePair(probeFrame, probeSample);
             }
           }
         } catch (e) {
