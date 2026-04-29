@@ -8,6 +8,7 @@
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { __test__ } from './renderWorker.worker';
+import { Renderer } from '../render/Renderer';
 import {
   DATA_TYPE_CODES,
   TRANSFER_FUNCTION_CODES,
@@ -1003,6 +1004,122 @@ describe('renderWorker', () => {
       expect(sentMsg.error).toBe('GL context lost');
 
       postMessageSpy.mockRestore();
+    });
+  });
+
+  // ==========================================================================
+  // Async init flow (MED-55 P-pre-2)
+  // ==========================================================================
+
+  describe('async init via createRenderer', () => {
+    let postMessageSpy: ReturnType<typeof vi.spyOn>;
+    let initializeSpy: ReturnType<typeof vi.spyOn>;
+    let initAsyncSpy: ReturnType<typeof vi.spyOn>;
+    let getHDROutputModeSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      postMessageSpy = vi.spyOn(self, 'postMessage').mockImplementation(() => {});
+      // Stub Renderer methods so the test does not require a real WebGL2 context.
+      initializeSpy = vi.spyOn(Renderer.prototype, 'initialize').mockImplementation(() => {});
+      getHDROutputModeSpy = vi.spyOn(Renderer.prototype, 'getHDROutputMode').mockReturnValue('sdr');
+    });
+
+    afterEach(() => {
+      postMessageSpy.mockRestore();
+      initializeSpy.mockRestore();
+      initAsyncSpy?.mockRestore();
+      getHDROutputModeSpy.mockRestore();
+      __test__.setRenderer(null);
+    });
+
+    it('RW-INIT-ASYNC-001: init handler awaits initAsync before posting initResult', async () => {
+      // Build a Promise we control to gate initAsync resolution.
+      let resolveInit: () => void = () => {};
+      const initAsyncGate = new Promise<void>((r) => {
+        resolveInit = r;
+      });
+      initAsyncSpy = vi.spyOn(Renderer.prototype, 'initAsync').mockImplementation(() => initAsyncGate);
+
+      // A minimal OffscreenCanvas-like stub: only addEventListener is invoked
+      // before initResult is posted, and only after a successful await.
+      const fakeCanvas = {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as OffscreenCanvas;
+
+      // Trigger the init message — this kicks off the async IIFE inside the
+      // worker but does NOT block this test thread.
+      handleMessage({
+        type: 'init',
+        canvas: fakeCanvas,
+        capabilities: undefined,
+      } as RenderWorkerMessage);
+
+      // Allow microtasks to drain. initAsync has not resolved yet, so
+      // initResult MUST NOT have been posted.
+      await Promise.resolve();
+      await Promise.resolve();
+      const initResultsBefore = postMessageSpy.mock.calls.filter(
+        (call: unknown[]) => (call[0] as Record<string, unknown>)?.type === 'initResult',
+      );
+      expect(initResultsBefore).toHaveLength(0);
+      // Async listeners on the canvas should also not yet be wired (those are
+      // attached after the await in the handler).
+      expect(
+        (fakeCanvas as unknown as { addEventListener: ReturnType<typeof vi.fn> }).addEventListener,
+      ).not.toHaveBeenCalled();
+
+      // Resolve initAsync; now the handler should proceed and post initResult.
+      resolveInit();
+      // Wait for the IIFE to settle.
+      await initAsyncGate;
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const initResultsAfter = postMessageSpy.mock.calls.filter(
+        (call: unknown[]) => (call[0] as Record<string, unknown>)?.type === 'initResult',
+      );
+      expect(initResultsAfter).toHaveLength(1);
+      const sentMsg = initResultsAfter[0]![0] as { success: boolean; hdrMode?: string };
+      expect(sentMsg.success).toBe(true);
+      expect(sentMsg.hdrMode).toBe('sdr');
+      // Context-loss listeners should now be wired.
+      expect(
+        (fakeCanvas as unknown as { addEventListener: ReturnType<typeof vi.fn> }).addEventListener,
+      ).toHaveBeenCalled();
+      // The renderer should now be assigned.
+      expect(__test__.getRenderer()).not.toBeNull();
+    });
+
+    it('RW-INIT-ASYNC-002: initAsync rejection produces success:false initResult', async () => {
+      const initError = new Error('shader compilation timed out');
+      initAsyncSpy = vi.spyOn(Renderer.prototype, 'initAsync').mockRejectedValue(initError);
+
+      const fakeCanvas = {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as OffscreenCanvas;
+
+      handleMessage({
+        type: 'init',
+        canvas: fakeCanvas,
+        capabilities: undefined,
+      } as RenderWorkerMessage);
+
+      // Drain microtasks so the rejection propagates through the IIFE.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const initResults = postMessageSpy.mock.calls.filter(
+        (call: unknown[]) => (call[0] as Record<string, unknown>)?.type === 'initResult',
+      );
+      expect(initResults).toHaveLength(1);
+      const sentMsg = initResults[0]![0] as { success: boolean; error?: string };
+      expect(sentMsg.success).toBe(false);
+      expect(sentMsg.error).toBe('shader compilation timed out');
+      // Renderer should NOT have been assigned on the failure path.
+      expect(__test__.getRenderer()).toBeNull();
     });
   });
 });

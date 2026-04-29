@@ -13,6 +13,8 @@
  */
 
 import { Renderer } from '../render/Renderer';
+import { createRenderer } from '../render/createRenderer';
+import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
 import { IPImage } from '../core/image/Image';
 import type { RenderWorkerMessage, RenderWorkerResult, RenderHDRMessage } from '../render/renderWorker.messages';
 import {
@@ -236,33 +238,49 @@ function handleMessage(msg: RenderWorkerMessage): void {
 
   switch (msg.type) {
     case 'init': {
-      try {
-        canvas = msg.canvas;
-        renderer = new Renderer();
-        // Renderer.initialize accepts HTMLCanvasElement | OffscreenCanvas
-        renderer.initialize(canvas as unknown as HTMLCanvasElement, msg.capabilities);
+      // MED-55 P-pre-2: route Renderer construction through createRenderer()
+      // factory + async initAsync() so backend selection (WebGL2 vs WebGPU)
+      // happens at one capability gate. Today the factory always falls back
+      // to WebGL2 in this worker because no WebGPU stages are registered;
+      // the async gate is preserved for symmetry with ViewerGLRenderer and
+      // for KHR_parallel_shader_compile completion.
+      void (async () => {
+        try {
+          canvas = msg.canvas;
+          // createRenderer returns RendererBackend; we cast to Renderer here
+          // because the worker calls Renderer-only methods (setViewport,
+          // setLUT variants, setColorAdjustments specifics, etc.). The cast
+          // is safe today because createRenderer falls back to Renderer
+          // (WebGL2) in this worker context. Phase 4a will widen
+          // RendererBackend to remove this cast.
+          const _renderer = createRenderer(msg.capabilities ?? DEFAULT_CAPABILITIES) as Renderer;
+          // Renderer.initialize accepts HTMLCanvasElement | OffscreenCanvas
+          _renderer.initialize(canvas as unknown as HTMLCanvasElement, msg.capabilities);
+          await _renderer.initAsync();
 
-        // Listen for context loss/restore on the OffscreenCanvas
-        canvas.addEventListener('webglcontextlost', (e) => {
-          e.preventDefault();
-          isContextLost = true;
-          post({ type: 'contextLost' });
-        });
-        canvas.addEventListener('webglcontextrestored', () => {
-          isContextLost = false;
-          post({ type: 'contextRestored' });
-        });
+          // Listen for context loss/restore on the OffscreenCanvas
+          canvas.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            isContextLost = true;
+            post({ type: 'contextLost' });
+          });
+          canvas.addEventListener('webglcontextrestored', () => {
+            isContextLost = false;
+            post({ type: 'contextRestored' });
+          });
 
-        const hdrMode = renderer.getHDROutputMode();
-        post({ type: 'initResult', success: true, hdrMode });
-      } catch (error) {
-        log.error('Initialization failed:', error);
-        post({
-          type: 'initResult',
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+          renderer = _renderer;
+          const hdrMode = _renderer.getHDROutputMode();
+          post({ type: 'initResult', success: true, hdrMode });
+        } catch (error) {
+          log.error('Initialization failed:', error);
+          post({
+            type: 'initResult',
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
       break;
     }
 
