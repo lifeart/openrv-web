@@ -2,12 +2,13 @@
  * Blend Modes Unit Tests
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   BLEND_MODES,
   BLEND_MODE_LABELS,
   compositeImageData,
   compositeMultipleLayers,
+  type BlendMode,
   type CompositeLayer,
   stackCompositeToBlendMode,
   stackCompositeToBlendModeWithInfo,
@@ -1127,6 +1128,115 @@ describe('BlendModes', () => {
       // Layer3 is invisible, so layer2 (next from top) should be used
       expect(result.data[0]).toBe(20);
       expect(result.data[1]).toBe(20);
+    });
+  });
+
+  // HIGH-25: 'topmost' is a stack-level blend mode set uniformly on all layers.
+  // The implementation checks layers[0] only (fast path, correct under the
+  // uniformity invariant). These tests pin the contract:
+  //   1. Real callers (e.g. StackGroupNode) set the mode uniformly across all
+  //      layers — verified indirectly via the canonical "all layers topmost"
+  //      shape used in BLD-TOPMOST-003/004.
+  //   2. If a future bug sets the mode divergently per-layer, the invariant
+  //      is detected in dev mode via console.warn (no behavior change in
+  //      production hot path).
+  //   3. Rendering still uses layers[0] for the topmost branch decision,
+  //      and produces the documented "last visible layer" output.
+  describe('topmost blend mode invariant (HIGH-25)', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    function makeLayer(value: number, blendMode: BlendMode): CompositeLayer {
+      const data = new ImageData(2, 2);
+      for (let i = 0; i < data.data.length; i += 4) {
+        data.data[i] = value;
+        data.data[i + 1] = value;
+        data.data[i + 2] = value;
+        data.data[i + 3] = 255;
+      }
+      return { imageData: data, blendMode, opacity: 1, visible: true };
+    }
+
+    it('BLD-TOPMOST-INV-001: uniform topmost across all layers triggers no warning', () => {
+      const layers: CompositeLayer[] = [
+        makeLayer(10, 'topmost'),
+        makeLayer(20, 'topmost'),
+        makeLayer(30, 'topmost'),
+      ];
+      compositeMultipleLayers(layers, 2, 2);
+      // No warning when the invariant holds (all layers share 'topmost').
+      const warnCalls = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('topmost'),
+      );
+      expect(warnCalls.length).toBe(0);
+    });
+
+    it('BLD-TOPMOST-INV-002: layers[0]=topmost with mixed modes warns in dev mode', () => {
+      // import.meta.env.DEV is true under Vitest, so the dev-mode invariant
+      // check fires. This is the "future-bug" scenario: caller set topmost on
+      // layers[0] but a different mode on layers[1].
+      const layers: CompositeLayer[] = [
+        makeLayer(10, 'topmost'),
+        makeLayer(20, 'normal'), // divergent
+        makeLayer(30, 'topmost'),
+      ];
+      compositeMultipleLayers(layers, 2, 2);
+      const warnCalls = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('topmost'),
+      );
+      expect(warnCalls.length).toBeGreaterThan(0);
+      // The warning should include the offending mode list for debuggability.
+      const firstWarn = warnCalls[0]!;
+      expect(firstWarn[1]).toEqual(['topmost', 'normal', 'topmost']);
+    });
+
+    it('BLD-TOPMOST-INV-003: non-first layer topmost while layers[0] != topmost warns in dev mode', () => {
+      // Symmetric divergence: a later layer carries 'topmost' but layers[0]
+      // does not. The fast-path check at layers[0] would miss this; the
+      // dev-mode symmetric guard surfaces it.
+      const layers: CompositeLayer[] = [
+        makeLayer(10, 'normal'),
+        makeLayer(20, 'topmost'), // divergent on a non-first layer
+      ];
+      compositeMultipleLayers(layers, 2, 2);
+      const warnCalls = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('topmost'),
+      );
+      expect(warnCalls.length).toBeGreaterThan(0);
+    });
+
+    it('BLD-TOPMOST-INV-004: rendering still uses layers[0] decision when the invariant holds', () => {
+      // Pin the layers[0]-only check produces the correct output for the
+      // canonical (uniform) topmost case: the last visible layer wins.
+      const layers: CompositeLayer[] = [
+        makeLayer(10, 'topmost'),
+        makeLayer(20, 'topmost'),
+        makeLayer(30, 'topmost'),
+      ];
+      const result = compositeMultipleLayers(layers, 2, 2);
+      expect(result.data[0]).toBe(30); // last visible (topmost) layer wins
+      expect(result.data[1]).toBe(30);
+      expect(result.data[2]).toBe(30);
+    });
+
+    it('BLD-TOPMOST-INV-005: divergent modes still take the topmost branch when layers[0]=topmost', () => {
+      // The dev-mode warning is informational only — it does not change
+      // rendering behavior. Confirm the topmost branch still runs (last
+      // visible layer wins), so production behavior is unaffected.
+      const layers: CompositeLayer[] = [
+        makeLayer(10, 'topmost'),
+        makeLayer(20, 'normal'), // divergent
+        makeLayer(30, 'topmost'),
+      ];
+      const result = compositeMultipleLayers(layers, 2, 2);
+      expect(result.data[0]).toBe(30); // last visible layer wins (topmost branch)
     });
   });
 });

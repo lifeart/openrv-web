@@ -291,8 +291,27 @@ export function compositeMultipleLayers(
     result.data[i + 3] = 0;
   }
 
-  // Topmost: return only the last visible layer (topmost in the stack)
+  // Topmost: return only the last visible layer (topmost in the stack).
+  //
+  // Invariant: 'topmost' is a stack-level blend mode set uniformly on all
+  // layers — checking layers[0] is correct as long as all layers share the
+  // mode. If any layer carries 'topmost' but some layer disagrees, that is
+  // a wiring bug in the caller (the stack-level setter should propagate
+  // uniformly). In dev builds we surface this with a console.warn so it
+  // does not silently produce surprising behavior; production keeps the
+  // fast layers[0] check to avoid extra work in the hot path.
   if (layers.length > 0 && layers[0]?.blendMode === 'topmost') {
+    if (import.meta.env?.DEV) {
+      const allTopmost = layers.every((l) => l.blendMode === 'topmost');
+      if (!allTopmost) {
+        const modes = layers.map((l) => l.blendMode);
+        console.warn(
+          '[BlendModes] compositeMultipleLayers: topmost is a stack-level mode and must be ' +
+            'uniform across all layers, but received mixed modes:',
+          modes,
+        );
+      }
+    }
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i]!;
       if (layer.visible && layer.opacity > 0) {
@@ -306,6 +325,21 @@ export function compositeMultipleLayers(
     }
     // No visible layers
     return result;
+  }
+
+  // Symmetric guard: if a non-first layer carries 'topmost' while layers[0]
+  // does not, callers have set the mode divergently — warn in dev so the
+  // bug surfaces (rendering still proceeds with the per-layer modes below).
+  if (import.meta.env?.DEV && layers.length > 0 && layers[0]?.blendMode !== 'topmost') {
+    if (layers.some((l) => l.blendMode === 'topmost')) {
+      const modes = layers.map((l) => l.blendMode);
+      console.warn(
+        '[BlendModes] compositeMultipleLayers: a non-first layer has blendMode=topmost ' +
+          "while layers[0] does not — topmost is a stack-level mode and must be uniform. " +
+          'Falling through to per-layer compositing:',
+        modes,
+      );
+    }
   }
 
   // Composite each visible layer
