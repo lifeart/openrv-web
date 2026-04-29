@@ -176,8 +176,18 @@ The current codebase has a **partial foundation** for tone mapping:
 #### 2. HDR Display Output -- IMPLEMENTED
 - **Implemented**: HLG and PQ output modes for HDR displays (`src/render/WebGPUHDRBlit.ts`, `src/render/Canvas2DHDRBlit.ts`)
 - **Implemented**: Display P3 / wide color gamut detection (`src/color/DisplayCapabilities.ts`)
-- **Implemented**: Browser HDR canvas support detection and WebGPU HDR backend (`src/render/WebGPUBackend.ts`)
+- **Implemented**: Browser HDR canvas support detection (`src/render/WebGPUBackend.ts`)
+- **Experimental (not yet user-facing)**: WebGPU rendering backend (`src/render/WebGPUBackend.ts`, `src/render/createRenderer.ts`). The full color-correction / tone-mapping pipeline ships only on the WebGL2 path today; production renderer construction in `ViewerGLRenderer.ts` and `renderWorker.worker.ts` calls `new Renderer()` directly and does not consult `createRenderer`. Phase 4 stage WGSL registration into `WebGPUShaderPipeline` is intentionally pending (see "WebGPU Tone-Mapping Operator Parity" below).
 - **Implemented**: Canvas2D HDR fallback path (srgb-linear, rec2100-hlg, float16)
+
+##### WebGPU Tone-Mapping Operator Parity (MED-55)
+
+Although the WebGPU backend is not yet wired into production, its tone-mapping shaders are held to a runtime CPU/WebGL2/WebGPU equivalence guarantee:
+
+- All eight operators (Reinhard, Filmic, ACES, AgX, PBR Neutral, GT, ACES Hill, Drago) are defined in a single source — `src/render/webgpu/shaders/common.wgsl` — and stage shaders import them via the `WebGPUShaderPipeline` prepend contract (`WebGPUShaderPipeline.ts:521`).
+- Per-operator runtime parity tests at `src/render/__gpu__/tonemap-webgpu.gpu-test.ts` exercise each operator against the CPU reference at `hdrHeadroom = 1` (SDR identity) and `hdrHeadroom = 3` (extended HDR), within `<= 1/256` tolerance.
+- Tests skip gracefully when the environment lacks WebGPU or cannot read pixels back through `copyTextureToBuffer` (gated by a one-shot canary).
+- A follow-up note remains: when Phase 4 wires stage WGSL registration via `registerStage`, the orchestrator must strip per-stage `@vertex fn vs` declarations to avoid duplicate-symbol errors with the prepended common+vertex source. Tracked separately; not blocking MED-55 closure.
 
 #### 3. Luminance Visualization Modes
 - **Missing**: HSV visualization
