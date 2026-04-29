@@ -70,6 +70,8 @@ Browsers restrict audio playback until a user interacts with the page. The Audio
 2. If the AudioContext is suspended due to autoplay policy, it waits for a user gesture
 3. Audio starts automatically once the browser policy is satisfied
 
+The `isPlaying` flag and the `stateChanged('playing')` event are set synchronously the moment `play()` is called, *before* the AudioContext resume completes. This ensures the UI play button reflects the playing state immediately on the first user gesture, with no flicker or perceived lag while the AudioContext warms up. If the user pauses during the resume window, an internal epoch counter detects the race and aborts the in-flight start cleanly.
+
 Playback continues without audio if audio loading fails entirely. Video frames still display correctly.
 
 ## Page Visibility
