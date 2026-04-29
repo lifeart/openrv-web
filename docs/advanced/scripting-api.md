@@ -309,6 +309,52 @@ openrv.color.resetCurves();
 
 Curve points must have `x` and `y` values in the [0, 1] range. At least two points are required per channel.
 
+### LUT Pipeline Output Color Space Declaration (MED-51)
+
+Each LUT pipeline stage can declare what color space its output is encoded in. This is metadata only -- the GPU shader still runs the LUT math; the declaration tells the renderer/scopes what the post-LUT pixels actually represent.
+
+```javascript
+// Display LUT outputs sRGB (typical PQ -> sRGB Display LUT)
+openrv.color.setLUTStageColorPrimaries('display', 'bt709');
+openrv.color.setLUTStageTransferFunction('display', 'srgb');
+
+// Look LUT outputs Rec.709 primaries, transfer unchanged
+openrv.color.setLUTStageColorPrimaries('look', 'bt709');
+
+// Read a stage's current declaration
+const primaries = openrv.color.getLUTStageColorPrimaries('display');
+const transfer = openrv.color.getLUTStageTransferFunction('display');
+
+// Clear (return to "preserve input")
+openrv.color.setLUTStageColorPrimaries('display', null);
+openrv.color.setLUTStageTransferFunction('display', null);
+```
+
+| Stage      | Scope        | Notes                                |
+|------------|--------------|--------------------------------------|
+| `precache` | Per-source   | Rarely changes color space; allowed but uncommon. |
+| `file`     | Per-source   | Input transform (e.g. AP1 -> Rec.709). |
+| `look`     | Per-source   | Creative grade. Often preserves working space. |
+| `display`  | Session-wide | Display calibration. Most common place to declare output. |
+
+Valid `primaries` values: `'bt709'`, `'bt2020'`, `'p3'`, or `null` (Auto).
+Valid `transfer` values: `'srgb'`, `'hlg'`, `'pq'`, `'smpte240m'`, `'linear'`, or `null`.
+
+The active source is resolved internally; multi-source addressing is not yet exposed via this API.
+
+#### Linter (Opt-In)
+
+The `LUTPipelineLinter` detects implausible declarations:
+
+```javascript
+import { lintLUTPipeline } from 'openrv-web/color/pipeline/LUTPipelineLinter';
+// ...
+const reports = lintLUTPipeline(pipeline, sourceId, currentImage.metadata);
+for (const r of reports) console.warn(r.message);
+```
+
+Or use the event-driven `createLUTPipelineLinter(pipeline)` for continuous reports.
+
 ---
 
 ## Marker Management
