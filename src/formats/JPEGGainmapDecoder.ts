@@ -145,19 +145,12 @@ export async function decodeGainmapToFloat32(
   data: Float32Array;
   channels: number;
 }> {
-  // Validate that the gainmap region is within buffer bounds
-  if (info.gainmapOffset + info.gainmapLength > buffer.byteLength) {
-    throw new DecoderError(
-      'JPEG Gainmap',
-      `Gainmap slice exceeds buffer: offset(${info.gainmapOffset}) + length(${info.gainmapLength}) = ${info.gainmapOffset + info.gainmapLength} > buffer length(${buffer.byteLength})`,
-    );
-  }
-  if (info.baseImageOffset + info.baseImageLength > buffer.byteLength) {
-    throw new DecoderError(
-      'JPEG Gainmap',
-      `Base image slice exceeds buffer: offset(${info.baseImageOffset}) + length(${info.baseImageLength}) = ${info.baseImageOffset + info.baseImageLength} > buffer length(${buffer.byteLength})`,
-    );
-  }
+  // Validate that the gainmap and base image regions are within buffer bounds.
+  // Use the shared `ensureMPFRange` helper so error UX (NaN/negative/OOB) is
+  // unified with the parser path; previously the inline check formatted offsets
+  // in decimal while the parser used hex.
+  ensureMPFRange(info.gainmapOffset, info.gainmapLength, buffer.byteLength, 'gainmap slice (decode)');
+  ensureMPFRange(info.baseImageOffset, info.baseImageLength, buffer.byteLength, 'base image slice (decode)');
 
   // Slice out the base JPEG and gainmap JPEG blobs
   // For the first image (offset 0), use gainmap offset as the end boundary.
@@ -483,7 +476,17 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
 
     if (tag === 0xb001) {
       // NumberOfImages tag: type=LONG, count=1
-      // The value field contains the actual number of images
+      // The value field contains the actual number of images.
+      // MPF practically caps the image count at uint16 range; values larger
+      // than 65535 are either corrupt or hostile (e.g., a uint32 wrap into
+      // the giga-range that would later survive `ensureMPFRange` only if the
+      // file were also massive). Short-circuit with a descriptive error.
+      if (valueOffset > 65535) {
+        throw new DecoderError(
+          'JPEG Gainmap',
+          `MPF: NumberOfImages (tag 0xB001) value ${valueOffset} exceeds sanity cap 65535`,
+        );
+      }
       mpEntryCount = valueOffset;
     }
 
@@ -673,6 +676,16 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
 
   return null;
 }
+
+/**
+ * Test-only export of internal helpers. Not part of the public API — consumers
+ * should not import from this namespace; it exists so unit tests can directly
+ * exercise small internal helpers like `ensureMPFRange` without round-tripping
+ * through crafted MPF buffers for every branch.
+ */
+export const _internal = {
+  ensureMPFRange,
+};
 
 /**
  * Parse headroom value from XMP text content.

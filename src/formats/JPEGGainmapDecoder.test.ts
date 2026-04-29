@@ -8,6 +8,7 @@ import {
   parseGainmapJPEG,
   extractJPEGOrientation,
   decodeGainmapToFloat32,
+  _internal,
   type GainmapInfo,
 } from './JPEGGainmapDecoder';
 import { DecoderError } from '../core/errors';
@@ -361,7 +362,7 @@ describe('JPEGGainmapDecoder', () => {
 
       // Optionally write MP entries at the requested offset
       if (opts.mpEntries) {
-        const mpEntriesAbs = mpfDataStart + (opts.mpEntriesOffsetOverride ?? parts.length - mpfDataStart);
+        const mpEntriesAbs = mpfDataStart + (opts.mpEntriesOffsetOverride ?? (parts.length - mpfDataStart));
         while (parts.length < mpEntriesAbs) parts.push(0x00);
         for (const me of opts.mpEntries) {
           // attributes(4)
@@ -441,6 +442,9 @@ describe('JPEGGainmapDecoder', () => {
     it('throws descriptive error when MPEntry table is partially truncated', () => {
       // MP entries should fit at offset X with mpEntryCount=2 (32 bytes) but the
       // buffer is sliced short so only ~16 bytes of MPEntry data remain.
+      // Set mpEntriesOffsetOverride explicitly so the IFD valueOffset (38) and
+      // the actual MP-entries write position match — otherwise the helper falls
+      // back to `parts.length - mpfDataStart` and the two could drift out of sync.
       const buf = buildCustomMPF({
         ifdOffset: 8,
         ifdEntries: [
@@ -451,6 +455,7 @@ describe('JPEGGainmapDecoder', () => {
           { size: 100, offset: 0 },
           { size: 100, offset: 100 },
         ],
+        mpEntriesOffsetOverride: 38,
         // Truncate to cut the second MPEntry in half
         truncateAt: 60,
       });
@@ -569,7 +574,10 @@ describe('JPEGGainmapDecoder', () => {
         headroom: 2.0,
       };
       await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(DecoderError);
-      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/Gainmap slice exceeds buffer/);
+      // Error UX is unified with the parser path via the shared `ensureMPFRange`
+      // helper — the message includes the call-site context tag.
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/gainmap slice \(decode\)/);
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/exceeds buffer length/);
     });
 
     it('throws DecoderError when base image slice exceeds buffer', async () => {
@@ -582,7 +590,152 @@ describe('JPEGGainmapDecoder', () => {
         headroom: 2.0,
       };
       await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(DecoderError);
-      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/Base image slice exceeds buffer/);
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/base image slice \(decode\)/);
+      await expect(decodeGainmapToFloat32(smallBuffer, info)).rejects.toThrow(/exceeds buffer length/);
+    });
+  });
+
+  describe('ensureMPFRange (internal helper)', () => {
+    // Direct unit tests against the internal helper exposed via `_internal`.
+    // Covers the NaN/Infinity/negative branches that are otherwise hard to
+    // exercise via crafted MPF buffers (uint32 reads can't yield NaN, and
+    // negatives only appear when callers pass externally-derived values).
+    const ensureMPFRange = _internal.ensureMPFRange;
+    const BUF_LEN = 1024;
+
+    it('does not throw when [start, start+size) fits inside buffer', () => {
+      expect(() => ensureMPFRange(0, 0, BUF_LEN, 'zero range')).not.toThrow();
+      expect(() => ensureMPFRange(0, BUF_LEN, BUF_LEN, 'exact fit')).not.toThrow();
+      expect(() => ensureMPFRange(100, 50, BUF_LEN, 'mid-buffer')).not.toThrow();
+      expect(() => ensureMPFRange(BUF_LEN, 0, BUF_LEN, 'end-of-buffer with zero size')).not.toThrow();
+    });
+
+    it('throws DecoderError when start is NaN', () => {
+      expect(() => ensureMPFRange(NaN, 10, BUF_LEN, 'NaN start')).toThrow(DecoderError);
+      expect(() => ensureMPFRange(NaN, 10, BUF_LEN, 'NaN start')).toThrow(/non-finite/);
+      expect(() => ensureMPFRange(NaN, 10, BUF_LEN, 'NaN start')).toThrow(/NaN start/);
+    });
+
+    it('throws DecoderError when size is NaN', () => {
+      expect(() => ensureMPFRange(0, NaN, BUF_LEN, 'NaN size')).toThrow(DecoderError);
+      expect(() => ensureMPFRange(0, NaN, BUF_LEN, 'NaN size')).toThrow(/non-finite/);
+    });
+
+    it('throws DecoderError when start is +Infinity', () => {
+      expect(() => ensureMPFRange(Infinity, 10, BUF_LEN, 'Infinity start')).toThrow(DecoderError);
+      expect(() => ensureMPFRange(Infinity, 10, BUF_LEN, 'Infinity start')).toThrow(/non-finite/);
+    });
+
+    it('throws DecoderError when size is -Infinity', () => {
+      expect(() => ensureMPFRange(0, -Infinity, BUF_LEN, 'neg-Infinity size')).toThrow(DecoderError);
+      expect(() => ensureMPFRange(0, -Infinity, BUF_LEN, 'neg-Infinity size')).toThrow(/non-finite/);
+    });
+
+    it('throws DecoderError when start is negative', () => {
+      expect(() => ensureMPFRange(-1, 10, BUF_LEN, 'negative start')).toThrow(DecoderError);
+      expect(() => ensureMPFRange(-1, 10, BUF_LEN, 'negative start')).toThrow(/negative/);
+      expect(() => ensureMPFRange(-1, 10, BUF_LEN, 'negative start')).toThrow(/negative start/);
+    });
+
+    it('throws DecoderError when size is negative', () => {
+      expect(() => ensureMPFRange(10, -5, BUF_LEN, 'negative size')).toThrow(DecoderError);
+      expect(() => ensureMPFRange(10, -5, BUF_LEN, 'negative size')).toThrow(/negative/);
+    });
+
+    it('throws DecoderError when start + size exceeds buffer length', () => {
+      expect(() => ensureMPFRange(BUF_LEN - 10, 100, BUF_LEN, 'oob tail')).toThrow(DecoderError);
+      expect(() => ensureMPFRange(BUF_LEN - 10, 100, BUF_LEN, 'oob tail')).toThrow(/exceeds buffer length/);
+      expect(() => ensureMPFRange(BUF_LEN - 10, 100, BUF_LEN, 'oob tail')).toThrow(/oob tail/);
+    });
+
+    it('throws DecoderError with hex-formatted offsets for OOB ranges', () => {
+      // Verify the message uses 0x... format consistently — this is the unified
+      // UX that decodeGainmapToFloat32 now shares via this helper.
+      expect(() => ensureMPFRange(0x100, 0x10000, 0x100, 'hex format')).toThrow(/0x100/);
+      expect(() => ensureMPFRange(0x100, 0x10000, 0x100, 'hex format')).toThrow(/0x10000/);
+    });
+
+    it('includes the context string verbatim in the error message', () => {
+      // Each call site passes a unique context tag — the helper must surface
+      // it so logs can disambiguate which structural element overflowed.
+      const ctx = 'IFD entry #7 valueOffset for tag 0xCAFE';
+      let err: unknown;
+      try {
+        ensureMPFRange(-1, 10, BUF_LEN, ctx);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      expect((err as Error).message).toContain(ctx);
+    });
+  });
+
+  describe('mpEntryCount sanity cap (round-2 polish)', () => {
+    /**
+     * Mirror of the buildCustomMPF helper so this block can construct a
+     * pathological NumberOfImages (tag 0xB001) value. Kept inline to avoid
+     * leaking helpers into outer scope.
+     */
+    function buildMPFWithNumberOfImages(numImages: number): ArrayBuffer {
+      const parts: number[] = [];
+      parts.push(0xff, 0xd8); // SOI
+      parts.push(0xff, 0xe2); // APP2
+      const lenIdx = parts.length;
+      parts.push(0x00, 0x00); // length placeholder
+      parts.push(0x4d, 0x50, 0x46, 0x00); // 'MPF\0'
+      parts.push(0x49, 0x49); // 'II'
+      parts.push(0x2a, 0x00); // TIFF magic LE
+      parts.push(0x08, 0x00, 0x00, 0x00); // IFD offset = 8
+      // IFD: 1 entry
+      parts.push(0x01, 0x00);
+      // Entry: tag 0xB001 (NumberOfImages), type LONG, count 1, value=numImages
+      parts.push(0x01, 0xb0);
+      parts.push(0x04, 0x00);
+      parts.push(0x01, 0x00, 0x00, 0x00);
+      parts.push(
+        numImages & 0xff,
+        (numImages >>> 8) & 0xff,
+        (numImages >>> 16) & 0xff,
+        (numImages >>> 24) & 0xff,
+      );
+      // Set APP2 segment length
+      const segLen = parts.length - lenIdx;
+      parts[lenIdx] = (segLen >> 8) & 0xff;
+      parts[lenIdx + 1] = segLen & 0xff;
+      parts.push(0xff, 0xd9); // EOI
+
+      const buf = new ArrayBuffer(parts.length);
+      const u8 = new Uint8Array(buf);
+      for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
+      return buf;
+    }
+
+    it('throws DecoderError when NumberOfImages exceeds 65535 sanity cap', () => {
+      const buf = buildMPFWithNumberOfImages(0x10_0000); // 1,048,576 — well above 65535
+      let err: unknown;
+      try {
+        parseGainmapJPEG(buf);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(DecoderError);
+      expect((err as Error).message).toMatch(/NumberOfImages/);
+      expect((err as Error).message).toMatch(/65535/);
+    });
+
+    it('throws DecoderError when NumberOfImages is 0xFFFFFFFF (uint32 max)', () => {
+      const buf = buildMPFWithNumberOfImages(0xffffffff);
+      expect(() => parseGainmapJPEG(buf)).toThrow(DecoderError);
+      expect(() => parseGainmapJPEG(buf)).toThrow(/65535/);
+    });
+
+    it('accepts NumberOfImages at the cap (65535)', () => {
+      // 65535 is the max accepted value — it shouldn't trip the sanity check.
+      // The parser will then fail later when it can't find a valid MPEntry table,
+      // returning null rather than throwing — that's the documented graceful path.
+      const buf = buildMPFWithNumberOfImages(65535);
+      // Should not throw the sanity-cap error; may return null (no MPEntry table).
+      expect(() => parseGainmapJPEG(buf)).not.toThrow(/65535/);
     });
   });
 });
