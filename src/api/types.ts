@@ -19,6 +19,7 @@ import type { DisplayColorState } from '../color/DisplayTransfer';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { OCIOState } from '../color/OCIOConfig';
 import type { PixelProbeState, SampleSize, SourceMode } from '../ui/components/PixelProbe';
+import type { ColorPrimaries, TransferFunction } from '../core/image/Image';
 
 /**
  * Minimal viewer interface required by the API layer.
@@ -94,6 +95,42 @@ export interface LUTProvider {
   getLUT(): LUT | null;
   setLUTIntensity(intensity: number): void;
   getLUTIntensity(): number;
+}
+
+/**
+ * Identifier for the four LUT pipeline stages.
+ *
+ * The stages run in order Pre-Cache -> File -> Look -> Display, with the
+ * first three being per-source and `display` being session-wide.
+ */
+export type LUTPipelineStage = 'precache' | 'file' | 'look' | 'display';
+
+/**
+ * Per-stage output color-space declaration interface.
+ *
+ * Sibling of {@link LUTProvider}: kept as a separate interface so that
+ * implementations supporting only the simple single-LUT API are not forced
+ * to implement the multi-stage surface.
+ *
+ * `null` is the sentinel for "color-space-preserving" (the stage's input
+ * primaries / transfer flow through unchanged). Concrete values declare
+ * what color-space the stage's output is encoded in so downstream stages
+ * (and the renderer) can interpret pixels correctly.
+ */
+export interface LUTPipelineProvider {
+  setLUTStageOutputColorPrimaries(stage: LUTPipelineStage, primaries: ColorPrimaries | null): void;
+  getLUTStageOutputColorPrimaries(stage: LUTPipelineStage): ColorPrimaries | null;
+
+  setLUTStageOutputTransferFunction(stage: LUTPipelineStage, transfer: TransferFunction | null): void;
+  getLUTStageOutputTransferFunction(stage: LUTPipelineStage): TransferFunction | null;
+
+  /**
+   * True iff OCIO is currently active and overriding manual declarations
+   * on the display stage. Optional — not all providers will know about
+   * OCIO. Used by the API surface to log a one-time warning when a manual
+   * declaration would be effectively overridden.
+   */
+  isOCIOActiveForDisplay?(): boolean;
 }
 
 /**

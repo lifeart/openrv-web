@@ -19,6 +19,7 @@ import type {
   CDLProvider,
   CurvesProvider,
   LUTProvider,
+  LUTPipelineProvider,
   ToneMappingProvider,
   DisplayProvider,
   DisplayCapabilitiesProvider,
@@ -55,6 +56,14 @@ export interface OpenRVAPIConfig {
   curvesControl: CurvesProvider;
   /** Optional LUT provider for LUT load/clear/intensity control */
   lutProvider?: LUTProvider;
+  /**
+   * Optional LUT pipeline provider for per-stage output color-space
+   * declarations (Pre-Cache / File / Look / Display).
+   *
+   * Sibling of {@link lutProvider}: kept as a separate field so that hosts
+   * exposing only the simple single-LUT surface can omit it.
+   */
+  lutPipelineProvider?: LUTPipelineProvider;
   /** Optional tone mapping provider for tone mapping state control */
   toneMappingProvider?: ToneMappingProvider;
   /** Optional display profile provider for display color management */
@@ -178,6 +187,7 @@ export class OpenRVAPI {
       config.displayProvider,
       config.displayCapabilitiesProvider,
       config.ocioProvider,
+      config.lutPipelineProvider,
     );
     this.markers = new MarkersAPI(config.session);
     this.events = new EventsAPI(config.session, config.viewer);

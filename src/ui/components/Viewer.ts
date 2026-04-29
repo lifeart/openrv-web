@@ -7,6 +7,7 @@ import { type WipeState, type WipeMode } from '../../core/types/wipe';
 import { type Transform2D } from './TransformControl';
 import { type FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import type { TextureFilterMode } from '../../core/types/filter';
+import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 import type { GamutMappingState } from '../../core/types/effects';
@@ -2609,6 +2610,65 @@ export class Viewer {
 
   getLUTIntensity(): number {
     return this.colorPipeline.getLUTIntensity();
+  }
+
+  // ---------------------------------------------------------------------
+  // LUTPipelineProvider implementation (MED-51)
+  //
+  // Per-stage output color-space declarations. The active source's
+  // identifier is resolved on each call so that switching sources
+  // automatically re-targets writes/reads to the new source's stage state.
+  // ---------------------------------------------------------------------
+
+  setLUTStageOutputColorPrimaries(
+    stage: 'precache' | 'file' | 'look' | 'display',
+    primaries: ColorPrimaries | null,
+  ): void {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') {
+      pipe.setDisplayLUTOutputColorPrimaries(primaries);
+    } else {
+      const sourceId = pipe.getActiveSourceId() ?? 'default';
+      pipe.setStageOutputColorPrimaries(sourceId, stage, primaries);
+    }
+    this.scheduleRender();
+  }
+
+  getLUTStageOutputColorPrimaries(stage: 'precache' | 'file' | 'look' | 'display'): ColorPrimaries | null {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') return pipe.getDisplayLUTOutputColorPrimaries();
+    const sourceId = pipe.getActiveSourceId() ?? 'default';
+    return pipe.getStageOutputColorPrimaries(sourceId, stage);
+  }
+
+  setLUTStageOutputTransferFunction(
+    stage: 'precache' | 'file' | 'look' | 'display',
+    transfer: TransferFunction | null,
+  ): void {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') {
+      pipe.setDisplayLUTOutputTransferFunction(transfer);
+    } else {
+      const sourceId = pipe.getActiveSourceId() ?? 'default';
+      pipe.setStageOutputTransferFunction(sourceId, stage, transfer);
+    }
+    this.scheduleRender();
+  }
+
+  getLUTStageOutputTransferFunction(stage: 'precache' | 'file' | 'look' | 'display'): TransferFunction | null {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') return pipe.getDisplayLUTOutputTransferFunction();
+    const sourceId = pipe.getActiveSourceId() ?? 'default';
+    return pipe.getStageOutputTransferFunction(sourceId, stage);
+  }
+
+  /**
+   * True iff OCIO is currently active and overriding manual declarations
+   * on the display stage. Used by the public API surface to log a one-time
+   * warning when a manual declaration would be effectively overridden.
+   */
+  isOCIOActiveForDisplay(): boolean {
+    return this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
   }
 
   /** Get the multi-point LUT pipeline instance */
