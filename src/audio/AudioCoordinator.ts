@@ -57,10 +57,21 @@ export class AudioCoordinator implements ManagerBase {
    * When true the host MUST mute the HTMLVideoElement to prevent echo.
    *
    * Uses the coordinator's own `_isPlaying` flag and `shouldUseWebAudio()`
-   * rather than `_manager.isPlaying` because `_manager.play()` is async --
-   * if the AudioContext needs to be resumed, `_manager.isPlaying` stays
-   * false until the resume completes, leaving the video element un-muted
-   * and producing double audio.
+   * rather than `_manager.isPlaying` for two reasons:
+   *
+   * 1. The coordinator's `_isPlaying` represents Session-level playback
+   *    intent and is set even before audio has finished loading, so the
+   *    late-load path can route audio correctly when loadFromVideo finally
+   *    completes (see AC-095).
+   * 2. During loop-wrap restart, `AudioBufferSourceNode.onended` fires and
+   *    `_manager.isPlaying` momentarily flips false until the next
+   *    play() is issued -- the coordinator's flag bridges that gap so the
+   *    video element stays muted (see AC-092).
+   *
+   * Note: MED-35 (fixed) eliminated the separate first-gesture
+   * `audioContext.resume()` gap on the manager side -- `_manager.isPlaying`
+   * is now set synchronously in play(). The coordinator flag is kept for
+   * the higher-level reasons above, not as a workaround.
    */
   get isWebAudioActive(): boolean {
     return this._isPlaying && this.shouldUseWebAudio();

@@ -54,9 +54,7 @@ These issues were found and fixed during the audit:
 
 #### ~~MED-30~~: MPF IFD entry count unbounded — **FIXED** (see FIXED_ISSUES.md #376)
 
-#### MED-35: AudioContext resume gap before isPlaying set
-- **File**: `src/audio/AudioPlaybackManager.ts` ~lines 280-308
-- **Status**: Gap exists, but AudioCoordinator already works around it with its own `_isPlaying` flag.
+#### ~~MED-35~~: AudioContext resume gap before isPlaying set — **FIXED** (see FIXED_ISSUES.md #383)
 
 #### ~~MED-39~~: AudioCoordinator dispose doesn't stop playback first — **FIXED** (see FIXED_ISSUES.md #359)
 

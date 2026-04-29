@@ -868,7 +868,10 @@ describe('AudioCoordinator', () => {
   // ======================================================================
 
   describe('double audio prevention', () => {
-    it('AC-090: isWebAudioActive is true synchronously after onPlaybackStarted even when AudioContext is suspended', async () => {
+    it('AC-090: isWebAudioActive AND manager.isPlaying are both true synchronously after onPlaybackStarted even when AudioContext is suspended', async () => {
+      // After MED-35, AudioPlaybackManager.play() sets isPlaying SYNCHRONOUSLY
+      // before awaiting audioContext.resume(). Both flags must converge true
+      // immediately so consumers reading either get the right answer.
       await loadWebAudio();
 
       // After loading, simulate AudioContext becoming suspended (browser policy)
@@ -883,15 +886,16 @@ describe('AudioCoordinator', () => {
 
       coordinator.onPlaybackStarted(1, 24, 1, 1);
 
-      // manager.play() is awaiting audioContext.resume(), so manager.isPlaying is still false
-      expect(coordinator.manager.isPlaying).toBe(false);
-      // But isWebAudioActive must be true to prevent double audio
+      // After MED-35, manager.isPlaying is set synchronously (optimistic).
+      expect(coordinator.manager.isPlaying).toBe(true);
+      // And isWebAudioActive is also true to prevent double audio
       expect(coordinator.isWebAudioActive).toBe(true);
 
       // Clean up — resolve the pending resume
       mockAudioContext.state = 'running';
       resolveResume();
       await vi.waitFor(() => {
+        // After resume completes, the source node has been started
         expect(coordinator.manager.isPlaying).toBe(true);
       });
     });
@@ -998,8 +1002,9 @@ describe('AudioCoordinator', () => {
 
       coordinator.onPlaybackStarted(10, 24, 1, 1);
 
-      // manager hasn't finished resuming, but coordinator must report active
-      expect(coordinator.manager.isPlaying).toBe(false);
+      // After MED-35, manager.isPlaying is set synchronously (optimistic)
+      // even while resume() is still in flight. Both flags converge true.
+      expect(coordinator.manager.isPlaying).toBe(true);
       expect(coordinator.isWebAudioActive).toBe(true);
 
       // After resume completes, still active

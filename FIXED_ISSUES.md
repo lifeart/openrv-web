@@ -5516,3 +5516,36 @@ VideoFrame is a GPU resource; missed close() leaks until process termination.
 - 214 plugin tests passing across 8 files (including 24 in HotReloadManager.test.ts).
 - `npx tsc --noEmit` clean.
 - Stash-revert confirms 4 of 7 new tests fail on pre-fix code (PHOT-022/023/024/025); 3 are contract documentation that pass either way (null/undefined/primitive short-circuit paths).
+
+## Issue #383: MED-35 — AudioContext resume gap before isPlaying set
+
+**Root cause**: `AudioPlaybackManager.play()` (and `playWithVideoFallback()`) awaited `audioContext.resume()` (or `videoElement.play()`) BEFORE setting `_isPlaying = true`. On the first user gesture, `audioContext.resume()` can take 10–30ms to settle, leaving any consumer reading `manager.isPlaying` during that window with stale `false` even though playback was already requested. AudioCoordinator papered over this with its own `_isPlaying` flag, but direct readers of `manager.isPlaying` got the wrong answer briefly.
+
+**Fix** (Option A — optimistic synchronous flag):
+- Set `_isPlaying = true`, `_startOffset`, `_startTime`, and emit `stateChanged('playing')` SYNCHRONOUSLY before awaiting `resume()` / `videoElement.play()`. Setting the time anchors keeps the `currentTime` getter consistent during the resume window.
+- Introduced a `_playEpoch` monotonic counter incremented by `play()`, `pause()`, and (transitively via pause) `dispose()`. The in-flight `play()` snapshots its epoch and aborts cleanly post-await if it has been superseded — preventing a leaked source node when `pause()` runs during the resume gap.
+- After `resume()` resolves, re-anchor `_startTime` to the current AudioContext time so elapsed-time math accounts for any time spent waiting on resume.
+- On error: revert `_isPlaying` to false (only if the epoch hasn't been superseded) and let `handleError()` transition state to `'error'`.
+- Updated AudioCoordinator's `isWebAudioActive` doc-comment: the coordinator's `_isPlaying` is kept (still needed for late-load and loop-wrap gap bridging — see AC-092 / AC-095) but is no longer documented as a workaround for the manager-side resume gap.
+
+**Tests added** (`src/audio/AudioPlaybackManager.test.ts`):
+- `APM-MED35-001`: `isPlaying` is set true SYNCHRONOUSLY before `resume()` resolves.
+- `APM-MED35-002`: `stateChanged` event fires synchronously with `state='playing'` during a hung resume.
+- `APM-MED35-003`: `resume()` rejection reverts `isPlaying` to false and emits an error event.
+- `APM-MED35-004`: `pause()` called during the resume window leaves final state paused, no source node started.
+- `APM-MED35-005`: sequential `play()` / `pause()` / `play()` — final state matches the last call; the second play starts a source node at the requested offset.
+- `APM-MED35-006`: `resume()` rejection on a suspended context does not start a source node.
+- `APM-MED35-007`: happy path (already-running context) — `resume()` is not called, no regression.
+
+Existing AudioCoordinator tests `AC-090` and `AC-094` updated to reflect the new (correct) behavior: `manager.isPlaying` is now `true` synchronously rather than `false` during the resume window.
+
+**Files changed**:
+- `src/audio/AudioPlaybackManager.ts`
+- `src/audio/AudioCoordinator.ts` (doc-comment only)
+- `src/audio/AudioPlaybackManager.test.ts`
+- `src/audio/AudioCoordinator.test.ts`
+
+**Verification**:
+- `npx vitest run src/audio src/core/session`: 3212 tests passing across 78 files.
+- `npx vitest run src/audio/AudioPlaybackManager.test.ts`: 80 tests passing (73 existing + 7 new MED-35).
+- `npx tsc --noEmit` clean.
