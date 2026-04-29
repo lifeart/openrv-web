@@ -205,6 +205,24 @@ Although the WebGPU backend is not yet wired into production, its tone-mapping s
 - Tests skip gracefully when the environment lacks WebGPU or cannot read pixels back through `copyTextureToBuffer` (gated by a one-shot canary).
 - A follow-up note remains: when Phase 4 wires stage WGSL registration via `registerStage`, the orchestrator must strip per-stage `@vertex fn vs` declarations to avoid duplicate-symbol errors with the prepended common+vertex source. Tracked separately; not blocking MED-55 closure.
 
+##### HDR Video Loading and Frame Lifecycle (CRIT-01)
+
+HDR video files (HLG / PQ in MP4, MOV, MKV, WebM, etc.) are loadable end-to-end today. The path is:
+
+1. `FileSourceNode` detects the container by extension and magic bytes; the file is handed to `MediabunnyFrameExtractor`.
+2. On `load()`, the extractor probes the first frame via a `VideoSampleSink` to read codec-bitstream colorspace metadata and sets `metadata.isHDR`, `metadata.transferFunction` (`'hlg'` / `'pq'`), and `metadata.colorPrimaries` (`'bt2020'`).
+3. `SessionMedia.fetchVideoHDRFrame` and `getVideoHDRIPImage` (`src/core/session/SessionMedia.ts:1105-1135`) route HDR playback through `VideoSourceNode.fetchHDRFrame` and a separate HDR LRU cache. Non-HDR videos remain on the SDR `CanvasSink` path.
+4. `VideoSourceNode.fetchHDRFrame` calls `MediabunnyFrameExtractor.getFrameHDR(frame)`, which transfers ownership of the returned `VideoSample` (and the `VideoFrame` produced via `sample.toVideoFrame()`) to the caller. The frame is wrapped in an `IPImage` with `videoFrame?: VideoFrame` populated and `transferFunction` / `colorPrimaries` propagated through the LUT cascade (MED-51).
+5. The renderer's `u_inputTransfer` uniform (`0=sRGB`, `1=HLG`, `2=PQ`) selects the input EOTF in the fragment shader; on browsers that report `DisplayCapabilities.videoFrameTexImage`, the `VideoFrame` is uploaded directly to a WebGL2/WebGPU texture without a CPU pixel copy.
+
+**Frame-lifecycle guarantees (CRIT-01 / Issue #381).** `VideoFrame` and `VideoSample` are GPU-backed resources whose `close()` must be called on every exit path; missed `close()` leaks GPU memory until process termination. The fix at:
+
+- `src/utils/media/MediabunnyFrameExtractor.ts:782-841` — JSDoc on `getFrameHDR` documents the ownership transfer contract with a recommended `try { … } finally { sample.close(); }` call pattern. The note also makes explicit that `sample.toVideoFrame()` produces a `VideoFrame` whose lifecycle is the caller's responsibility (close it directly, or transfer ownership to an `IPImage` whose `close()` will release it).
+- `src/nodes/sources/VideoSourceNode.ts:1058-1113` — `fetchHDRFrame` body is wrapped in `try/catch/finally`. The `finally` always closes the `VideoSample`, and additionally closes the `IPImage` when ownership has *not* yet been transferred to the HDR LRU cache. This covers the success path, errors during `hdrSampleToIPImage` / resize, errors during `cache.set`, and dispose races where `frameExtractor` is nulled while awaiting `getFrameHDR` or between sample-to-IPImage and cache insertion.
+- `src/utils/media/MediabunnyFrameExtractor.ts:64-101` — `_probeInternals.closeProbePair(probeFrame, probeSample)` releases both ends of the transient probe pair regardless of which (if any) `close()` throws; per-call errors are swallowed because they typically mean "already closed."
+
+The behaviour is locked in by 8 unit tests (`CRIT-01-VSN-001…006` and `CRIT-01-MFE-001…004`), four of which are dispose-race regressions that fail on master without the fix. The only production caller of `getFrameHDR` is `VideoSourceNode.fetchHDRFrame`; tests exercise the same shape against `MediabunnyFrameExtractor` directly. External consumers (plugins, scripting layers) that are added in the future MUST follow the JSDoc-documented `try/finally` pattern — the scripting API does not currently expose `getFrameHDR` or raw `VideoFrame` handles, and any future surface that does should adopt the same ownership contract.
+
 #### 3. Luminance Visualization Modes
 - **Missing**: HSV visualization
 - **Missing**: Random colorization for analysis
