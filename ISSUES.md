@@ -64,9 +64,7 @@ These issues were found and fixed during the audit:
 
 #### ~~MED-39~~: AudioCoordinator dispose doesn't stop playback first — **FIXED** (see FIXED_ISSUES.md #359)
 
-#### MED-42: Detected FPS calculation flawed for edge case
-- **File**: `src/utils/media/MediabunnyFrameExtractor.ts` ~lines 434-448
-- **Status**: Guard at line 435 (`lastTimestamp > 0`) prevents execution for single-frame-at-t=0. Formula would be wrong for 1 frame with non-zero timestamp.
+#### ~~MED-42~~: Detected FPS calculation flawed for edge case — **FIXED** (see FIXED_ISSUES.md #377)
 
 ---
 

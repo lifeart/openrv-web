@@ -5336,3 +5336,28 @@ Each error is descriptive — names the actual count and the cap.
 - Stash-revert confirms new tests would fail on master code.
 
 **Behavior change**: The 0xB001 NumberOfImages cap was tightened from the uint16 ceiling (65535) to the practical cap (256). No real MPF file ships with 257+ sub-images, so this should not affect production decoding.
+
+## Issue #377: MED-42 — Detected FPS calculation flawed for edge case
+
+**Root cause**: `MediabunnyFrameExtractor.buildFrameIndex` guarded only against `lastTimestamp <= 0`. A single-frame video with non-zero PTS (typical for still-image "videos") fell through and applied the formula `N / (lastTimestamp + lastTimestamp/(N-1))`, which collapses to `1/(2*lastTimestamp)` for N=1 — a meaningless number (e.g. 1.0 FPS for a single frame at t=0.5s). FPS is mathematically indeterminate from a single frame.
+
+**Fix**: Extracted pure helper `computeDetectedFps(N, lastTimestamp): number | null` that returns `null` for `N < 2` or `lastTimestamp <= 0`, and `(N-1) / lastTimestamp` (with snap-to-common-FPS) for `N >= 2`. The `(N-1)` denominator now correctly counts frame intervals. Consumers (`SessionMedia`, `VideoRepresentationLoader`, `VideoSourceNode`) already null-check `detectedFps` and fall back to defaults.
+
+**Tests added** (`src/utils/media/MediabunnyFrameExtractor.test.ts`):
+- 11 new pure-function tests in a new `computeDetectedFps (MED-42)` describe block: 0 frames, 1 frame at t=0, 1 frame at t>0 (the regression), N=2 with t=0, negative timestamp, 2 frames @ 30fps, 24 frames @ 24fps, 60 frames @ 60fps, snap to 23.976/29.97, uncommon (100) FPS pass-through.
+- Existing single-frame integration test tightened from "either null or number" to strictly `null`.
+
+**Files changed**:
+- `src/utils/media/MediabunnyFrameExtractor.ts`
+- `src/utils/media/MediabunnyFrameExtractor.test.ts`
+
+**Verification**:
+- 69 MediabunnyFrameExtractor tests passing.
+- 4122 tests across utils/media + core/session + nodes/sources passing.
+- Full suite: 26077 passing.
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 10 of 11 new tests fail on pre-fix code (the 11th is a tightened existing test that was always lenient enough to pass either way).
+
+**Known follow-ups** (separate tickets, not blockers):
+- Snap-to-common-FPS at `MediabunnyFrameExtractor.ts:111-117` aliases 24→23.976, 30→29.97, 60→59.94 due to wide tolerance (0.5) + first-match-wins ordering. New MED-42 tests codify the current behavior; a fix should change to nearest-match.
+- For trimmed videos where first PTS is t0>0, the `(N-1)/lastTimestamp` formula understates FPS. Pre-existing assumption ("first frame at t=0") documented in JSDoc.
