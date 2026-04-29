@@ -56,9 +56,7 @@ These issues were found and fixed during the audit:
 
 #### ~~MED-28~~: JPEG marker segment length partially unchecked — **FIXED** (see FIXED_ISSUES.md #375)
 
-#### MED-30: MPF IFD entry count unbounded
-- **File**: `src/formats/JPEGGainmapDecoder.ts` ~lines 386-415
-- **Status**: Up to 65535 iterations from uint16. Buffer bounds check prevents OOB reads but CPU cost is unbounded.
+#### ~~MED-30~~: MPF IFD entry count unbounded — **FIXED** (see FIXED_ISSUES.md #376)
 
 #### MED-35: AudioContext resume gap before isPlaying set
 - **File**: `src/audio/AudioPlaybackManager.ts` ~lines 280-308

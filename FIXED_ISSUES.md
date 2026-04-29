@@ -5306,3 +5306,33 @@ Code comments at each site cite the spec and explain the defense-in-depth ration
 - Stash-revert with new tests against pre-fix source: 8 _internal tests fail (proving they would catch a regression in either direction).
 
 **Known follow-up**: A defensive `segLen < 2` audit of `src/formats/JP2Decoder.ts:430-454` (JPEG 2000 marker walker) is a tracked improvement; not infinite-loopable, but `<2` could mis-align reads. Out of MED-28 scope.
+
+## Issue #376: MED-30 — MPF IFD entry count unbounded
+
+**Root cause**: `parseMPFEntries` in `src/formats/JPEGGainmapDecoder.ts` read a uint16 IFD entry count directly from the file and looped over it without any practical cap. Although HIGH-31's `ensureMPFRange` prevented out-of-bounds reads when the entry array didn't fit, a hostile file just large enough to satisfy the bounds check (~786 KB) could still force up to 65535 iterations, each performing 3 DataView reads — uncapped CPU work derived from attacker-controlled bytes. Two related uncapped paths existed:
+- The 0xB001 NumberOfImages tag (previously capped at 65535 — the uint16 ceiling, not a practical cap)
+- The 0xB002 `count / 16` derivation (when 0xB002 precedes 0xB001 or 0xB001 is absent)
+
+**Fix**: Added `MAX_MPF_IFD_ENTRIES = 256` constant with inline rationale (CIPA DC-007 / ISO 21496-1 don't formally cap; real MPF gainmap JPEGs use 2–4 entries; 256 is two orders of magnitude above any practical file). Applied the cap to all three paths:
+1. **IFD entry count** at IFD start, validated BEFORE the entry loop runs (prevents CPU work)
+2. **0xB001 NumberOfImages**, tightened from the previous 65535 sanity cap
+3. **0xB002 count/16 derivation** with a clearer error message ("MPEntry table implies N entries, exceeds practical cap 256") than the downstream buffer-overflow message
+
+Each error is descriptive — names the actual count and the cap.
+
+**Tests added** (`src/formats/JPEGGainmapDecoder.test.ts`):
+- `MED-30: IFD entry count cap` describe block: 5 tests — entryCount=65535 (uint16 max), entryCount=257 (boundary), entryCount=256 (cap accepted), entryCount=4 (typical), error-message format check.
+- `MED-30 round 2: 0xB002 count/16 derivation cap` describe block: 3 tests — count=4112 (implies 257), count=0xFFFFFFF0 (uint32-max-ish), count=4096 (implies exactly 256, cap error must not fire).
+- Updated 4 existing 0xB001 tests for the new 256 cap (was 65535).
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+**Verification**:
+- 75 JPEGGainmapDecoder tests passing (8 new for MED-30).
+- 1156 format tests passing across 23 files (1 pre-existing skip).
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms new tests would fail on master code.
+
+**Behavior change**: The 0xB001 NumberOfImages cap was tightened from the uint16 ceiling (65535) to the practical cap (256). No real MPF file ships with 257+ sub-images, so this should not affect production decoding.
