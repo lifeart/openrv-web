@@ -83,7 +83,7 @@ These findings were not yet verified against actual source code:
 #### Render/Shader
 - ~~**MED-49**~~: Brightness unclamped in SDR path before contrast — **FIXED** (see FIXED_ISSUES.md #361)
 - ~~**MED-50**~~: HLG OOTF gain extremely high for near-black — **FIXED** (see FIXED_ISSUES.md #362)
-- **MED-51**: Color primaries metadata lost through LUT stages — `src/color/pipeline/LUTPipeline.ts`
+- ~~**MED-51**~~: Color primaries metadata lost through LUT stages — **FIXED** (see FIXED_ISSUES.md #370)
 - **MED-52**: Tone mapping headroom inconsistent across operators — `viewer.frag.glsl` ~lines 253-296
 - **MED-54**: Gamut mapping matrix working space undocumented — `viewer.frag.glsl` ~lines 1069, 1367
 - **MED-55**: WebGPU extended tone mapping not verified at runtime — `hdr-acceptance-criteria.test.ts`

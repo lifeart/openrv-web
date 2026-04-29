@@ -1524,6 +1524,15 @@ export class Viewer {
       // Pass right-eye image data for 'separate' stereo (multi-view EXR)
       const rightEyeIPImage = source?.fileSourceNode?.getIPImage()?.rightEyeImage;
       if (detectedStereoFormat === 'separate' && rightEyeIPImage) {
+        // TODO(MED-51 follow-up): for symmetry with the left-eye HDR paths
+        // below (lines ~1795/1823/1850 — `applyLUTMetadataCascade(...)`),
+        // the right-eye IPImage should also pass through the LUT cascade
+        // before `toImageData()` so its metadata reflects the post-pipeline
+        // color space. Skipped for now because: (a) `toImageData()` lossy-
+        // converts to 8-bit and the renderer's right-eye 2D path doesn't
+        // currently consume the cascaded metadata, and (b) `separate`
+        // multi-view EXR is rare enough that the wiring deserves its own
+        // dedicated test pass. Non-blocking for the NEW-B4 fix.
         this.stereoManager.setRightEyeImageData(rightEyeIPImage.toImageData());
       } else {
         this.stereoManager.setRightEyeImageData(null);
@@ -1791,7 +1800,9 @@ export class Viewer {
       const hdrIPImage = this.session.getVideoHDRIPImage(currentFrame);
       PerfTrace.end('getVideoHDRIPImage');
       if (!hdrIPImage) PerfTrace.count('hdrIPImage.miss');
-      if (hdrIPImage && this.renderHDRWithWebGL(hdrIPImage, displayWidth, displayHeight)) {
+      // Apply LUT pipeline metadata cascade — see hdrFileSource branch below (issue MED-51).
+      const cascadedHdrIPImage = hdrIPImage ? this.applyLUTMetadataCascade(hdrIPImage) : null;
+      if (cascadedHdrIPImage && this.renderHDRWithWebGL(cascadedHdrIPImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
         // Preload nearby HDR frames in background for smoother scrubbing.
@@ -1814,7 +1825,12 @@ export class Viewer {
       // Fall through to SDR while waiting (element was set by the video path above)
     } else if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
       const ipImage = hdrFileSource.getIPImage();
-      if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
+      // Apply LUT pipeline metadata cascade so the renderer sees the
+      // post-pipeline color space when the user has declared explicit
+      // LUT-stage outputs (issue MED-51). For the default no-declaration
+      // case the helper returns the input by reference (no-op).
+      const cascadedIpImage = ipImage ? this.applyLUTMetadataCascade(ipImage) : null;
+      if (cascadedIpImage && this.renderHDRWithWebGL(cascadedIpImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
         return; // HDR path complete, skip 2D
@@ -1839,7 +1855,9 @@ export class Viewer {
     } else if (hdrProceduralSource) {
       // Procedural sources produce float32 IPImage — render via WebGL HDR path
       const ipImage = hdrProceduralSource.getIPImage();
-      if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
+      // See note in the hdrFileSource branch above — issue MED-51.
+      const cascadedIpImage = ipImage ? this.applyLUTMetadataCascade(ipImage) : null;
+      if (cascadedIpImage && this.renderHDRWithWebGL(cascadedIpImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
         return; // Procedural HDR path complete
@@ -2690,6 +2708,27 @@ export class Viewer {
 
     this.notifyEffectsChanged();
     this.scheduleRender();
+  }
+
+  /**
+   * Apply the LUT pipeline's color-space metadata cascade to an IPImage on
+   * its way to the renderer (issue MED-51).
+   *
+   * The cascade walks every active stage (Pre-Cache → File → Look →
+   * Display) and layers each stage's declared `outputColorPrimaries` /
+   * `outputTransferFunction` on top of the input metadata. Returns the
+   * input image by reference when the cascade is a no-op (the common
+   * default case where no stage has declared an output color space), so
+   * this is allocation-free in the steady state.
+   *
+   * Pixel data is shared with the input image — only metadata is fresh.
+   */
+  private applyLUTMetadataCascade(
+    image: import('../../core/image/Image').IPImage,
+  ): import('../../core/image/Image').IPImage {
+    const pipeline = this.colorPipeline.lutPipeline;
+    const sourceId = pipeline.getActiveSourceId() ?? 'default';
+    return pipeline.applyToIPImage(sourceId, image);
   }
 
   /**

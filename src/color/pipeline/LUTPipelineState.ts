@@ -6,6 +6,7 @@
  */
 
 import type { LUT } from '../LUTLoader';
+import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 
 /** State for a single LUT stage */
 export interface LUTStageState {
@@ -18,6 +19,24 @@ export interface LUTStageState {
   inMatrix: Float32Array | null;
   /** 4x4 output matrix (row-major flat[16]) applied after LUT sampling */
   outMatrix: Float32Array | null;
+  /**
+   * Color primaries the resulting pixels are encoded in after this stage runs.
+   *
+   * `null` means the stage is color-space-preserving — i.e., the output is in
+   * the same primaries as the input. Set to a concrete value (e.g. `'bt709'`)
+   * when the LUT is known to convert into a different space (for example, an
+   * AP1 -> Rec.709 input transform). The downstream IPImage carries this value
+   * forward as its `colorPrimaries` metadata.
+   */
+  outputColorPrimaries: ColorPrimaries | null;
+  /**
+   * Transfer function the resulting pixels are encoded in after this stage
+   * runs. `null` means preserve the input's transfer function. Set when the
+   * LUT itself encodes/decodes a transfer (e.g. PQ -> linear, Log-C -> linear).
+   * The downstream IPImage carries this value forward as its `transferFunction`
+   * metadata.
+   */
+  outputTransferFunction: TransferFunction | null;
 }
 
 /** Pre-Cache stage extends base with bit-depth option */
@@ -51,6 +70,10 @@ export interface SerializableLUTStageState {
   inMatrix?: number[] | null;
   /** 4x4 output matrix as plain number array (row-major flat[16]) */
   outMatrix?: number[] | null;
+  /** Output color primaries (or null/undefined to preserve input) */
+  outputColorPrimaries?: ColorPrimaries | null;
+  /** Output transfer function (or null/undefined to preserve input) */
+  outputTransferFunction?: TransferFunction | null;
 }
 
 /** Serializable version of pre-cache stage state */

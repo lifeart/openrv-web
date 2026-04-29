@@ -534,7 +534,12 @@ describe('IPImage', () => {
       expect(image.metadata.frameNumber).toBeUndefined();
     });
 
-    it('does not copy videoFrame', () => {
+    it('shares videoFrame reference (non-owning) so HDR-video metadata clones see real pixels', () => {
+      // Issue MED-51 / NEW-B4: when an HDR-video IPImage carries a 4-byte
+      // placeholder `data` buffer with the real pixel source in
+      // `managedVideoFrame`, the metadata-only clone MUST share the
+      // VideoFrame ref (otherwise the renderer reads the 4-byte placeholder
+      // as if it were the full pixel buffer — heap-out-of-bounds / garbage).
       ManagedVideoFrame.resetForTesting();
       const mockVideoFrame = createMockVideoFrame();
 
@@ -548,10 +553,40 @@ describe('IPImage', () => {
 
       const shallow = image.cloneMetadataOnly();
 
+      // Both handles point at the same underlying VideoFrame.
       expect(image.videoFrame).toBe(mockVideoFrame);
-      expect(shallow.videoFrame).toBeNull();
+      expect(shallow.videoFrame).toBe(mockVideoFrame);
+      // And specifically: the same ManagedVideoFrame ref (not a re-wrap).
+      expect(shallow.managedVideoFrame).toBe(image.managedVideoFrame);
 
       image.close();
+    });
+
+    it('clone is non-owning — closing it does NOT release the source videoFrame', () => {
+      // Lifecycle test: the source IPImage owns the GPU resource; the
+      // metadata-only clone is short-lived and must not double-release.
+      ManagedVideoFrame.resetForTesting();
+      const mockVideoFrame = createMockVideoFrame();
+
+      const image = new IPImage({
+        width: 1920,
+        height: 1080,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      const shallow = image.cloneMetadataOnly();
+
+      // Close the clone first — should NOT release the source's videoFrame.
+      shallow.close();
+      expect(image.videoFrame).toBe(mockVideoFrame);
+      expect(image.managedVideoFrame?.isClosed).toBe(false);
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
+      // Now close the source — the underlying VideoFrame finally goes away.
+      image.close();
+      expect(ManagedVideoFrame.activeCount).toBe(0);
     });
 
     it('does not copy texture or textureNeedsUpdate', () => {

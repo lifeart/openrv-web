@@ -213,6 +213,9 @@ interface TestableViewer {
 
   // Async effects generation counter (Phase 4A race-condition fix)
   _asyncEffectsGeneration: number;
+
+  // LUT pipeline metadata cascade (issue MED-51)
+  applyLUTMetadataCascade(image: import('../../core/image/Image').IPImage): import('../../core/image/Image').IPImage;
 }
 
 /** Cast a Viewer to its testable internals for accessing private members in tests. */
@@ -1736,6 +1739,203 @@ describe('Viewer', () => {
       expect(t.colorPipeline.currentLUT?.data[2]).toBe(0);
       expect(viewer.getLUTIntensity()).toBe(1);
       warnSpy.mockRestore();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue MED-51: LUT pipeline metadata cascade is wired into the render path
+  // -----------------------------------------------------------------------
+  describe('issue MED-51: LUT pipeline metadata cascade', () => {
+    it('VWR-MED51-001: applyLUTMetadataCascade returns input by reference when no stages declare output', async () => {
+      const t = testable(viewer);
+      const { IPImage } = await import('../../core/image/Image');
+      const pipeline = t.colorPipeline.lutPipeline;
+      pipeline.registerSource('default');
+      pipeline.setActiveSource('default');
+
+      const input = new IPImage({
+        width: 4,
+        height: 4,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { colorPrimaries: 'bt2020', transferFunction: 'pq' },
+      });
+
+      const out = t.applyLUTMetadataCascade(input);
+      expect(out).toBe(input);
+    });
+
+    it('VWR-MED51-002: applyLUTMetadataCascade returns clone with cascaded metadata when stage declares output', async () => {
+      const t = testable(viewer);
+      const { IPImage } = await import('../../core/image/Image');
+      const pipeline = t.colorPipeline.lutPipeline;
+      pipeline.registerSource('default');
+      pipeline.setActiveSource('default');
+
+      // Display LUT does PQ→Rec.709 sRGB.
+      pipeline.setDisplayLUT(
+        {
+          type: '3d',
+          title: 'pq_to_srgb.cube',
+          size: 2,
+          domainMin: [0, 0, 0],
+          domainMax: [1, 1, 1],
+          data: new Float32Array(2 * 2 * 2 * 3),
+        },
+        'pq_to_srgb.cube',
+      );
+      pipeline.setDisplayLUTOutputColorPrimaries('bt709');
+      pipeline.setDisplayLUTOutputTransferFunction('srgb');
+
+      const input = new IPImage({
+        width: 4,
+        height: 4,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { colorPrimaries: 'bt2020', transferFunction: 'pq', frameNumber: 9 },
+      });
+
+      const out = t.applyLUTMetadataCascade(input);
+
+      expect(out).not.toBe(input);
+      expect(out.metadata.colorPrimaries).toBe('bt709');
+      expect(out.metadata.transferFunction).toBe('srgb');
+      expect(out.metadata.frameNumber).toBe(9);
+      // Input metadata is *not* mutated.
+      expect(input.metadata.colorPrimaries).toBe('bt2020');
+      expect(input.metadata.transferFunction).toBe('pq');
+    });
+
+    // Note on test seam: VWR-MED51-001..003 invoke `applyLUTMetadataCascade`
+    // directly via the TestableViewer cast rather than driving the full
+    // `renderImage()` path. This is intentional — the production `renderImage()`
+    // pulls from `session.currentSource`, requires a wired `glRendererManager`,
+    // a real GL context, and a session with an active source, all of which are
+    // expensive to build in a unit test. The cascade helper is the seam closest
+    // to the renderer (its only callers are the three HDR branches in
+    // `renderImage` at lines ~1795 / 1823 / 1850), so testing it directly
+    // exercises the same code path the renderer hits. The end-to-end HDR-video
+    // path is covered in `LUTPipeline.test.ts` MLUT-CASCADE-020 (NEW-B4)
+    // which uses a full IPImage with a VideoFrame, plus VWR-MED51-004 below
+    // which checks the helper specifically with a VideoFrame-backed IPImage
+    // (mimicking what `getVideoHDRIPImage()` returns).
+
+    it('VWR-MED51-003: applyLUTMetadataCascade falls back to "default" sourceId when none active', async () => {
+      const t = testable(viewer);
+      const { IPImage } = await import('../../core/image/Image');
+      const pipeline = t.colorPipeline.lutPipeline;
+      pipeline.registerSource('default');
+      // No active source set explicitly — helper falls back to 'default'.
+
+      pipeline.setDisplayLUT(
+        {
+          type: '3d',
+          title: 'd.cube',
+          size: 2,
+          domainMin: [0, 0, 0],
+          domainMax: [1, 1, 1],
+          data: new Float32Array(24),
+        },
+        'd.cube',
+      );
+      pipeline.setDisplayLUTOutputColorPrimaries('p3');
+
+      const input = new IPImage({
+        width: 4,
+        height: 4,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { colorPrimaries: 'bt2020' },
+      });
+
+      const out = t.applyLUTMetadataCascade(input);
+      expect(out.metadata.colorPrimaries).toBe('p3');
+    });
+
+    it('VWR-MED51-004: NEW-B4 — HDR VideoFrame IPImage survives cascade end-to-end', async () => {
+      // Reproduction scenario: HDR PQ video, Display LUT declared as PQ→sRGB.
+      // The cascade clone must NOT drop the VideoFrame — otherwise the
+      // renderer reads the 4-byte placeholder data as full pixel data.
+      // (Pre-fix `image.clone()` set videoFrame=null on the clone; this test
+      // would have failed against that code.)
+      const t = testable(viewer);
+      const { IPImage } = await import('../../core/image/Image');
+      const { ManagedVideoFrame } = await import('../../core/image/ManagedVideoFrame');
+      ManagedVideoFrame.resetForTesting();
+
+      let closed = false;
+      const mockVideoFrame = {
+        get format() {
+          return closed ? null : 'RGBA';
+        },
+        close() {
+          closed = true;
+        },
+        displayWidth: 1920,
+        displayHeight: 1080,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        timestamp: 0,
+        duration: null,
+        colorSpace: {},
+      } as unknown as VideoFrame;
+
+      const pipeline = t.colorPipeline.lutPipeline;
+      pipeline.registerSource('default');
+      pipeline.setActiveSource('default');
+      pipeline.setDisplayLUT(
+        {
+          type: '3d',
+          title: 'pq_to_srgb_display.cube',
+          size: 2,
+          domainMin: [0, 0, 0],
+          domainMax: [1, 1, 1],
+          data: new Float32Array(2 * 2 * 2 * 3),
+        },
+        'pq_to_srgb_display.cube',
+      );
+      pipeline.setDisplayLUTOutputColorPrimaries('bt709');
+      pipeline.setDisplayLUTOutputTransferFunction('srgb');
+
+      // Mirrors VideoSourceNode HDR construction (4-byte placeholder data,
+      // VideoFrame is the real pixel source).
+      const hdrInput = new IPImage({
+        width: 1920,
+        height: 1080,
+        channels: 4,
+        dataType: 'float32',
+        data: new ArrayBuffer(4),
+        videoFrame: mockVideoFrame,
+        metadata: {
+          colorPrimaries: 'bt2020',
+          transferFunction: 'pq',
+          frameNumber: 100,
+          attributes: { hdr: true, videoColorSpace: 'bt2020-pq' },
+        },
+      });
+
+      const cascaded = t.applyLUTMetadataCascade(hdrInput);
+
+      // Cascade rewrote metadata to sRGB / Rec.709.
+      expect(cascaded.metadata.colorPrimaries).toBe('bt709');
+      expect(cascaded.metadata.transferFunction).toBe('srgb');
+
+      // CRITICAL: VideoFrame survived the clone. If this regressed, the
+      // renderer would read the 4-byte placeholder `data` buffer as full
+      // pixels (heap-out-of-bounds / garbage / crash).
+      expect(cascaded.videoFrame).toBe(mockVideoFrame);
+      expect(cascaded.managedVideoFrame).toBe(hdrInput.managedVideoFrame);
+      expect(cascaded.data).toBe(hdrInput.data);
+      // The 4-byte placeholder is intentional — VideoFrame holds the real pixels.
+      expect(cascaded.data.byteLength).toBe(4);
+
+      // Lifecycle: cascade clone is non-owning, source still owns the frame.
+      cascaded.close();
+      expect(hdrInput.videoFrame).toBe(mockVideoFrame);
+      expect(hdrInput.managedVideoFrame?.isClosed).toBe(false);
+
+      hdrInput.close();
+      expect(ManagedVideoFrame.activeCount).toBe(0);
     });
   });
 

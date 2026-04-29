@@ -43,6 +43,16 @@ export class IPImage {
    */
   managedVideoFrame: ManagedVideoFrame | null;
 
+  /**
+   * When true, this IPImage does NOT own the lifecycle of `managedVideoFrame`
+   * or `imageBitmap` — its `close()` will skip releasing them. Used by
+   * {@link cloneMetadataOnly} so a metadata-only clone of an HDR-video
+   * IPImage can share the source's GPU resources without double-free.
+   *
+   * @internal
+   */
+  private _nonOwning = false;
+
   /** Raw VideoFrame accessor (reads from managed wrapper, setter auto-wraps) */
   get videoFrame(): VideoFrame | null {
     return this.managedVideoFrame?.frame ?? null;
@@ -203,6 +213,19 @@ export class IPImage {
    * ```
    */
   close(): void {
+    if (this._nonOwning) {
+      // Non-owning clone (see cloneMetadataOnly): drop our shared references
+      // without releasing the underlying GPU resources — the source IPImage
+      // retains ownership and will close them.
+      this.managedVideoFrame = null;
+      this.imageBitmap = null;
+      // rightEyeImage is intentionally NOT shared by cloneMetadataOnly today.
+      if (this.rightEyeImage) {
+        this.rightEyeImage.close();
+        this.rightEyeImage = null;
+      }
+      return;
+    }
     if (this.managedVideoFrame) {
       this.managedVideoFrame.release();
       this.managedVideoFrame = null;
@@ -273,10 +296,54 @@ export class IPImage {
   }
 
   /**
-   * @deprecated Use {@link clone} instead, which now defaults to shallow (metadata-only) cloning.
+   * Create a *non-owning* shallow clone that shares pixel data **and** GPU
+   * resources (`managedVideoFrame`, `imageBitmap`) with the source, but has
+   * an independent metadata object.
+   *
+   * This is the right choice for read-only metadata variants like the LUT
+   * pipeline cascade output (issue MED-51 / NEW-B4): the cascade does not
+   * touch pixels, only annotates them with the post-pipeline color space —
+   * so cloning the heavyweight `managedVideoFrame` (or worse, dropping it
+   * and exposing a 4-byte placeholder `data` buffer to the renderer) would
+   * be both wasteful and unsafe.
+   *
+   * **Lifecycle / ownership contract:**
+   * - The returned IPImage is *non-owning*: calling `close()` on it will
+   *   NOT release the source's `managedVideoFrame` or `imageBitmap`. The
+   *   source IPImage retains sole ownership of those GPU resources and is
+   *   responsible for releasing them.
+   * - The clone is therefore short-lived by construction: it must not
+   *   outlive the source. Typical use is "construct, hand to the renderer
+   *   for one frame, drop on the floor."
+   * - Callers must treat the pixel data and GPU resources as **read-only**
+   *   through the clone. Mutating them via the clone would be observable
+   *   on the source.
+   *
+   * `texture` and `textureNeedsUpdate` are renderer-specific and are
+   * **not** copied (the clone gets fresh defaults so the renderer treats
+   * it as a new upload target if needed).
+   *
+   * For a fully independent owning clone (no shared GPU resources), use
+   * {@link clone} (shares only pixel data) or {@link deepClone} (full copy).
    */
   cloneMetadataOnly(): IPImage {
-    return this.clone();
+    const out = new IPImage({
+      width: this.width,
+      height: this.height,
+      channels: this.channels,
+      dataType: this.dataType,
+      data: this.data,
+      metadata: { ...this.metadata },
+      // Note: we deliberately bypass the IPImage constructor's auto-wrap
+      // path (which would throw on double-wrap of the underlying VideoFrame)
+      // by assigning directly below.
+    });
+    // Share GPU-resource references *without* re-wrapping. Both fields are
+    // non-owning on the clone — see the `close()` short-circuit above.
+    out.managedVideoFrame = this.managedVideoFrame;
+    out.imageBitmap = this.imageBitmap;
+    out._nonOwning = true;
+    return out;
   }
 
   /**

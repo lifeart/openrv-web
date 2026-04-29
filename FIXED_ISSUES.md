@@ -5030,3 +5030,46 @@ Applied at both entry points: `applyStereoMode()` and `applyStereoModeWithEyeTra
 **Files changed**:
 - `src/workers/renderWorker.worker.ts`
 - `src/workers/renderWorker.worker.test.ts`
+
+## Issue #370: MED-51 — Color primaries metadata lost through LUT stages
+
+**Root cause**: The four-stage GPU LUT pipeline (Pre-Cache → File → Look → Display) accepted user-declared output color spaces but never threaded that metadata onto the IPImage handed to the renderer. Downstream consumers (scopes, HDR shader path selection, observability) saw stale source metadata even after a Display LUT did PQ→sRGB.
+
+Subsequent reviews uncovered:
+- B1: `applyToIPImage` had no production caller (dead code).
+- B2: File/Look/Display stages dropped metadata silently in `GPULUTChain`.
+- B3: Lossy uint8 conversion silently corrupted float HDR data while the metadata "lied" about it.
+- NEW-B4: Cascade clone path used `IPImage.clone()` which drops `videoFrame`. For HDR-video IPImages (4-byte placeholder `data`, real pixels in VideoFrame), the renderer would read 4 bytes as the full pixel buffer → heap-out-of-bounds / garbage / crash.
+
+**Fix**:
+- Added `outputColorPrimaries` / `outputTransferFunction` to `LUTStageState` (preserve-on-null, override-on-value).
+- Added `LUTPipeline.computeOutputMetadata()` (pure cascade walker over Pre-Cache → File → Look → Display, skipping bypassed stages) and `LUTPipeline.applyToIPImage()` (materializer).
+- Wired the cascade into all three Viewer HDR render branches via `applyLUTMetadataCascade`.
+- Added `IPImage.cloneMetadataOnly()` — non-owning shallow clone that shares `data`, `managedVideoFrame`, `imageBitmap` and sets `_nonOwning` so `close()` skips releasing shared GPU resources. `LUTPipeline.applyToIPImage` uses this instead of `clone()`, fixing NEW-B4.
+- `PreCacheLUTStage.applyToIPImage` throws descriptive errors on float32/uint16 inputs and on incompatible bitDepth — preserves precision instead of lossy downcast.
+- Sanitization on deserialize against an enum allow-list (bt709/bt2020/p3 for primaries; srgb/hlg/pq/smpte240m for transfer).
+- Stage-state read accessors added on `LUTPipeline` for UI/observability use.
+
+**Tests added**: 50+ regression tests including:
+- `MLUT-CASCADE-001..021` in `LUTPipeline.test.ts` covering cascade math, applyToIPImage seam, NEW-B4 HDR-video VideoFrame preservation.
+- `cloneMetadataOnly` describe block in `Image.test.ts` (shared data, independent metadata, shared VideoFrame ref, non-owning lifecycle).
+- `VWR-MED51-001..004` in `Viewer.test.ts` (no-op path, cascade-with-changes, fallback sourceId, end-to-end HDR PQ video VideoFrame preservation).
+- `LSTG-U019..025`, `MLUT-CS-001..011`, `PCLT-IPM-001..017` for stage-level coverage and float guards.
+
+**Files changed**:
+- `src/core/image/Image.ts`
+- `src/core/image/Image.test.ts`
+- `src/color/pipeline/LUTPipeline.ts`
+- `src/color/pipeline/LUTPipeline.test.ts`
+- `src/color/pipeline/LUTPipelineState.ts`
+- `src/color/pipeline/LUTStage.ts`
+- `src/color/pipeline/LUTStage.test.ts`
+- `src/color/pipeline/PreCacheLUTStage.ts`
+- `src/color/pipeline/PreCacheLUTStage.test.ts`
+- `src/ui/components/Viewer.ts`
+- `src/ui/components/Viewer.test.ts`
+
+**Known follow-ups (non-blocking, separate issues)**:
+- Renderer SDR fallback path at `Renderer.ts:1023-1026` mutates `managedVideoFrame` directly; should respect non-owning clone contract.
+- Stereo right-eye IPImage doesn't currently get cascaded (left as TODO comment in Viewer.ts).
+- `'linear'` and additional ACES/Log transfer enum values would benefit color-space-converting LUTs (would touch decoders + worker round-trip table — out of scope here).
