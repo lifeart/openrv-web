@@ -144,6 +144,40 @@ The following color methods are currently available via `window.openrv.color`:
 - `setToneMapping()` / `getToneMapping()` -- tone mapping
 - `setDisplayProfile()` / `getDisplayProfile()` / `getDisplayCapabilities()` -- display management
 - `setOCIOState()` / `getOCIOState()` / `getAvailableConfigs()` -- OCIO pipeline
+- `setLUTStageColorPrimaries(stage, primaries)` / `getLUTStageColorPrimaries(stage)` -- declared output primaries per LUT stage (MED-51)
+- `setLUTStageTransferFunction(stage, transfer)` / `getLUTStageTransferFunction(stage)` -- declared output transfer function per LUT stage (MED-51)
+
+---
+
+## Stage Output Color Space (MED-51)
+
+Each LUT pipeline stage (Pre-Cache, File, Look, Display) can declare what color space its output is encoded in. This is metadata only -- the GPU shader still runs the LUT math; the declaration tells the renderer/scopes what the post-LUT pixels actually represent so the correct downstream EOTF / scope normalization is selected.
+
+### Setting via the LUT Pipeline Panel
+
+Open the LUT Pipeline panel. Each stage row exposes two dropdowns:
+
+- **Output Primaries** -- Auto (passthrough) | Rec. 709 | Rec. 2020 | DCI-P3
+- **Output Transfer** -- Auto (passthrough) | sRGB | HLG | PQ | SMPTE 240M | Linear
+
+Pre-Cache is wrapped in an "Advanced" disclosure since color-space conversion in the pre-cache stage is uncommon.
+
+### Common Workflows
+
+1. **PQ -> sRGB Display LUT**: Set Display stage Output Primaries to Rec. 709 and Output Transfer to sRGB.
+2. **ACES -> Rec.709 Look LUT**: Set Look stage Output Primaries to Rec. 709 and Output Transfer to Auto (the LUT typically stays in scene-linear).
+3. **Camera log -> linear File LUT**: Set File stage Output Transfer to Linear (LUT bakes in the EOTF decode).
+
+Leave **Auto** unless you know your LUT performs the conversion. Declarations are saved with your session.
+
+### Known Limitations
+
+- **AP1 / AP0 ACES primaries**: not yet representable in `ColorPrimaries` enum (`bt709`, `bt2020`, `p3` only). Use the closest display approximation in v1.
+- **OCIO-active conflict**: when OCIO is enabled and overriding the display stage, manual declarations are stored but do not affect rendering until OCIO is disabled. A console warning fires once per session.
+
+::: warning Implausibility Detection
+The opt-in `LUTPipelineLinter` (see scripting docs) detects suspicious declarations like declaring an HDR transfer (PQ, HLG) that matches the source's transfer -- usually means the LUT didn't actually decode the transfer and the renderer would produce double-decoded output. Set the declaration to the actual post-LUT transfer (often `srgb`).
+:::
 
 ---
 

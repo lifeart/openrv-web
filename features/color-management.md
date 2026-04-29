@@ -309,6 +309,27 @@ The cascade is wired into the Viewer's three HDR render branches via
 uniform tracks the post-pipeline transfer function (e.g. when a Display LUT
 maps PQ -> sRGB the renderer applies the sRGB EOTF rather than the PQ EOTF).
 
+### Production Surfaces (MED-51 follow-up)
+
+The cascade is exposed to users in two surfaces:
+
+- **`LUTPipelinePanel` UI** -- Each stage row carries Output Primaries and Output Transfer dropdowns with an Auto/Inherit option mapping to `null`. Pre-cache is rendered in an "Advanced" disclosure.
+- **`window.openrv.color.setLUTStage*()` and `getLUTStage*()`** -- Public scripting API; validates inputs, supports per-source addressing implicitly via active source.
+
+### LUT Pipeline Linter (Opt-In)
+
+`src/color/pipeline/LUTPipelineLinter.ts` exposes:
+- `lintLUTPipeline(pipeline, sourceId, inputMetadata)` -- pure function returning `LintReport[]`
+- `createLUTPipelineLinter(pipeline)` -- event-driven controller with cache invalidation on `stageChanged` / `displayChanged` / `reset` events
+
+The linter is NOT invoked by the cascade applier -- `Viewer.applyLUTMetadataCascade` stays pure. Consumers wire the linter explicitly when they want continuous reports.
+
+Heuristic: warns when a declared output transfer matches the input transfer for exotic transfers (PQ, HLG) -- usually a sign the LUT didn't actually decode the transfer.
+
+### Future Work (Phase 2)
+
+OCIO auto-population: when OCIO is enabled, the destination color space (`OCIOState.display` + `OCIOState.view`) is known. A future phase will derive the Display stage's declaration from OCIO and set it programmatically via the same setters used here, with an "ownership" flag distinguishing OCIO-owned from user-set declarations.
+
 ## E2E Test Cases
 
 ### Existing Tests (`e2e/color-controls.spec.ts`)
