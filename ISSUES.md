@@ -54,9 +54,7 @@ These issues were found and fixed during the audit:
 - **File**: `src/plugin/dev/HotReloadManager.ts` ~lines 59-61
 - **Status**: Design-level concern — depends on plugin's `getState()` returning a copy (which is the contract).
 
-#### MED-28: JPEG marker segment length partially unchecked
-- **File**: `src/formats/JPEGGainmapDecoder.ts` ~lines 227, 335, 493, 549
-- **Status**: `segmentLength = 0` could cause infinite loop, but `dataLen = segmentLength - 2` goes negative, preventing OOB reads.
+#### ~~MED-28~~: JPEG marker segment length partially unchecked — **FIXED** (see FIXED_ISSUES.md #375)
 
 #### MED-30: MPF IFD entry count unbounded
 - **File**: `src/formats/JPEGGainmapDecoder.ts` ~lines 386-415

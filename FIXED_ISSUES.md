@@ -5269,3 +5269,40 @@ Lenient/strict boundary preserved: returns `null` for "this isn't MPF" signals (
 - `npx tsc --noEmit` clean.
 
 **Known follow-up**: MED-30 (MPF IFD entry count unbounded for the `count / 16` derivation when 0xB002 precedes 0xB001) is tracked as a separate issue.
+
+## Issue #375: MED-28 — JPEG marker segment length partially unchecked
+
+**Root cause**: Per JPEG spec ITU-T T.81 §B.1.1.4, marker segment length is a 2-byte big-endian field that includes itself; minimum valid value is 2 (empty payload). Four segment-iterating loops in `src/formats/JPEGGainmapDecoder.ts` (`extractJPEGOrientation`, `findMPFMarkerOffset`, `extractHeadroomFromXMP`, `extractXMPFromJPEG`) read `segmentLength` from untrusted file bytes without validating the minimum. While the existing implementation does not infinite-loop on `segLen < 2` alone (each iteration advances `offset` by at least 2 bytes), spec-violating values can cause re-traversal of misaligned bytes, producing phantom markers and confused parsing on adversarial inputs.
+
+**Fix**: Added `if (segLen < 2) break/return null` to all four loops (matching the pre-existing pattern at `DecoderRegistry.ts:236`). Recovery is lenient throughout because:
+- `findMPFMarkerOffset` is shared between the gainmap detector (must not throw) and the parser
+- `extractJPEGOrientation` falls back to default orientation 1 on parse failure
+- XMP sub-parsers already return null and have caller-side fallbacks
+
+Code comments at each site cite the spec and explain the defense-in-depth rationale. The XMP sub-parsers are now exposed via `_internal` namespace (matching the pattern HIGH-31 introduced for `ensureMPFRange`) so the lenient bail branches can be tested directly.
+
+**Tests added** (`src/formats/JPEGGainmapDecoder.test.ts`):
+- `JPEG segment length spec compliance (ITU-T T.81 §B.1.1.4)` describe block:
+  - `isGainmapJPEG bails on spec-violating segmentLength=0/1`
+  - `isGainmapJPEG accepts segmentLength=2 (empty payload, valid)` and `segmentLength=3 (1 byte payload)`
+  - `parseGainmapJPEG returns null when MPF scan hits segmentLength=0`
+  - `extractJPEGOrientation returns default (1) on segmentLength=0/1`
+  - `extractJPEGOrientation accepts segmentLength=2 and segmentLength=3`
+  - Adversarial-buffer tests for `isGainmapJPEG` and `extractJPEGOrientation` with 0xFFE0/0xFFE1-shaped padding to verify bounded behavior on hostile inputs.
+- Direct `_internal` coverage:
+  - `extractHeadroomFromXMP returns null when APP marker has segmentLength=0/1`
+  - `extractXMPFromJPEG returns null when APP marker has segmentLength=0/1`
+  - `extractHeadroomFromXMP/extractXMPFromJPEG accept segmentLength=2 and return null cleanly`
+  - `extractHeadroomFromXMP/extractXMPFromJPEG bail on adversarial buffer with 0xFFxx-shaped padding`
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+**Verification**:
+- 66 JPEGGainmapDecoder tests passing.
+- 1147 format tests passing (1 pre-existing skip).
+- `npx tsc --noEmit` clean.
+- Stash-revert with new tests against pre-fix source: 8 _internal tests fail (proving they would catch a regression in either direction).
+
+**Known follow-up**: A defensive `segLen < 2` audit of `src/formats/JP2Decoder.ts:430-454` (JPEG 2000 marker walker) is a tracked improvement; not infinite-loopable, but `<2` could mis-align reads. Out of MED-28 scope.
