@@ -5186,3 +5186,54 @@ Round 1 review surfaced five additional concerns: an implicit "common.wgsl is pr
 - `src/hdr-acceptance-criteria.test.ts`
 
 **Known follow-up (non-blocking)**: When Phase 4 wiring registers stage WGSL into `WebGPUShaderPipeline`, the orchestrator must strip the per-stage `@vertex fn vs` declaration to avoid duplicate-symbol errors (the prepend pattern combines vertex + common + stage source). Track in a separate issue.
+
+## Issue #373: MED-25 — Multiple global document click listeners without delegation
+
+**Root cause**: Many UI components (popovers, settings menus, dropdowns, overlays) each registered their own `document.addEventListener('mousedown'|'click', ...)` handler for outside-click dismiss. With dozens of dismissable surfaces, each open instance added a fresh global listener; missed cleanup leaked listeners holding references to disposed components. Semantics for nested popovers, Escape, re-entrancy, and LIFO dismiss order varied per component.
+
+**Fix**: Introduced `OutsideClickRegistry` (`src/utils/ui/OutsideClickRegistry.ts`) — a singleton that owns ONE capture-phase listener per event type (`mousedown`, `click`, `keydown`) and dispatches dismiss to registered consumers. Components call `register({ elements, onDismiss, dismissOn?, dismissOnEscape? })` and receive an idempotent deregister function.
+
+Semantics:
+- **LIFO walk**: clicking inside an inner popover protects it AND its outer ancestors. Clicking outside both dismisses innermost-first.
+- **Capture-phase listeners**: deliberate change vs prior bubble-phase handlers; consumers cannot rely on `stopPropagation` to suppress dismiss.
+- **Strict deregister-during-dispatch**: if a peer's deregister fires inside another callback, the peer's onDismiss is skipped (intuitive contract: "if I deregister, my onDismiss won't run").
+- **Re-entrant register() during dispatch**: lands in the registry but is NOT considered for the in-flight event.
+- **Auto-detach** of global listeners when the last entry is removed.
+- **Escape**: dismisses only the innermost opted-in registration.
+- **Callback throws** are caught and logged via `console.error` so a buggy consumer can't break peers.
+
+Migrated 14 components to the new registry: BugOverlaySettingsMenu, ClippingOverlaySettingsMenu, EXRWindowOverlaySettingsMenu, FPSIndicatorSettingsMenu, FrameburnSettingsMenu, InfoPanelSettingsMenu, InfoStripSettingsMenu, MatteOverlaySettingsMenu, ReferenceComparisonSettingsMenu, SpotlightOverlaySettingsMenu, TimecodeOverlaySettingsMenu, ShortcutCheatSheet, GotoFrameOverlay, plus minor cleanup of InfoStripSettingsMenu duplicate `menuEl` assignment. Net -208 LOC across migrated components.
+
+**Tests added** (`src/utils/ui/OutsideClickRegistry.test.ts`, 27 tests):
+- Basic register/dismiss with multi-element safe zones.
+- Deregister idempotency, listener teardown invariant.
+- LIFO peer registrations, nested popover protection.
+- Escape (innermost only, opt-out, key filtering).
+- Robustness: throwing callback, null/undefined elements, re-entrant register/deregister during dispatch.
+- Detached DOM elements, listener detach after dismiss path.
+- Plus 8 integration tests in `OutsideClickRegistry.integration.test.ts` proving real components dismiss correctly and listener-count stays at 1 per event type regardless of open popover count.
+
+**Files changed**:
+- `src/utils/ui/OutsideClickRegistry.ts` (new)
+- `src/utils/ui/OutsideClickRegistry.test.ts` (new)
+- `src/ui/components/OutsideClickRegistry.integration.test.ts` (new)
+- `src/ui/components/BugOverlaySettingsMenu.ts`
+- `src/ui/components/ClippingOverlaySettingsMenu.ts`
+- `src/ui/components/EXRWindowOverlaySettingsMenu.ts`
+- `src/ui/components/FPSIndicatorSettingsMenu.ts`
+- `src/ui/components/FrameburnSettingsMenu.ts`
+- `src/ui/components/InfoPanelSettingsMenu.ts`
+- `src/ui/components/InfoStripSettingsMenu.ts`
+- `src/ui/components/MatteOverlaySettingsMenu.ts`
+- `src/ui/components/ReferenceComparisonSettingsMenu.ts`
+- `src/ui/components/SpotlightOverlaySettingsMenu.ts`
+- `src/ui/components/TimecodeOverlaySettingsMenu.ts`
+- `src/ui/components/ShortcutCheatSheet.ts`
+- `src/ui/components/GotoFrameOverlay.ts`
+
+**Verification**:
+- Targeted: 191 files, 8860 tests passing.
+- Full suite: 639 files, 26018 tests passing.
+- `npx tsc --noEmit` clean.
+
+**Known follow-up (non-blocking)**: ~30 other controls (ZebraControl, CompareControl, StereoControl, ScopesControl, ToneMappingControl, OCIOControl, LUTPipelinePanel, etc.) still have hand-rolled outside-click dismiss patterns. Each migration requires updating the associated test (replace `expect(document.addEventListener).toHaveBeenCalledWith(...)` style assertions with `expect(outsideClickRegistry.getRegistrationCount()).toBe(...)`). Tracked as a follow-up batch.

@@ -97,7 +97,7 @@ These findings were not yet verified against actual source code:
 
 #### UI Controls
 - ~~**MED-23**~~: DisplayProfileControl slider range not validated on load — **FIXED** (see FIXED_ISSUES.md #363)
-- **MED-25**: Multiple global document click listeners without delegation — Multiple UI components
+- ~~**MED-25**~~: Multiple global document click listeners without delegation — **FIXED** (see FIXED_ISSUES.md #373)
 
 #### Workers
 - ~~**LOW-22**~~: ImageBitmap close error handling incomplete — **FIXED** (see FIXED_ISSUES.md #369)
