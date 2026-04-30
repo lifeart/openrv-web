@@ -323,7 +323,11 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
   // 1.1g App.ts integration: detectDisplayCapabilities called at startup
   // =====================================================================
   describe('1.1 App.ts integration', () => {
-    it('AC-P1-1.1g: App module exports the App class', async () => {
+    // The dynamic import here pulls in the entire App module graph (~60 UI controls,
+    // Viewer, ColorPipelineManager, etc.). Locally this resolves in ~2s; under CI
+    // coverage instrumentation with parallel workers it has been observed exceeding
+    // the default 5s vitest timeout. Bump to 15s headroom. See seam-verifier flag-up.
+    it('AC-P1-1.1g: App module exports the App class', { timeout: 15000 }, async () => {
       const appModule = await import('./App');
       expect(appModule.App).toBeDefined();
     });
