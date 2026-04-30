@@ -535,6 +535,12 @@ export class Renderer implements RendererBackend {
     this.initShaders();
     this.initQuad();
 
+    // Force every uniform / GL state field to re-upload on the next render.
+    // The new GL context starts with default values, but our dirty flags were
+    // cleared by prior applyUniforms() calls — without this, sliders changed
+    // *during* the loss window stay stale until the user touches them again.
+    this.stateManager.markAllDirty();
+
     log.info('GPU state re-initialized after context restore');
   }
 
@@ -1762,6 +1768,7 @@ export class Renderer implements RendererBackend {
     gl.bindTexture(gl.TEXTURE_2D, null);
 
     if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      log.warn('Scope FBO not complete, status:', status);
       gl.deleteFramebuffer(fbo);
       gl.deleteTexture(texture);
       return;

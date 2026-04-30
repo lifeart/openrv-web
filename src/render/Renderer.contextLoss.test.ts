@@ -313,4 +313,24 @@ describe('Renderer WebGL Context Loss Recovery', () => {
     // Reset isTexture to default for subsequent tests
     (mockGL.isTexture as ReturnType<typeof vi.fn>).mockReturnValue(true);
   });
+
+  // -----------------------------------------------------------------------
+  // RENDER-W4-05: shader uniforms re-uploaded after context restore
+  // -----------------------------------------------------------------------
+
+  it('RENDER-W4-05: should mark all shader state dirty after context restore', () => {
+    // The dirty flags get cleared as applyUniforms() runs during normal frames.
+    // After a new GL context is created the existing program is gone; the
+    // freshly initShaders()-created program has no uniforms set. If
+    // ShaderStateManager's dirty flags weren't reset, the next render would
+    // skip the upload and the new program would render with default uniforms
+    // until the user touches a slider.
+    const stateManager = (renderer as unknown as { stateManager: { markAllDirty: () => void } }).stateManager;
+    const markAllDirtySpy = vi.spyOn(stateManager, 'markAllDirty');
+
+    canvas.dispatchEvent(new Event('webglcontextlost'));
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+
+    expect(markAllDirtySpy).toHaveBeenCalled();
+  });
 });
