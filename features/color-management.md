@@ -268,8 +268,8 @@ State surface on `LUTPipeline` (`src/color/pipeline/LUTPipeline.ts`):
   `'bt709' | 'bt2020' | 'p3'`, or `null` for "preserve input primaries".
 - `setStageOutputTransferFunction(sourceId, stage, transfer)` /
   `getStageOutputTransferFunction(sourceId, stage)` — transfer functions are
-  `'srgb' | 'hlg' | 'pq' | 'smpte240m'`, or `null` for "preserve input
-  transfer function".
+  `'srgb' | 'hlg' | 'pq' | 'smpte240m' | 'linear'`, or `null` for "preserve
+  input transfer function".
 - Equivalent setter / getter pair for the session-wide display stage
   (`setDisplayLUTOutputColorPrimaries`, `getDisplayLUTOutputColorPrimaries`,
   etc.).

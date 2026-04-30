@@ -416,6 +416,36 @@ describe('Viewer', () => {
       viewer.setLUTIntensity(0.5);
       expect(viewer.getLUTIntensity()).toBe(0.5);
     });
+
+    it('VWR-024a: setLUTStageOutputColorPrimaries auto-registers default source when none is registered', () => {
+      // Simulate the "no source registered" state — Viewer normally
+      // auto-registers `'default'` at construction time, so unregister it
+      // here to exercise the recovery path. Calling per-stage setters must
+      // NOT silently no-op at the LUTPipeline layer.
+      const pipe = viewer.getLUTPipeline();
+      pipe.unregisterSource('default');
+      expect(pipe.getSourceConfig('default')).toBeUndefined();
+
+      viewer.setLUTStageOutputColorPrimaries('file', 'bt709');
+
+      const cfg = pipe.getSourceConfig('default');
+      expect(cfg).toBeDefined();
+      expect(cfg!.fileLUT.outputColorPrimaries).toBe('bt709');
+      expect(viewer.getLUTStageOutputColorPrimaries('file')).toBe('bt709');
+    });
+
+    it('VWR-024b: setLUTStageOutputTransferFunction auto-registers default source when none is registered', () => {
+      const pipe = viewer.getLUTPipeline();
+      pipe.unregisterSource('default');
+      expect(pipe.getSourceConfig('default')).toBeUndefined();
+
+      viewer.setLUTStageOutputTransferFunction('precache', 'pq');
+
+      const cfg = pipe.getSourceConfig('default');
+      expect(cfg).toBeDefined();
+      expect(cfg!.preCacheLUT.outputTransferFunction).toBe('pq');
+      expect(viewer.getLUTStageOutputTransferFunction('precache')).toBe('pq');
+    });
   });
 
   describe('wipe state', () => {

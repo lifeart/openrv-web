@@ -745,6 +745,36 @@ describe('LUTPipeline', () => {
       expect(DEFAULT_LUT_STAGE.outputColorPrimaries).toBeNull();
       expect(DEFAULT_LUT_STAGE.outputTransferFunction).toBeNull();
     });
+
+    it('MLUT-CS-012: setStageOutputColorPrimaries sanitizes invalid runtime values', () => {
+      pipeline.setStageOutputColorPrimaries('source-1', 'file', 'bt709');
+      // Untyped JS / plugin caller passes a bogus primaries string.
+      pipeline.setStageOutputColorPrimaries('source-1', 'file', 'mars-sat-3' as never);
+
+      const cfg = pipeline.getSourceConfig('source-1')!;
+      // Bad value must be coerced to null rather than poisoning state.
+      expect(cfg.fileLUT.outputColorPrimaries).toBeNull();
+    });
+
+    it('MLUT-CS-013: setStageOutputTransferFunction sanitizes invalid runtime values', () => {
+      pipeline.setStageOutputTransferFunction('source-1', 'precache', 'srgb');
+      pipeline.setStageOutputTransferFunction('source-1', 'precache', 'definitely-not-pq' as never);
+
+      const cfg = pipeline.getSourceConfig('source-1')!;
+      expect(cfg.preCacheLUT.outputTransferFunction).toBeNull();
+    });
+
+    it('MLUT-CS-014: setDisplayLUTOutputColorPrimaries sanitizes invalid runtime values', () => {
+      pipeline.setDisplayLUTOutputColorPrimaries('p3');
+      pipeline.setDisplayLUTOutputColorPrimaries('not-a-primaries' as never);
+      expect(pipeline.getState().displayLUT.outputColorPrimaries).toBeNull();
+    });
+
+    it('MLUT-CS-015: setDisplayLUTOutputTransferFunction sanitizes invalid runtime values', () => {
+      pipeline.setDisplayLUTOutputTransferFunction('hlg');
+      pipeline.setDisplayLUTOutputTransferFunction('bogus' as never);
+      expect(pipeline.getState().displayLUT.outputTransferFunction).toBeNull();
+    });
   });
 
   // ---------------------------------------------------------------------------

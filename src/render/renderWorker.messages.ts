@@ -108,7 +108,7 @@ export interface RenderHDRMessage extends BaseWorkerMessage {
   height: number;
   dataType: number; // 0=uint8, 1=uint16, 2=float32
   channels: number;
-  transferFunction?: number; // 0=srgb, 1=hlg, 2=pq
+  transferFunction?: number; // 0=srgb, 1=hlg, 2=pq, 3=smpte240m, 4=linear
   colorPrimaries?: number; // 0=bt709, 1=bt2020, 2=p3
 }
 

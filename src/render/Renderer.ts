@@ -2629,6 +2629,7 @@ export class Renderer implements RendererBackend {
     // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
+    this._lastInputTransferCode = INPUT_TRANSFER_SRGB;
     // Apply user rotation/flip (SDR has no video rotation metadata)
     const sdrRotMatrix = getRotationMatrix2x2(normalizeAngle(this._userRotation));
     this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', sdrRotMatrix);

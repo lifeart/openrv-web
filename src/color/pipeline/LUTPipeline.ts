@@ -322,17 +322,20 @@ export class LUTPipeline extends EventEmitter<PipelineEventMap> {
   ): void {
     const config = this.sources.get(sourceId);
     if (!config) return;
+    // Sanitize at runtime — TS types don't protect against untyped JS callers
+    // (plugins, deserialized JSON) passing invalid strings.
+    const sanitized = sanitizeColorPrimaries(primaries);
     // Discriminated update preserves PreCacheStageState's bitDepth field
     // without leaning on a structural cast.
     switch (stage) {
       case 'precache':
-        config.preCacheLUT = { ...config.preCacheLUT, outputColorPrimaries: primaries };
+        config.preCacheLUT = { ...config.preCacheLUT, outputColorPrimaries: sanitized };
         break;
       case 'file':
-        config.fileLUT = { ...config.fileLUT, outputColorPrimaries: primaries };
+        config.fileLUT = { ...config.fileLUT, outputColorPrimaries: sanitized };
         break;
       case 'look':
-        config.lookLUT = { ...config.lookLUT, outputColorPrimaries: primaries };
+        config.lookLUT = { ...config.lookLUT, outputColorPrimaries: sanitized };
         break;
     }
     this.emit('stageChanged', { sourceId, stage });
@@ -353,17 +356,20 @@ export class LUTPipeline extends EventEmitter<PipelineEventMap> {
   ): void {
     const config = this.sources.get(sourceId);
     if (!config) return;
+    // Sanitize at runtime — TS types don't protect against untyped JS callers
+    // (plugins, deserialized JSON) passing invalid strings.
+    const sanitized = sanitizeTransferFunction(transfer);
     // Discriminated update preserves PreCacheStageState's bitDepth field
     // without leaning on a structural cast.
     switch (stage) {
       case 'precache':
-        config.preCacheLUT = { ...config.preCacheLUT, outputTransferFunction: transfer };
+        config.preCacheLUT = { ...config.preCacheLUT, outputTransferFunction: sanitized };
         break;
       case 'file':
-        config.fileLUT = { ...config.fileLUT, outputTransferFunction: transfer };
+        config.fileLUT = { ...config.fileLUT, outputTransferFunction: sanitized };
         break;
       case 'look':
-        config.lookLUT = { ...config.lookLUT, outputTransferFunction: transfer };
+        config.lookLUT = { ...config.lookLUT, outputTransferFunction: sanitized };
         break;
     }
     this.emit('stageChanged', { sourceId, stage });
@@ -371,13 +377,17 @@ export class LUTPipeline extends EventEmitter<PipelineEventMap> {
 
   /** Set the color primaries that the display LUT's output is encoded in. */
   setDisplayLUTOutputColorPrimaries(primaries: ColorPrimaries | null): void {
-    this.displayLUT = { ...this.displayLUT, outputColorPrimaries: primaries };
+    // Sanitize at runtime — see `setStageOutputColorPrimaries` for rationale.
+    const sanitized = sanitizeColorPrimaries(primaries);
+    this.displayLUT = { ...this.displayLUT, outputColorPrimaries: sanitized };
     this.emit('displayChanged', { stage: 'display' });
   }
 
   /** Set the transfer function that the display LUT's output is encoded in. */
   setDisplayLUTOutputTransferFunction(transfer: TransferFunction | null): void {
-    this.displayLUT = { ...this.displayLUT, outputTransferFunction: transfer };
+    // Sanitize at runtime — see `setStageOutputTransferFunction` for rationale.
+    const sanitized = sanitizeTransferFunction(transfer);
+    this.displayLUT = { ...this.displayLUT, outputTransferFunction: sanitized };
     this.emit('displayChanged', { stage: 'display' });
   }
 

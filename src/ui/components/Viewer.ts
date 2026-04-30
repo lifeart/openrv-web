@@ -2620,6 +2620,20 @@ export class Viewer {
   // automatically re-targets writes/reads to the new source's stage state.
   // ---------------------------------------------------------------------
 
+  /**
+   * Resolve the source ID for per-source stage setters. Falls back to
+   * `'default'` and auto-registers it if no source config exists yet, so
+   * the public API never silently no-ops at the LUTPipeline layer.
+   */
+  private resolveLUTStageSourceId(): string {
+    const pipe = this.colorPipeline.lutPipeline;
+    const sourceId = pipe.getActiveSourceId() ?? 'default';
+    if (!pipe.getSourceConfig(sourceId)) {
+      pipe.registerSource(sourceId);
+    }
+    return sourceId;
+  }
+
   setLUTStageOutputColorPrimaries(
     stage: 'precache' | 'file' | 'look' | 'display',
     primaries: ColorPrimaries | null,
@@ -2628,7 +2642,7 @@ export class Viewer {
     if (stage === 'display') {
       pipe.setDisplayLUTOutputColorPrimaries(primaries);
     } else {
-      const sourceId = pipe.getActiveSourceId() ?? 'default';
+      const sourceId = this.resolveLUTStageSourceId();
       pipe.setStageOutputColorPrimaries(sourceId, stage, primaries);
     }
     this.scheduleRender();
@@ -2649,7 +2663,7 @@ export class Viewer {
     if (stage === 'display') {
       pipe.setDisplayLUTOutputTransferFunction(transfer);
     } else {
-      const sourceId = pipe.getActiveSourceId() ?? 'default';
+      const sourceId = this.resolveLUTStageSourceId();
       pipe.setStageOutputTransferFunction(sourceId, stage, transfer);
     }
     this.scheduleRender();

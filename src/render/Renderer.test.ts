@@ -538,6 +538,57 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     expect(getLastUniform1i(mockGL, 'u_hslQualifierEnabled')).toBe(1);
     expect(getLastUniform1i(mockGL, 'u_hslMattePreview')).toBe(1);
   });
+
+  it('REN-SDR-016: renderSDRFrame after PQ HDR frame resets _lastInputTransferCode to SRGB', () => {
+    initRendererWithMockGL(renderer, { supportPQ: true });
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.resize(100, 100);
+
+    // First, render a PQ HDR frame so _lastInputTransferCode becomes 2 (PQ).
+    const hdrImage = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+    });
+    hdrImage.metadata.transferFunction = 'pq';
+    renderer.renderImage(hdrImage);
+
+    // Sanity check: cached input-transfer code should now be 2 (PQ).
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(2);
+
+    // Now render an SDR frame and verify the cached code is reset to 0 (sRGB).
+    renderer.renderSDRFrame(sourceCanvas);
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(0);
+  });
+
+  // REN-LIN-006 mirrors REN-SDR-016 with the linearization-pipeline naming
+  // the code-review audit cites (MED-51 family). The Renderer/Color agent's
+  // fix at Renderer.ts:2632 (`_lastInputTransferCode = INPUT_TRANSFER_SRGB`)
+  // is what makes this assertion hold; if that line regresses, this test
+  // — together with REN-SDR-016 — fails fast.
+  it('REN-LIN-006: SDR frame after HDR frame resets _lastInputTransferCode to INPUT_TRANSFER_SRGB', () => {
+    initRendererWithMockGL(renderer, { supportPQ: true });
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.resize(100, 100);
+
+    const hdrImage = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+    });
+    hdrImage.metadata.transferFunction = 'pq';
+    renderer.renderImage(hdrImage);
+    // After PQ HDR: cached code should be INPUT_TRANSFER_PQ (2).
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(2);
+
+    // After SDR: cached code must reset to INPUT_TRANSFER_SRGB (0).
+    renderer.renderSDRFrame(sourceCanvas);
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(0);
+  });
 });
 
 /**
