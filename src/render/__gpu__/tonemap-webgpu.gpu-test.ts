@@ -27,6 +27,10 @@ import { createTestDevice, createShaderModule } from './helpers/webgpu';
 import { EPSILON } from './helpers/tolerance';
 
 import commonSrc from '../webgpu/shaders/common.wgsl?raw';
+// MED-55 4a-3: scene_analysis.wgsl no longer carries its own `@vertex fn vs`
+// or `struct VSOut` — they're now provided by the prepended vertex source.
+// Mirror the runtime concatenation: common + viewer vertex + stage fragment.
+import viewerVertSrc from '../webgpu/shaders/_viewer_vert.wgsl?raw';
 import sceneAnalysisSrc from '../webgpu/shaders/scene_analysis.wgsl?raw';
 
 import {
@@ -101,8 +105,9 @@ async function renderToneMapWGPU(
   inputRGBA: [number, number, number, number],
   uniforms: ToneMappingUniforms,
 ): Promise<GPURenderResult> {
-  // Combined shader: common.wgsl + scene_analysis.wgsl (matches runtime).
-  const combinedSrc = commonSrc + '\n' + sceneAnalysisSrc;
+  // Combined shader: common.wgsl + viewer vertex + scene_analysis.wgsl
+  // (matches runtime concatenation in WebGPUShaderPipeline).
+  const combinedSrc = commonSrc + '\n' + viewerVertSrc + '\n' + sceneAnalysisSrc;
   const shader = await createShaderModule(device, combinedSrc, 'tonemap_test');
 
   // Use a 2x2 output texture so the read pixel sits inside the rasterized
@@ -675,7 +680,7 @@ describe('WebGPU Tone Mapping — Runtime Verification (MED-55)', () => {
       try {
         // EPSILON.HDR_HALF imported to keep the tolerance helpers honest.
         void EPSILON.HDR_HALF;
-        const combinedSrc = commonSrc + '\n' + sceneAnalysisSrc;
+        const combinedSrc = commonSrc + '\n' + viewerVertSrc + '\n' + sceneAnalysisSrc;
         const module = await createShaderModule(gpu.device, combinedSrc, 'tonemap_dispatch_full');
         expect(module).toBeTruthy();
       } finally {

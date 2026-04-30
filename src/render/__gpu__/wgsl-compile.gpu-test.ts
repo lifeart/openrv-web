@@ -4,6 +4,12 @@ import { createTestDevice, createShaderModule } from './helpers/webgpu';
 // Import WGSL shader sources via Vite ?raw
 import commonSrc from '../webgpu/shaders/common.wgsl?raw';
 import passthroughSrc from '../webgpu/shaders/passthrough.wgsl?raw';
+// MED-55 4a-3: per-stage shaders no longer carry their own `@vertex fn vs`
+// or `struct VSOut`. The runtime (WebGPUShaderPipeline) prepends one of
+// these vertex sources before the stage fragment source, so tests must
+// mirror that concatenation when compiling stage shaders.
+import viewerVertSrc from '../webgpu/shaders/_viewer_vert.wgsl?raw';
+import passthroughVertSrc from '../webgpu/shaders/_passthrough_vert.wgsl?raw';
 import linearizeSrc from '../webgpu/shaders/linearize.wgsl?raw';
 import inputDecodeSrc from '../webgpu/shaders/input_decode.wgsl?raw';
 import primaryGradeSrc from '../webgpu/shaders/primary_grade.wgsl?raw';
@@ -66,12 +72,26 @@ describe('WGSL Shader Compilation (real GPU)', () => {
   ];
 
   for (const { name, src } of stageShaders) {
-    it(`${name}.wgsl compiles (with common.wgsl prepended)`, async () => {
+    // First-stage path: viewer vertex (pan/zoom) prepended.
+    it(`${name}.wgsl compiles (common + viewer vertex prepended)`, async () => {
       const gpu = await createTestDevice();
       if (!gpu) return;
       try {
-        const fullSource = commonSrc + '\n' + src;
-        const module = await createShaderModule(gpu.device, fullSource, name);
+        const fullSource = commonSrc + '\n' + viewerVertSrc + '\n' + src;
+        const module = await createShaderModule(gpu.device, fullSource, `${name}_viewer`);
+        expect(module).toBeTruthy();
+      } finally {
+        gpu.device.destroy();
+      }
+    });
+
+    // Intermediate-stage path: passthrough vertex (identity FBO quad) prepended.
+    it(`${name}.wgsl compiles (common + passthrough vertex prepended)`, async () => {
+      const gpu = await createTestDevice();
+      if (!gpu) return;
+      try {
+        const fullSource = commonSrc + '\n' + passthroughVertSrc + '\n' + src;
+        const module = await createShaderModule(gpu.device, fullSource, `${name}_passthrough`);
         expect(module).toBeTruthy();
       } finally {
         gpu.device.destroy();

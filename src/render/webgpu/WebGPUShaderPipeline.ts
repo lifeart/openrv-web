@@ -27,6 +27,8 @@ import { GPUBufferUsage } from './WebGPUTypes';
 import { WebGPUPingPong } from './WebGPUPingPong';
 import type { PingPongFormat } from './WebGPUPingPong';
 import commonSrc from './shaders/common.wgsl?raw';
+import viewerVertSrc from './shaders/_viewer_vert.wgsl?raw';
+import passthroughVertSrc from './shaders/_passthrough_vert.wgsl?raw';
 
 // ---------------------------------------------------------------------------
 // Stage descriptor for WebGPU pipeline
@@ -87,50 +89,22 @@ struct VSOut {
 // ---------------------------------------------------------------------------
 // Viewer vertex WGSL (pan/zoom transform for first stage)
 // ---------------------------------------------------------------------------
+//
+// Imported from `./shaders/_viewer_vert.wgsl?raw` for symmetry with the
+// existing `commonSrc` pattern. Prepended (after common.wgsl) to the first
+// active stage's fragment source at pipeline build time.
 
-const VIEWER_VERT_WGSL = /* wgsl */ `
-struct ViewerUniforms {
-  offset: vec2f,
-  scale: vec2f,
-}
-
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
-
-@group(1) @binding(0) var<uniform> viewer: ViewerUniforms;
-
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x * viewer.scale.x + viewer.offset.x,
-                  y * viewer.scale.y + viewer.offset.y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
-`;
+const VIEWER_VERT_WGSL = viewerVertSrc;
 
 // ---------------------------------------------------------------------------
 // Passthrough vertex WGSL (identity transform for intermediate FBO stages)
 // ---------------------------------------------------------------------------
+//
+// Imported from `./shaders/_passthrough_vert.wgsl?raw`. Prepended (after
+// common.wgsl) to every non-first stage's fragment source at pipeline build
+// time.
 
-const PASSTHROUGH_VERT_WGSL = /* wgsl */ `
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
-
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x, y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
-`;
+const PASSTHROUGH_VERT_WGSL = passthroughVertSrc;
 
 // ---------------------------------------------------------------------------
 // Pipeline cache key helpers
