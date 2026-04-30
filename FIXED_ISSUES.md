@@ -5185,7 +5185,7 @@ Round 1 review surfaced five additional concerns: an implicit "common.wgsl is pr
 - `src/utils/effects/effectProcessing.shared.ts`
 - `src/hdr-acceptance-criteria.test.ts`
 
-**Known follow-up (non-blocking)**: When Phase 4 wiring registers stage WGSL into `WebGPUShaderPipeline`, the orchestrator must strip the per-stage `@vertex fn vs` declaration to avoid duplicate-symbol errors (the prepend pattern combines vertex + common + stage source). Track in a separate issue.
+**Known follow-up (resolved on improvements-v4)**: The `@vertex fn vs` deduplication was completed in commit `6444da9` ("MED-55 4a-3 — strip @vertex fn vs from 11 stage WGSL files"). Per-stage vertex blocks were extracted into `shaders/_viewer_vert.wgsl` and `shaders/_passthrough_vert.wgsl` (imported via `?raw`) and the orchestrator prepends the appropriate one per stage. A tristate feature flag (`src/render/webgpu/featureFlag.ts`, default `'disabled'`) gates whether `WebGPUBackend.initAsync()` calls `registerStage()` in production.
 
 ## Issue #593: MED-25 — Multiple global document click listeners without delegation
 
@@ -5236,7 +5236,7 @@ Migrated 14 components to the new registry: BugOverlaySettingsMenu, ClippingOver
 - Full suite: 639 files, 26018 tests passing.
 - `npx tsc --noEmit` clean.
 
-**Known follow-up (non-blocking)**: ~30 other controls (ZebraControl, CompareControl, StereoControl, ScopesControl, ToneMappingControl, OCIOControl, LUTPipelinePanel, etc.) still have hand-rolled outside-click dismiss patterns. Each migration requires updating the associated test (replace `expect(document.addEventListener).toHaveBeenCalledWith(...)` style assertions with `expect(outsideClickRegistry.getRegistrationCount()).toBe(...)`). Tracked as a follow-up batch.
+**Follow-up phases (completed in improvements-v4)**: The original 14-component migration was extended in subsequent phases on the same branch — Panel + DropdownMenu (Phase 1), 19 Pattern B controls including ZebraControl, ToneMappingControl, ScopesControl, StereoControl, CompareControl, etc. (Phase 2 + cleanup batches A/B), HeaderBar's 4 menu shims (Phase 4), and 14 complex Phase-3 controls including NetworkControl, HSLQualifierControl, DisplayProfileControl, OCIOControl, LUTPipelinePanel, TimelineEditor, TimelineContextMenu, etc. See `UI.md` "Centralized Outside-Click Registry" section for the authoritative migration list. Post-cleanup, no Phase 1–3 controls remain on hand-rolled `document.addEventListener('click'|'mousedown', ...)` listeners.
 
 ---
 
