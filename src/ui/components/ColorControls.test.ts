@@ -5,16 +5,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ColorControls, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import type { LUT3D, LUT1D } from '../../color/ColorProcessingFacade';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('ColorControls', () => {
   let controls: ColorControls;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     controls = new ColorControls();
   });
 
   afterEach(() => {
     controls.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -532,50 +539,31 @@ describe('ColorControls', () => {
 
       expect(handler).not.toHaveBeenCalled();
     });
-
-    it('COL-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      controls.show();
-      controls.hide();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
-
-    it('COL-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      controls.show();
-      controls.dispose();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
   });
 
-  describe('dispose', () => {
-    it('COL-044: removes document click listener on dispose', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
+  describe('OutsideClickRegistry integration', () => {
+    it('COL-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      controls.show();
+      expectRegistrationCount(1);
+      controls.hide();
+      expectRegistrationCount(0);
+    });
 
-      const ctrl = new ColorControls();
+    it('COL-OCR-002: outside-click after open dismisses the panel', () => {
+      const handler = vi.fn();
+      controls.on('visibilityChanged', handler);
 
-      // Find the click handler that was added by looking for the last call to addEventListener with 'click'
-      // Note: This assumes no other active global click listeners are added during test execution
-      const clickCalls = addSpy.mock.calls.filter((call) => call[0] === 'click');
-      const lastClickCall = clickCalls[clickCalls.length - 1]; // The one added by constructor
+      controls.show();
+      expect(handler).toHaveBeenCalledWith(true);
 
-      expect(lastClickCall).toBeDefined();
-      const handler = lastClickCall![1];
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
 
-      ctrl.dispose();
-
-      // Verify it was removed
-      expect(removeSpy).toHaveBeenCalledWith('click', handler);
-
-      addSpy.mockRestore();
-      removeSpy.mockRestore();
+      expect(handler).toHaveBeenCalledWith(false);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 

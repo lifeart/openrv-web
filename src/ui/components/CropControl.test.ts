@@ -14,16 +14,23 @@ import {
   MIN_CROP_FRACTION,
   MAX_UNCROP_PADDING,
 } from './CropControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('CropControl', () => {
   let control: CropControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new CropControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -1369,6 +1376,30 @@ describe('CropControl', () => {
       expect(rightInput!.getAttribute('aria-label')).toBe('Right padding in pixels');
       expect(bottomInput!.getAttribute('aria-label')).toBe('Bottom padding in pixels');
       expect(leftInput!.getAttribute('aria-label')).toBe('Left padding in pixels');
+    });
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('CRP-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      control.showPanel();
+      expectRegistrationCount(1);
+      control.hidePanel();
+      expectRegistrationCount(0);
+    });
+
+    it('CRP-OCR-002: outside-click after open dismisses the panel', () => {
+      control.showPanel();
+      const panel = document.querySelector('.crop-panel') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 });

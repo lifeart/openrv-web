@@ -1,5 +1,6 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { CropRegion, CropState } from '../../core/types/transform';
 export { DEFAULT_CROP_REGION, DEFAULT_CROP_STATE } from '../../core/types/transform';
@@ -76,8 +77,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private aspectSelect: HTMLSelectElement | null = null;
   private toggleSwitch: HTMLButtonElement | null = null;
   private dimensionsLabel: HTMLElement | null = null;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   // Uncrop UI elements
   private uncropToggleSwitch: HTMLButtonElement | null = null;
@@ -160,29 +160,10 @@ export class CropControl extends EventEmitter<CropControlEvents> {
 
     this.container.appendChild(this.cropButton);
     // Panel will be appended to body when shown
-
-    // Close on outside click
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close panel on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isPanelOpen) {
-        this.hidePanel();
-      }
-    };
-    document.addEventListener('keydown', this.boundHandleKeyDown);
-  }
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (!this.isPanelOpen) return;
-    const target = e.target as Node;
-    // Don't close when clicking on the crop button/container or the panel itself
-    if (this.container.contains(target) || this.panel.contains(target)) return;
-    // Don't close when clicking in the viewer area (allows crop handle dragging)
-    const viewer = document.querySelector('.viewer-container');
-    if (viewer && viewer.contains(target)) return;
-    this.hidePanel();
+    // Outside-click + Escape dismiss are handled by OutsideClickRegistry,
+    // registered in showPanel() and deregistered in hidePanel(). The viewer
+    // container is included in `elements` so clicks inside the viewer (e.g.,
+    // dragging crop handles) do not dismiss the panel.
   }
 
   private createPanelContent(): void {
@@ -843,6 +824,16 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     // Move focus to the first interactive element in the panel
     this.toggleSwitch?.focus();
 
+    // Register outside-click + Escape dismissal. Include the viewer container
+    // so clicks inside the viewer (e.g., dragging crop handles) do not dismiss.
+    const viewer = document.querySelector('.viewer-container');
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel, viewer],
+      onDismiss: () => this.hidePanel(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
+
     this.emit('panelToggled', true);
   }
 
@@ -850,6 +841,8 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
     this.updateButtonState();
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
 
     // Return focus to the crop button
     this.cropButton.focus();
@@ -967,8 +960,8 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     // Remove panel from body if present
     if (document.body.contains(this.panel)) {
       document.body.removeChild(this.panel);
