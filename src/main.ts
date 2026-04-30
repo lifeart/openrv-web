@@ -42,20 +42,50 @@ pluginRegistry.setAllowedOrigins([window.location.origin]);
 // Wire plugin settings into the unified preferences backup flow
 getCorePreferencesManager().setPluginSettingsProvider(pluginRegistry.settingsStore);
 
-// Dev-only: wire up the in-tree sample plugin and the Vite-driven hot-reload
-// bridge. The dynamic imports keep `SamplePlugin`, `clientBridge`, and
-// `HotReloadManager` out of production bundles entirely — verified by
-// `tests/build/no-dev-leak.test.ts`.
+// Dev-only: wire up the Vite-driven hot-reload bridge and (optionally) the
+// in-tree sample plugin. The dynamic imports keep `SamplePlugin`,
+// `clientBridge`, and `HotReloadManager` out of production bundles
+// entirely — verified by `tests/build/no-dev-leak.test.ts`.
+//
+// Ordering note: we install the hot-reload bridge BEFORE registering /
+// activating any plugin so the `pluginStateChanged` listener that captures
+// the plugin URL fires on the initial 'active' transition. If we activated
+// first, the bridge's listener would attach after the event was emitted
+// and the very first save-driven reload would fail with "No URL tracked".
+//
+// Sample plugin opt-out: `SamplePlugin` is loaded by default in DEV but
+// can be disabled by setting `VITE_LOAD_SAMPLE_PLUGIN=0` in `.env.local`.
+// It can also be activated on demand via `window.__openrvDev?.activateSample()`
+// when the env var is `0`. See docs/advanced/plugin-development.md.
 if (import.meta.env.DEV) {
   void (async () => {
     try {
-      const [{ default: SamplePlugin }, { installPluginHotReloadBridge }] = await Promise.all([
-        import('./plugin/builtins/SamplePlugin'),
-        import('./plugin/dev/clientBridge'),
-      ]);
-      pluginRegistry.register(SamplePlugin);
-      await pluginRegistry.activate(SamplePlugin.manifest.id);
+      const { installPluginHotReloadBridge } = await import('./plugin/dev/clientBridge');
       installPluginHotReloadBridge();
+
+      const loadSample = import.meta.env.VITE_LOAD_SAMPLE_PLUGIN !== '0';
+      const activateSample = async (): Promise<void> => {
+        const { default: SamplePlugin } = await import('./plugin/builtins/SamplePlugin');
+        pluginRegistry.register(SamplePlugin);
+        await pluginRegistry.activate(SamplePlugin.manifest.id);
+      };
+
+      // Always expose the on-demand activator so devs can opt in from the
+      // console even when VITE_LOAD_SAMPLE_PLUGIN=0.
+      const devHandle = (window as Window & { __openrvDev?: Record<string, unknown> }).__openrvDev ?? {};
+      devHandle.activateSample = activateSample;
+      (window as Window & { __openrvDev?: Record<string, unknown> }).__openrvDev = devHandle;
+
+      if (loadSample) {
+        await activateSample();
+      } else {
+        // Use console.warn for the opt-out notice so it surfaces under the
+        // repo's `no-console` lint rule (which only permits warn/error).
+        console.warn(
+          '[main] SamplePlugin auto-load disabled (VITE_LOAD_SAMPLE_PLUGIN=0). ' +
+            'Call window.__openrvDev.activateSample() to enable on demand.',
+        );
+      }
     } catch (err) {
       console.warn('[main] DEV plugin hot-reload setup failed:', err);
     }

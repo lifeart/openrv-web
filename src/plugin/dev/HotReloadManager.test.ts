@@ -220,6 +220,56 @@ describe('HotReloadManager', () => {
       expect(manager.isTracked('test.plugin')).toBe(true);
     });
 
+    it('PHOT-019b: rolls back newly-loaded plugin when dispose() of old plugin throws', async () => {
+      // Simulate a buggy old plugin whose deactivate() / dispose() throws.
+      // Without rollback, the next reload would call loadFromURL again and
+      // register() would throw "Plugin already registered" for newId.
+      (registry.dispose as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('dispose boom'));
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await expect(manager.reload('test.plugin')).rejects.toThrow('dispose boom');
+
+      // We loaded the new plugin, then dispose threw on the old one, then
+      // we rolled back by disposing+unregistering the new one.
+      expect(registry.loadFromURL).toHaveBeenCalledTimes(1);
+      // dispose called for old (threw) AND for newId (rollback) => 2 calls.
+      expect((registry.dispose as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+      // unregister only called as part of rollback (for newId), since the
+      // failure aborted before the old-plugin unregister step.
+      expect(registry.unregister).toHaveBeenCalledWith('reloaded.plugin');
+      // Old tracked URL preserved so developer can retry after fixing.
+      expect(manager.isTracked('test.plugin')).toBe(true);
+      expect(manager.isTracked('reloaded.plugin')).toBe(false);
+    });
+
+    it('PHOT-019c: rolls back newly-loaded plugin when activate() of new plugin throws', async () => {
+      (registry.activate as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('activate boom'));
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await expect(manager.reload('test.plugin')).rejects.toThrow('activate boom');
+
+      expect(registry.loadFromURL).toHaveBeenCalledTimes(1);
+      // The old plugin reached unregister cleanly; rollback then disposed
+      // and unregistered the new plugin.
+      expect(registry.unregister).toHaveBeenCalledWith('test.plugin');
+      expect(registry.unregister).toHaveBeenCalledWith('reloaded.plugin');
+    });
+
+    it('PHOT-019d: subsequent reload after rollback is not blocked by stale registration', async () => {
+      // First call: dispose throws, rollback runs.
+      (registry.dispose as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('dispose boom'));
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await expect(manager.reload('test.plugin')).rejects.toThrow('dispose boom');
+
+      // Second call: clean run. The rollback should have left the registry
+      // in a coherent state, so the second reload succeeds.
+      await manager.reload('test.plugin');
+
+      expect(registry.activate).toHaveBeenCalledWith('reloaded.plugin');
+      expect(manager.isTracked('reloaded.plugin')).toBe(true);
+    });
+
     it('PHOT-021: retry succeeds after transient reload failure', async () => {
       (registry.loadFromURL as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network error'));
 

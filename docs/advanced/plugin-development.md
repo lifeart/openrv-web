@@ -159,9 +159,24 @@ window.__openrvDev?.reloadPlugin('openrv.sample.hot-reload-demo');
 
 // Inspect which plugins are tracked for hot-reload.
 window.__openrvDev?.listTrackedPlugins();
+
+// Activate the bundled SamplePlugin on demand
+// (only useful when VITE_LOAD_SAMPLE_PLUGIN=0 is set, see below).
+window.__openrvDev?.activateSample();
 ```
 
 Useful when you want to reload without modifying the file (for example to verify `getState` / `restoreState` round-trips cleanly).
+
+### Disabling the bundled SamplePlugin
+
+`SamplePlugin` is auto-registered + activated in DEV by default so the hot-reload workflow is one save away. If you don't want its "Sample" entry cluttering the blend-mode dropdown, set:
+
+```bash
+# .env.local
+VITE_LOAD_SAMPLE_PLUGIN=0
+```
+
+The bridge still installs (so hot-reload works for any plugin you add) and `window.__openrvDev.activateSample()` remains available for on-demand activation from the console. Production builds never include `SamplePlugin` regardless of this flag.
 
 ---
 

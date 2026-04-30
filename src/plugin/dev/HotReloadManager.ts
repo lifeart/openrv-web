@@ -108,14 +108,43 @@ export class HotReloadManager {
     const cacheBustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
     const newId = await this.registry.loadFromURL(cacheBustUrl);
 
-    // 3. Deactivate and dispose old plugin (only after new one loaded successfully)
-    await this.registry.dispose(pluginId);
+    // 3-5. Dispose old, unregister old, activate new. Wrapped in try/catch
+    // because if any of these throws (deactivate, dispose, or activate
+    // hooks user-defined), we'd be left in a partially-applied state where
+    // the new plugin is registered but never activated, and the OLD plugin
+    // either still active or in some intermediate state. The next reload
+    // would then try to `loadFromURL` again and `register()` would throw
+    // "Plugin already registered" for the new id.
+    //
+    // Recovery strategy: if anything in steps 3-5 fails, unregister the
+    // newly-loaded plugin so the registry returns to a coherent state.
+    // The original plugin may still be present (depending on which step
+    // failed); the developer's editor will retry on the next save.
+    try {
+      // 3. Deactivate and dispose old plugin (only after new one loaded successfully)
+      await this.registry.dispose(pluginId);
 
-    // 4. Unregister old plugin
-    this.registry.unregister(pluginId);
+      // 4. Unregister old plugin
+      this.registry.unregister(pluginId);
 
-    // 5. Activate new plugin
-    await this.registry.activate(newId);
+      // 5. Activate new plugin
+      await this.registry.activate(newId);
+    } catch (err) {
+      // Best-effort cleanup of the newly-loaded-but-not-activated plugin.
+      // We swallow rollback errors because they would mask the original
+      // failure that the caller actually needs to see.
+      try {
+        await this.registry.dispose(newId);
+      } catch (rollbackErr) {
+        console.warn(`[hot-reload:${pluginId}] rollback dispose(${newId}) failed:`, rollbackErr);
+      }
+      try {
+        this.registry.unregister(newId);
+      } catch (rollbackErr) {
+        console.warn(`[hot-reload:${pluginId}] rollback unregister(${newId}) failed:`, rollbackErr);
+      }
+      throw err;
+    }
 
     // 6. Restore state if available
     if (savedState !== undefined) {
