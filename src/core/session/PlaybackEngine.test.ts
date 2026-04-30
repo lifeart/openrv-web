@@ -1471,10 +1471,7 @@ describe('PlaybackEngine', () => {
       isHDR: () => false,
     });
 
-    const createMockSource = (
-      name: string,
-      videoSourceNode: MockVideoSourceNode,
-    ): MockSource => ({
+    const createMockSource = (name: string, videoSourceNode: MockVideoSourceNode): MockSource => ({
       type: 'video',
       name,
       url: `file:///${name}`,
