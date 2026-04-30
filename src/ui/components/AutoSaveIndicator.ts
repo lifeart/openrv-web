@@ -8,6 +8,7 @@
 import { getIconSvg } from './shared/Icons';
 import { Z_INDEX, SHADOWS } from './shared/theme';
 import type { AutoSaveManager, AutoSaveConfig } from '../../core/session/AutoSaveManager';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 /** Auto-save status */
 export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'disabled';
@@ -38,8 +39,7 @@ export class AutoSaveIndicator {
   private boundClickHandler: () => void;
   private boundKeydownHandler: (e: KeyboardEvent) => void;
   private popoverElement: HTMLElement | null = null;
-  private boundOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
-  private boundEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private boundViewportChangeHandler: (() => void) | null = null;
 
   constructor() {
@@ -331,23 +331,15 @@ export class AutoSaveIndicator {
     this.popoverElement = popover;
     this.positionSettingsPopover();
 
-    // Close on click outside
-    this.boundOutsideClickHandler = (e: MouseEvent) => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (!this.container.contains(target) && !this.popoverElement?.contains(target)) {
-        this.hideSettingsPopover();
-      }
-    };
-    document.addEventListener('mousedown', this.boundOutsideClickHandler);
-
-    // Close on Escape
-    this.boundEscapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        this.hideSettingsPopover();
-      }
-    };
-    document.addEventListener('keydown', this.boundEscapeHandler);
+    // Outside-click + Escape dismiss owned by OutsideClickRegistry. The
+    // pre-existing semantic was 'mousedown' (popover closes on press, not
+    // release), preserved via dismissOn: 'mousedown' (the registry default).
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, popover],
+      onDismiss: () => this.hideSettingsPopover(),
+      dismissOn: 'mousedown',
+      dismissOnEscape: true,
+    });
 
     // Reposition when viewport or scroll containers change
     this.boundViewportChangeHandler = () => this.positionSettingsPopover();
@@ -392,14 +384,8 @@ export class AutoSaveIndicator {
       this.popoverElement.remove();
       this.popoverElement = null;
     }
-    if (this.boundOutsideClickHandler) {
-      document.removeEventListener('mousedown', this.boundOutsideClickHandler);
-      this.boundOutsideClickHandler = null;
-    }
-    if (this.boundEscapeHandler) {
-      document.removeEventListener('keydown', this.boundEscapeHandler);
-      this.boundEscapeHandler = null;
-    }
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     if (this.boundViewportChangeHandler) {
       window.removeEventListener('resize', this.boundViewportChangeHandler);
       document.removeEventListener('scroll', this.boundViewportChangeHandler, true);

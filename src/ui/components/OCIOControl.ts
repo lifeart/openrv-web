@@ -27,6 +27,7 @@ import { getIconSvg } from './shared/Icons';
 import { DropdownMenu } from './shared/DropdownMenu';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import { OCIOStateManager } from './OCIOStateManager';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 /**
  * OCIO Control events
@@ -75,8 +76,8 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   // Timer ID for validation feedback auto-hide
   private feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Bound listener for outside-click cleanup
-  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  // Outside-click + Escape dismiss handle (registered on show, deregistered on hide).
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor(processor?: OCIOProcessor) {
     super();
@@ -188,13 +189,8 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       this.refreshConfigDropdown();
     });
 
-    // Close panel on outside click
-    this.outsideClickHandler = (e: MouseEvent) => {
-      if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-        this.hide();
-      }
-    };
-    document.addEventListener('click', this.outsideClickHandler);
+    // Outside-click + Escape dismiss now go through OutsideClickRegistry,
+    // registered in show() and deregistered in hide().
   }
 
   /**
@@ -1060,6 +1056,17 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
     this.toggleButton.style.borderColor = 'var(--accent-primary)';
     this.toggleButton.style.color = 'var(--accent-primary)';
+    // Outside-click + Escape dismiss owned by OutsideClickRegistry. The
+    // OCIOControl has internal DropdownMenu popovers (config/input/working/
+    // display/view/look/direction); each registers separately via
+    // shared/DropdownMenu.ts. Innermost-wins Escape semantics ensure that
+    // pressing Escape dismisses the open dropdown first, then the OCIO panel.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.toggleButton, this.panel],
+      onDismiss: () => this.hide(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
     this.emit('visibilityChanged', true);
   }
 
@@ -1071,6 +1078,8 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
     this.isExpanded = false;
     this.panel.style.display = 'none';
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     this.updateButtonStyle();
     this.emit('visibilityChanged', false);
   }
@@ -1133,11 +1142,9 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       this.feedbackTimer = null;
     }
 
-    // Remove global document click listener
-    if (this.outsideClickHandler) {
-      document.removeEventListener('click', this.outsideClickHandler);
-      this.outsideClickHandler = null;
-    }
+    // Deregister from OutsideClickRegistry if currently open.
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
 
     this.configDropdown.dispose();
     this.inputColorSpaceDropdown.dispose();

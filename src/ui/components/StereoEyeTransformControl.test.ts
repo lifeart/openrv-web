@@ -8,16 +8,45 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StereoEyeTransformControl } from './StereoEyeTransformControl';
 import { DEFAULT_EYE_TRANSFORM } from '../../stereo/StereoEyeTransform';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('StereoEyeTransformControl', () => {
   let control: StereoEyeTransformControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new StereoEyeTransformControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('SETC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      document.body.appendChild(control.render());
+      expectRegistrationCount(0);
+      control.showPanel();
+      expectRegistrationCount(1);
+      control.hidePanel();
+      expectRegistrationCount(0);
+    });
+
+    it('SETC-OCR-002: outside click dismisses the panel', () => {
+      document.body.appendChild(control.render());
+      control.showPanel();
+      expect(control.isPanelVisible()).toBe(true);
+
+      dispatchOutsideClick();
+
+      expect(control.isPanelVisible()).toBe(false);
+      expectRegistrationCount(0);
+    });
   });
 
   describe('initialization', () => {
