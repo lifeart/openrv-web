@@ -75,12 +75,11 @@ Some compositing modes describe a property of the **entire stack** rather than a
 
 **Uniformity contract for `Topmost`.** When the stack composite type is `topmost`, every layer in the stack carries `blendMode = 'topmost'` -- the value is propagated from the stack-level setter (`StackGroupNode.getCompositeType()`), never selected per layer. Mixing `topmost` with other modes on individual layers is not a supported configuration.
 
-To make accidental violations of this contract fail loudly during development, the compositing helper `compositeMultipleLayers` emits a `console.warn` (in development builds only -- the check is tree-shaken from production) whenever it detects:
+The contract is enforced structurally rather than by a runtime check:
 
-- A first layer with `blendMode = 'topmost'` while later layers carry a different mode, or
-- A non-first layer with `blendMode = 'topmost'` while the first layer does not.
-
-Production rendering is unchanged: the helper continues to take its fast path based on the first layer's mode. The dev-time warning exists so future regressions in the stack-level wiring surface immediately rather than producing silently wrong frames.
+- The per-layer blend-mode dropdown (`StackControl`) filters `'topmost'` out of the user-visible options, so `'topmost'` cannot be selected for an individual layer through the UI. It is only ever produced by the stack-level setter `StackGroupNode.getCompositeType()`, which propagates the same value to every layer.
+- The compositor takes its fast path based on the stack's composite type via `StackGroupNode.compositeLayers`, which short-circuits to a single-layer (top) draw when `getCompositeType() === 'topmost'`. This makes `compositeMultipleLayers` unreachable for the `'topmost'` case in the node-tree path.
+- `compositeMultipleLayers` (in `src/composite/BlendModes.ts`) is marked `@internal` and is reserved for tests / consolidation work; production stack rendering does not call it for `'topmost'`.
 
 ### Alpha Compositing
 

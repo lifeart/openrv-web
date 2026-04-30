@@ -177,7 +177,7 @@ The current codebase has a **partial foundation** for tone mapping:
 - **Implemented**: HLG and PQ output modes for HDR displays (`src/render/WebGPUHDRBlit.ts`, `src/render/Canvas2DHDRBlit.ts`)
 - **Implemented**: Display P3 / wide color gamut detection (`src/color/DisplayCapabilities.ts`)
 - **Implemented**: Browser HDR canvas support detection (`src/render/WebGPUBackend.ts`)
-- **Experimental (not yet user-facing)**: WebGPU rendering backend (`src/render/WebGPUBackend.ts`, `src/render/createRenderer.ts`). The full color-correction / tone-mapping pipeline ships only on the WebGL2 path today; production renderer construction in `ViewerGLRenderer.ts` and `renderWorker.worker.ts` calls `new Renderer()` directly and does not consult `createRenderer`. Phase 4 stage WGSL registration into `WebGPUShaderPipeline` is intentionally pending (see "WebGPU Tone-Mapping Operator Parity" below).
+- **Experimental (not yet user-facing)**: WebGPU rendering backend (`src/render/WebGPUBackend.ts`, `src/render/createRenderer.ts`). The full color-correction / tone-mapping pipeline ships only on the WebGL2 path today; production renderer construction in `ViewerGLRenderer.ts` and `renderWorker.worker.ts` now route through `createRenderer(caps)` (commits MED-55 P-pre-1/-2). The WebGPU stage pipeline is gated by a tristate feature flag (default disabled) — see `src/render/webgpu/featureFlag.ts`. Phase 4 stage WGSL registration into `WebGPUShaderPipeline` is intentionally pending (see "WebGPU Tone-Mapping Operator Parity" below).
 - **Implemented**: Canvas2D HDR fallback path (srgb-linear, rec2100-hlg, float16)
 - **Implemented (MED-51)**: LUT output-color-space cascade. Each LUT stage
   (Pre-Cache, File, Look, Display) can declare `outputColorPrimaries` /

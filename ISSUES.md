@@ -40,23 +40,23 @@ These issues were found and fixed during the audit:
 
 ### Partially Confirmed (with caveats)
 
-#### ~~CRIT-01~~: HDR VideoFrame lifecycle unmanaged at call sites — **FIXED** (see FIXED_ISSUES.md #381)
+#### ~~CRIT-01~~: HDR VideoFrame lifecycle unmanaged at call sites — **FIXED** (see FIXED_ISSUES.md #601)
 
-#### ~~HIGH-25~~: Topmost blend mode checks only first layer — **FIXED** (see FIXED_ISSUES.md #384)
+#### ~~HIGH-25~~: Topmost blend mode checks only first layer — **FIXED** (see FIXED_ISSUES.md #604)
 
-#### ~~HIGH-31~~: MPF offset arithmetic partially unchecked — **FIXED** (see FIXED_ISSUES.md #374)
+#### ~~HIGH-31~~: MPF offset arithmetic partially unchecked — **FIXED** (see FIXED_ISSUES.md #594)
 
-#### ~~MED-19~~: HotReloadManager state capture not deep-cloned — **FIXED** (see FIXED_ISSUES.md #382)
+#### ~~MED-19~~: HotReloadManager state capture not deep-cloned — **FIXED** (see FIXED_ISSUES.md #602)
 
-#### ~~MED-28~~: JPEG marker segment length partially unchecked — **FIXED** (see FIXED_ISSUES.md #375)
+#### ~~MED-28~~: JPEG marker segment length partially unchecked — **FIXED** (see FIXED_ISSUES.md #595)
 
-#### ~~MED-30~~: MPF IFD entry count unbounded — **FIXED** (see FIXED_ISSUES.md #376)
+#### ~~MED-30~~: MPF IFD entry count unbounded — **FIXED** (see FIXED_ISSUES.md #596)
 
-#### ~~MED-35~~: AudioContext resume gap before isPlaying set — **FIXED** (see FIXED_ISSUES.md #383)
+#### ~~MED-35~~: AudioContext resume gap before isPlaying set — **FIXED** (see FIXED_ISSUES.md #603)
 
 #### ~~MED-39~~: AudioCoordinator dispose doesn't stop playback first — **FIXED** (see FIXED_ISSUES.md #359)
 
-#### ~~MED-42~~: Detected FPS calculation flawed for edge case — **FIXED** (see FIXED_ISSUES.md #377)
+#### ~~MED-42~~: Detected FPS calculation flawed for edge case — **FIXED** (see FIXED_ISSUES.md #597)
 
 ---
 
@@ -67,10 +67,10 @@ These findings were not yet verified against actual source code:
 #### Render/Shader
 - ~~**MED-49**~~: Brightness unclamped in SDR path before contrast — **FIXED** (see FIXED_ISSUES.md #361)
 - ~~**MED-50**~~: HLG OOTF gain extremely high for near-black — **FIXED** (see FIXED_ISSUES.md #362)
-- ~~**MED-51**~~: Color primaries metadata lost through LUT stages — **FIXED** (see FIXED_ISSUES.md #370)
-- ~~**MED-52**~~: Tone mapping headroom inconsistent across operators — **FIXED** (see FIXED_ISSUES.md #371)
-- ~~**MED-54**~~: Gamut mapping matrix working space undocumented — **FIXED** (see FIXED_ISSUES.md #380)
-- ~~**MED-55**~~: WebGPU extended tone mapping not verified at runtime — **FIXED** (see FIXED_ISSUES.md #372)
+- ~~**MED-51**~~: Color primaries metadata lost through LUT stages — **FIXED** (see FIXED_ISSUES.md #590)
+- ~~**MED-52**~~: Tone mapping headroom inconsistent across operators — **FIXED** (see FIXED_ISSUES.md #591)
+- ~~**MED-54**~~: Gamut mapping matrix working space undocumented — **FIXED** (see FIXED_ISSUES.md #600)
+- ~~**MED-55**~~: WebGPU extended tone mapping not verified at runtime — **FIXED** (see FIXED_ISSUES.md #592)
 
 #### Node System
 - ~~**MED-10**~~: FileSourceNode properties inconsistent with defineNodeProperty — **FIXED** (see FIXED_ISSUES.md #355)
@@ -81,12 +81,12 @@ These findings were not yet verified against actual source code:
 
 #### UI Controls
 - ~~**MED-23**~~: DisplayProfileControl slider range not validated on load — **FIXED** (see FIXED_ISSUES.md #363)
-- ~~**MED-25**~~: Multiple global document click listeners without delegation — **FIXED** (see FIXED_ISSUES.md #373)
+- ~~**MED-25**~~: Multiple global document click listeners without delegation — **FIXED** (see FIXED_ISSUES.md #593)
 
 #### Workers
 - ~~**LOW-22**~~: ImageBitmap close error handling incomplete — **FIXED** (see FIXED_ISSUES.md #369)
-- ~~**LOW-23**~~: Effect processor error stack unavailable in production — **FIXED** (see FIXED_ISSUES.md #379)
-- ~~**LOW-24**~~: Midtone mask integer rounding precision — **FIXED** (see FIXED_ISSUES.md #378)
+- ~~**LOW-23**~~: Effect processor error stack unavailable in production — **FIXED** (see FIXED_ISSUES.md #599)
+- ~~**LOW-24**~~: Midtone mask integer rounding precision — **FIXED** (see FIXED_ISSUES.md #598)
 
 #### Format Decoders
 - ~~**MED-33**~~: TIFF LZW chain corruption — **FIXED** (see FIXED_ISSUES.md #350)
@@ -97,7 +97,7 @@ These findings were not yet verified against actual source code:
 
 #### Misc
 - ~~**MED-18**~~: WebSocketClient malformed message flood not rate-limited — **FIXED** (see FIXED_ISSUES.md #360)
-- ~~**LOW-07**~~: Clarity/sharpen sample raw texture (known trade-off) — **FIXED** (see FIXED_ISSUES.md #385)
+- ~~**LOW-07**~~: Clarity/sharpen sample raw texture (known trade-off) — **FIXED** (see FIXED_ISSUES.md #605)
 - ~~**LOW-14**~~: Stereo eye offset not bounds-validated — **FIXED** (see FIXED_ISSUES.md #367)
 - ~~**LOW-15**~~: Stereo side-by-side odd width asymmetry — **FIXED** (see FIXED_ISSUES.md #368)
 - ~~**LOW-20**~~: Frame accumulator overflow on speed changes — **FIXED** (see FIXED_ISSUES.md #357)
@@ -152,3 +152,15 @@ Wave 2+3 verification rejected these findings:
 | MED-46 | Seek clamp — duration defaults to 1, clamp is correct safeguard |
 | MED-56 | hdrHeadroom — setHDRHeadroom clamps [1, 100] (NaN edge case only) |
 | LOW-02 | LUT domain — clamp(0,1) handles Inf; NaN is theoretical |
+
+---
+
+## REFACTORING BACKLOG
+
+**REFACTOR-01 (low priority)**: Three CPU compositing paths exist for stack layers and should be consolidated:
+
+1. `StackGroupNode.compositeLayers` (`src/nodes/groups/StackGroupNode.ts:280`) — node-tree IPImage path; topmost short-circuits via `getCompositeType()`
+2. `ViewerImageRenderer.compositeStackLayers` (`src/ui/components/ViewerImageRenderer.ts:442`) — viewer-render path; iterates per-layer, applies stencil-box clipping, no topmost short-circuit
+3. `compositeMultipleLayers` (`src/composite/BlendModes.ts:277`) — `@internal` test-only; intended consolidation target
+
+Tracked from HIGH-25 follow-up. Not user-visible; defer until a feature touches stack compositing.

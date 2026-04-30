@@ -68,5 +68,5 @@ During each component migration, the implementer audits that component's `stopPr
 
 ---
 
-[^1]: At the start of Phase 0 there were **133** `stopPropagation` / `stopImmediatePropagation` call sites in `src/ui/components/` (excluding `*.test.ts`). Generated via:
+[^1]: At the start of Phase 0 there were **133** `stopPropagation` / `stopImmediatePropagation` call sites in `src/ui/components/` (excluding `*.test.ts`); the current count is **132** (verified post-MED-25 cleanup). Generated via:
     `grep -rn "stopPropagation\|stopImmediatePropagation" src/ui/components/ --include="*.ts" | grep -v ".test.ts" | wc -l`

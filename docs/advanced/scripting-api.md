@@ -344,10 +344,13 @@ The active source is resolved internally; multi-source addressing is not yet exp
 
 #### Linter (Opt-In)
 
-The `LUTPipelineLinter` detects implausible declarations:
+The `LUTPipelineLinter` detects implausible declarations.
+
+> **Note**: this is an internal helper and is **not** exported from the public `openrv-web` package. The import path below is the in-tree path used by application code; external plugin/script consumers cannot reach this module today. If you need it from outside the codebase, file a request to re-export it from `src/api/index.ts`.
 
 ```javascript
-import { lintLUTPipeline } from 'openrv-web/color/pipeline/LUTPipelineLinter';
+// In-tree usage (internal/dev-only):
+import { lintLUTPipeline } from '../../color/pipeline/LUTPipelineLinter';
 // ...
 const reports = lintLUTPipeline(pipeline, sourceId, currentImage.metadata);
 for (const r of reports) console.warn(r.message);

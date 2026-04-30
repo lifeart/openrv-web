@@ -5031,7 +5031,7 @@ Applied at both entry points: `applyStereoMode()` and `applyStereoModeWithEyeTra
 - `src/workers/renderWorker.worker.ts`
 - `src/workers/renderWorker.worker.test.ts`
 
-## Issue #370: MED-51 — Color primaries metadata lost through LUT stages
+## Issue #590: MED-51 — Color primaries metadata lost through LUT stages
 
 **Root cause**: The four-stage GPU LUT pipeline (Pre-Cache → File → Look → Display) accepted user-declared output color spaces but never threaded that metadata onto the IPImage handed to the renderer. Downstream consumers (scopes, HDR shader path selection, observability) saw stale source metadata even after a Display LUT did PQ→sRGB.
 
@@ -5076,7 +5076,7 @@ Subsequent reviews uncovered:
 
 ---
 
-## Issue #371: MED-52 — Tone mapping headroom inconsistent across operators
+## Issue #591: MED-52 — Tone mapping headroom inconsistent across operators
 
 **Root cause**: Two incompatible HDR-headroom conventions were mixed across the eight tone mapping operators in `viewer.frag.glsl`, `webgpu/shaders/common.wgsl`, and `webgpu/shaders/scene_analysis.wgsl`:
 
@@ -5148,7 +5148,7 @@ All four implementations now use the same `scaled = color/headroom; mapped = cur
 - The CPU `applyToneMappingToData` byte-array path is still SDR-only (`Uint8ClampedArray` clips above 1.0 by definition); the headroom plumbing is in place but no caller sets a non-default value yet. This is consistent with the current architecture (HDR CPU path uses Float32 buffers separately).
 - The `Renderer.setHDRHeadroom` NaN-propagation edge case noted in Round 1 is now fixed (Round 2): both the WebGL2 and WebGPU JS-side entry points sanitize non-finite headroom to 1.0 before clamping, and every shader operator additionally floors the divisor to `1e-6` defensively.
 
-## Issue #372: MED-55 — WebGPU extended tone mapping not verified at runtime
+## Issue #592: MED-55 — WebGPU extended tone mapping not verified at runtime
 
 **Root cause**: Phase 4 acceptance for "WebGPU extended tone mapping" relied on shader-compile checks alone. No test exercised real GPU pixels through any of the 8 operators with `hdrHeadroom > 1`, so a regression between WGSL and the CPU/GLSL reference would not be caught.
 
@@ -5187,7 +5187,7 @@ Round 1 review surfaced five additional concerns: an implicit "common.wgsl is pr
 
 **Known follow-up (non-blocking)**: When Phase 4 wiring registers stage WGSL into `WebGPUShaderPipeline`, the orchestrator must strip the per-stage `@vertex fn vs` declaration to avoid duplicate-symbol errors (the prepend pattern combines vertex + common + stage source). Track in a separate issue.
 
-## Issue #373: MED-25 — Multiple global document click listeners without delegation
+## Issue #593: MED-25 — Multiple global document click listeners without delegation
 
 **Root cause**: Many UI components (popovers, settings menus, dropdowns, overlays) each registered their own `document.addEventListener('mousedown'|'click', ...)` handler for outside-click dismiss. With dozens of dismissable surfaces, each open instance added a fresh global listener; missed cleanup leaked listeners holding references to disposed components. Semantics for nested popovers, Escape, re-entrancy, and LIFO dismiss order varied per component.
 
@@ -5240,7 +5240,7 @@ Migrated 14 components to the new registry: BugOverlaySettingsMenu, ClippingOver
 
 ---
 
-## Issue #374: HIGH-31 — MPF offset arithmetic partially unchecked
+## Issue #594: HIGH-31 — MPF offset arithmetic partially unchecked
 
 **Root cause**: `parseMPFEntries` and `parseGainmapJPEG` in `src/formats/JPEGGainmapDecoder.ts` performed offset+size arithmetic on uint32 values read from untrusted JPEG content with several unchecked paths. ArrayBuffer.slice silently clamps OOB offsets, producing opaque downstream errors (e.g., a decoder fails on a 0-byte blob with no context). The IFD entry array, MPEntry table, individual MPEntry slices, and base-image slice were all subject to silent truncation rather than explicit error.
 
@@ -5270,7 +5270,7 @@ Lenient/strict boundary preserved: returns `null` for "this isn't MPF" signals (
 
 **Known follow-up**: MED-30 (MPF IFD entry count unbounded for the `count / 16` derivation when 0xB002 precedes 0xB001) is tracked as a separate issue.
 
-## Issue #375: MED-28 — JPEG marker segment length partially unchecked
+## Issue #595: MED-28 — JPEG marker segment length partially unchecked
 
 **Root cause**: Per JPEG spec ITU-T T.81 §B.1.1.4, marker segment length is a 2-byte big-endian field that includes itself; minimum valid value is 2 (empty payload). Four segment-iterating loops in `src/formats/JPEGGainmapDecoder.ts` (`extractJPEGOrientation`, `findMPFMarkerOffset`, `extractHeadroomFromXMP`, `extractXMPFromJPEG`) read `segmentLength` from untrusted file bytes without validating the minimum. While the existing implementation does not infinite-loop on `segLen < 2` alone (each iteration advances `offset` by at least 2 bytes), spec-violating values can cause re-traversal of misaligned bytes, producing phantom markers and confused parsing on adversarial inputs.
 
@@ -5307,7 +5307,7 @@ Code comments at each site cite the spec and explain the defense-in-depth ration
 
 **Known follow-up**: A defensive `segLen < 2` audit of `src/formats/JP2Decoder.ts:430-454` (JPEG 2000 marker walker) is a tracked improvement; not infinite-loopable, but `<2` could mis-align reads. Out of MED-28 scope.
 
-## Issue #376: MED-30 — MPF IFD entry count unbounded
+## Issue #596: MED-30 — MPF IFD entry count unbounded
 
 **Root cause**: `parseMPFEntries` in `src/formats/JPEGGainmapDecoder.ts` read a uint16 IFD entry count directly from the file and looped over it without any practical cap. Although HIGH-31's `ensureMPFRange` prevented out-of-bounds reads when the entry array didn't fit, a hostile file just large enough to satisfy the bounds check (~786 KB) could still force up to 65535 iterations, each performing 3 DataView reads — uncapped CPU work derived from attacker-controlled bytes. Two related uncapped paths existed:
 - The 0xB001 NumberOfImages tag (previously capped at 65535 — the uint16 ceiling, not a practical cap)
@@ -5337,7 +5337,7 @@ Each error is descriptive — names the actual count and the cap.
 
 **Behavior change**: The 0xB001 NumberOfImages cap was tightened from the uint16 ceiling (65535) to the practical cap (256). No real MPF file ships with 257+ sub-images, so this should not affect production decoding.
 
-## Issue #377: MED-42 — Detected FPS calculation flawed for edge case
+## Issue #597: MED-42 — Detected FPS calculation flawed for edge case
 
 **Root cause**: `MediabunnyFrameExtractor.buildFrameIndex` guarded only against `lastTimestamp <= 0`. A single-frame video with non-zero PTS (typical for still-image "videos") fell through and applied the formula `N / (lastTimestamp + lastTimestamp/(N-1))`, which collapses to `1/(2*lastTimestamp)` for N=1 — a meaningless number (e.g. 1.0 FPS for a single frame at t=0.5s). FPS is mathematically indeterminate from a single frame.
 
@@ -5362,7 +5362,7 @@ Each error is descriptive — names the actual count and the cap.
 - Snap-to-common-FPS at `MediabunnyFrameExtractor.ts:111-117` aliases 24→23.976, 30→29.97, 60→59.94 due to wide tolerance (0.5) + first-match-wins ordering. New MED-42 tests codify the current behavior; a fix should change to nearest-match.
 - For trimmed videos where first PTS is t0>0, the `(N-1)/lastTimestamp` formula understates FPS. Pre-existing assumption ("first frame at t=0") documented in JSDoc.
 
-## Issue #378: LOW-24 — Midtone mask integer rounding precision
+## Issue #598: LOW-24 — Midtone mask integer rounding precision
 
 **Root cause**: The clarity effect's midtone weighting used a 256-entry uint8-indexed LUT looked up via `Math.round(luminance)`. Any two luminances in the same uint8 bin (e.g. 60.2 and 60.4) got the same mask weight, producing visible plateaus / banding in smooth gradients — particularly for HDR / float pipelines where the input precision exceeds 8 bits. Three call sites had the same defect: the worker (full-res + half-res clarity loops), `EffectProcessor` (sync, half-res, async-chunked), and `ViewerEffects.applyClarity` (consumed by `ClarityNode`).
 
@@ -5386,7 +5386,7 @@ Each error is descriptive — names the actual count and the cap.
 - `npx tsc --noEmit` clean.
 - Stash-revert confirms 6 LOW24 tests fail on pre-fix code.
 
-## Issue #379: LOW-23 — Effect processor error stack unavailable in production
+## Issue #599: LOW-23 — Effect processor error stack unavailable in production
 
 **Root cause**: `Error.name`, `Error.message`, and `Error.stack` are non-enumerable on V8/SpiderMonkey, so the structured-clone algorithm used by `Worker.postMessage` silently drops them when posting Error instances across worker boundaries. The main thread previously received bare `Error: <message>` with no source context, making production debugging hard.
 
@@ -5418,7 +5418,7 @@ Each error is descriptive — names the actual count and the cap.
 
 **Known follow-up (separate ticket)**: `src/render/renderWorker.worker.ts` uses a different `renderError` protocol but has the same Error.stack-lost defect at lines ~258, 308, 336. Out of LOW-23 scope.
 
-## Issue #380: MED-54 — Gamut mapping matrix working space undocumented
+## Issue #600: MED-54 — Gamut mapping matrix working space undocumented
 
 **Root cause**: Color matrices in `viewer.frag.glsl`, `common.wgsl`, `scene_analysis.wgsl`, `effectProcessing.shared.ts`, and `ShaderConstants.ts` had no inline documentation of source/destination color spaces, derivation references, or storage conventions. A future reader could not tell whether a matrix mapped Rec.709→AP1, AP1→Rec.709, Rec.2020→sRGB, etc. without re-deriving from constants. The `COLOR_PRIMARIES_MATRICES` JSDoc additionally claimed the matrices were derived "via the Bradford chromatic adaptation transform" — misleading because all entries share the D65 white point, so no CAT is involved.
 
@@ -5450,7 +5450,7 @@ Each error is descriptive — names the actual count and the cap.
 
 **Known cosmetic follow-up**: 4th-decimal precision discrepancy between `ShaderConstants.ts` REC2020_TO_SRGB[3] (-0.5877) and GLSL/CPU mirrors (-0.5876). Pre-existing, no functional impact.
 
-## Issue #381: CRIT-01 — HDR VideoFrame lifecycle unmanaged at call sites
+## Issue #601: CRIT-01 — HDR VideoFrame lifecycle unmanaged at call sites
 
 **Root cause**: `getFrameHDR()` in `MediabunnyFrameExtractor` transfers VideoFrame ownership to the caller, but call sites had partial cleanup:
 - `VideoSourceNode.fetchHDRFrame` closed the sample on the success path and in a `catch` block, but a dispose race (frameExtractor nulled while awaiting `getFrameHDR` or between `hdrSampleToIPImage` and `cache.set`) left the sample or IPImage leaking. Errors thrown by `cache.set` would also skip close().
@@ -5490,7 +5490,7 @@ VideoFrame is a GPU resource; missed close() leaks until process termination.
 
 **Note**: `ManagedVideoFrame.creationStack` and `enableLeakDetection` (FinalizationRegistry) already exist for runtime leak observability — no additional instrumentation needed beyond the call-site fix.
 
-## Issue #382: MED-19 — HotReloadManager state capture not deep-cloned
+## Issue #602: MED-19 — HotReloadManager state capture not deep-cloned
 
 **Root cause**: `HotReloadManager.reload()` captured plugin state via `plugin.getState()` and held the returned value across the dispose / re-import / re-activate window before passing it to the new plugin's `restoreState()`. The plugin contract states `getState()` should return a copy, but a misbehaving plugin returning a live reference would let:
 1. Mutations during dispose/re-import leak into the snapshot.
@@ -5517,7 +5517,7 @@ VideoFrame is a GPU resource; missed close() leaks until process termination.
 - `npx tsc --noEmit` clean.
 - Stash-revert confirms 4 of 7 new tests fail on pre-fix code (PHOT-022/023/024/025); 3 are contract documentation that pass either way (null/undefined/primitive short-circuit paths).
 
-## Issue #383: MED-35 — AudioContext resume gap before isPlaying set
+## Issue #603: MED-35 — AudioContext resume gap before isPlaying set
 
 **Root cause**: `AudioPlaybackManager.play()` (and `playWithVideoFallback()`) awaited `audioContext.resume()` (or `videoElement.play()`) BEFORE setting `_isPlaying = true`. On the first user gesture, `audioContext.resume()` can take 10–30ms to settle, leaving any consumer reading `manager.isPlaying` during that window with stale `false` even though playback was already requested. AudioCoordinator papered over this with its own `_isPlaying` flag, but direct readers of `manager.isPlaying` got the wrong answer briefly.
 
@@ -5550,7 +5550,7 @@ Existing AudioCoordinator tests `AC-090` and `AC-094` updated to reflect the new
 - `npx vitest run src/audio/AudioPlaybackManager.test.ts`: 80 tests passing (73 existing + 7 new MED-35).
 - `npx tsc --noEmit` clean.
 
-## Issue #384: HIGH-25 — Topmost blend mode checks only first layer
+## Issue #604: HIGH-25 — Topmost blend mode checks only first layer
 
 **Root cause**: `compositeMultipleLayers` in `src/composite/BlendModes.ts` decided whether to take the "topmost" branch by reading `layers[0].blendMode` only. The check is correct under the documented stack-level uniformity invariant (`StackGroupNode` sets the composite mode at stack level via `getCompositeType()`, never per-layer divergently). However, a future bug that set `blendMode = 'topmost'` per-layer divergently would silently produce surprising rendering with no diagnostic.
 
@@ -5576,7 +5576,23 @@ Each warning includes the offending mode list for debuggability. Production hot 
 - Reviewer confirmed test integrity: removing the invariant code causes BLD-TOPMOST-INV-002 and BLD-TOPMOST-INV-003 to fail; other three are contract pins that hold either way.
 - StackGroupNode (`src/nodes/groups/StackGroupNode.ts:285-294`) short-circuits topmost via `getCompositeType()`, structurally guaranteeing the invariant for in-tree callers.
 
-## Issue #385: LOW-07 — Clarity/sharpen sample raw texture (known trade-off)
+### Lap-2 follow-up (commit `d60b8f1`)
+
+A subsequent review preferred structural enforcement over a runtime warning, on the grounds that the dev-only `console.warn` only fires when an invalid mix already exists, while the underlying problem is that `'topmost'` should never be selectable per-layer in the first place. The follow-up:
+
+- Reverted the dev-mode `console.warn` invariant check in `compositeMultipleLayers` — production hot path is now identical to the original first-layer fast path with no warning code.
+- Marked `compositeMultipleLayers` `@internal` in `src/composite/BlendModes.ts` to signal it is reserved for tests / future consolidation work and not the production stack-rendering path.
+- Filtered `'topmost'` out of the per-layer blend-mode dropdown in `StackControl.ts` so the UI cannot produce a mixed-mode stack. `'topmost'` is now only ever produced by the stack-level setter `StackGroupNode.getCompositeType()`, which propagates uniformly.
+- Deleted the five dev-warn invariant tests `BLD-TOPMOST-INV-001..005` (which pinned the runtime check that no longer exists). One scenario was migrated to `BLD-TOPMOST-006` to keep the "rendering still takes the topmost branch when the first layer is `'topmost'`" contract pinned without referencing the dev warning. New tests `STACK-U101/102/103` were added in `StackControl.test.ts` to assert the dropdown filter (no `'topmost'` option exposed, stack-level setter still produces uniform `'topmost'`, switching away from `'topmost'` propagates to all layers).
+- The structural guarantees that remain are: (a) `StackGroupNode.compositeLayers` short-circuits via `getCompositeType()` so `compositeMultipleLayers` is never reached for `'topmost'` in the node-tree path, and (b) the per-layer dropdown can no longer surface `'topmost'`.
+
+**Files updated in Lap-2**:
+- `src/composite/BlendModes.ts`
+- `src/ui/components/StackControl.ts`
+- `src/composite/BlendModes.test.ts`
+- `src/ui/components/StackControl.test.ts`
+
+## Issue #605: LOW-07 — Clarity/sharpen sample raw texture (known trade-off)
 
 **Root cause (documentation gap, not a code defect)**: The clarity (5x5 Gaussian) and sharpen (4-tap Laplacian) effects in the GLSL single-pass renderer intentionally sample `u_texture` (the raw input) rather than the post-color-pipeline value. True post-pipeline neighbour sampling would require an extra FBO + second render pass that the single-pass design deliberately avoids. The trade-off was undocumented in shader source — a future reader might "fix" it and silently change rendering quality.
 
