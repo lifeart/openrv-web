@@ -92,17 +92,33 @@ export function parseCubeLUT(content: string): LUT {
     }
 
     if (trimmed.startsWith('DOMAIN_MIN')) {
-      const match = trimmed.match(/DOMAIN_MIN\s+([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)/i);
+      const match = trimmed.match(/DOMAIN_MIN\s+(\S+)\s+(\S+)\s+(\S+)/i);
       if (match) {
-        domainMin = [parseFloat(match[1]!), parseFloat(match[2]!), parseFloat(match[3]!)];
+        const v0 = parseFloat(match[1]!);
+        const v1 = parseFloat(match[2]!);
+        const v2 = parseFloat(match[3]!);
+        if (!Number.isFinite(v0) || !Number.isFinite(v1) || !Number.isFinite(v2)) {
+          throw new Error(
+            `Invalid DOMAIN_MIN values: "${match[1]} ${match[2]} ${match[3]}" (expected three finite numbers)`,
+          );
+        }
+        domainMin = [v0, v1, v2];
       }
       continue;
     }
 
     if (trimmed.startsWith('DOMAIN_MAX')) {
-      const match = trimmed.match(/DOMAIN_MAX\s+([\d.-]+)\s+([\d.-]+)\s+([\d.-]+)/i);
+      const match = trimmed.match(/DOMAIN_MAX\s+(\S+)\s+(\S+)\s+(\S+)/i);
       if (match) {
-        domainMax = [parseFloat(match[1]!), parseFloat(match[2]!), parseFloat(match[3]!)];
+        const v0 = parseFloat(match[1]!);
+        const v1 = parseFloat(match[2]!);
+        const v2 = parseFloat(match[3]!);
+        if (!Number.isFinite(v0) || !Number.isFinite(v1) || !Number.isFinite(v2)) {
+          throw new Error(
+            `Invalid DOMAIN_MAX values: "${match[1]} ${match[2]} ${match[3]}" (expected three finite numbers)`,
+          );
+        }
+        domainMax = [v0, v1, v2];
       }
       continue;
     }
@@ -179,9 +195,13 @@ export function applyLUT3D(lut: LUT3D, r: number, g: number, b: number): [number
   const { size, domainMin, domainMax, data } = lut;
 
   // Normalize input to 0-1 range based on domain
-  const nr = (r - domainMin[0]) / (domainMax[0] - domainMin[0]);
-  const ng = (g - domainMin[1]) / (domainMax[1] - domainMin[1]);
-  const nb = (b - domainMin[2]) / (domainMax[2] - domainMin[2]);
+  // Guard against zero-width domain (domainMin === domainMax)
+  const rangeR = domainMax[0] - domainMin[0];
+  const rangeG = domainMax[1] - domainMin[1];
+  const rangeB = domainMax[2] - domainMin[2];
+  const nr = rangeR === 0 ? 0 : (r - domainMin[0]) / rangeR;
+  const ng = rangeG === 0 ? 0 : (g - domainMin[1]) / rangeG;
+  const nb = rangeB === 0 ? 0 : (b - domainMin[2]) / rangeB;
 
   // Clamp and scale to LUT indices
   const maxIdx = size - 1;
@@ -247,7 +267,9 @@ export function applyLUT1D(lut: LUT1D, r: number, g: number, b: number): [number
   // Helper to apply 1D LUT to a single channel
   const applyChannel = (value: number, channelOffset: number, domainMinCh: number, domainMaxCh: number): number => {
     // Normalize input to 0-1 range based on domain
-    const normalized = (value - domainMinCh) / (domainMaxCh - domainMinCh);
+    // Guard against zero-width domain (domainMin === domainMax)
+    const range = domainMaxCh - domainMinCh;
+    const normalized = range === 0 ? 0 : (value - domainMinCh) / range;
 
     // Clamp and scale to LUT indices
     const maxIdx = size - 1;
