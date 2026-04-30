@@ -458,6 +458,95 @@ describe('StackControl', () => {
         expect(layer.blendMode).toBe(mode);
       });
     });
+
+    // STACK-U101/102/103 cover the per-layer blend dropdown contract enforced
+    // by the HIGH-25 follow-up (commit d60b8f1). They were claimed but not
+    // landed in that commit; this batch closes the gap.
+    function getBlendSelectForFirstLayer(): HTMLSelectElement {
+      control.render();
+      control.showPanel();
+      const layers = control.getLayers();
+      expect(layers.length).toBeGreaterThan(0);
+      const select = document.querySelector(
+        `[data-testid="stack-layer-blend-${layers[0]!.id}"]`,
+      ) as HTMLSelectElement | null;
+      expect(select).not.toBeNull();
+      return select!;
+    }
+
+    it("STACK-U101: dropdown does not include 'topmost' option", () => {
+      control.addLayer({
+        name: 'Layer 1',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        sourceIndex: 0,
+      });
+
+      const select = getBlendSelectForFirstLayer();
+      const values = Array.from(select.options).map((opt) => opt.value);
+      expect(values).not.toContain('topmost');
+    });
+
+    it('STACK-U102: dropdown includes all per-layer modes (normal/add/multiply/screen/overlay/difference/exclusion/dissolve/minus)', () => {
+      control.addLayer({
+        name: 'Layer 1',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        sourceIndex: 0,
+      });
+
+      const select = getBlendSelectForFirstLayer();
+      const values = Array.from(select.options).map((opt) => opt.value);
+
+      const expected: BlendMode[] = [
+        'normal',
+        'add',
+        'multiply',
+        'screen',
+        'overlay',
+        'difference',
+        'exclusion',
+        'dissolve',
+        'minus',
+      ];
+      for (const mode of expected) {
+        expect(values).toContain(mode);
+      }
+    });
+
+    it("STACK-U103: when layer.blendMode='topmost', render coerces to 'normal' AND emits layerChanged", () => {
+      // Add a layer with the stack-level 'topmost' mode (e.g. loaded from an
+      // older session). The render path must coerce it to 'normal' AND emit
+      // layerChanged so the data model converges with the UI.
+      // Subscribe BEFORE adding the layer, since addLayer() triggers
+      // updateLayerList() which runs the coercion immediately.
+      const callback = vi.fn();
+      control.on('layerChanged', callback);
+
+      const layer = control.addLayer({
+        name: 'Layer 1',
+        visible: true,
+        opacity: 1,
+        // Cast: BlendMode includes 'topmost' but the dropdown filters it; we
+        // exercise the coercion guard explicitly.
+        blendMode: 'topmost' as BlendMode,
+        sourceIndex: 0,
+      });
+
+      // Coercion happens during createLayerElement (called from
+      // updateLayerList in addLayer). It runs again when render()/showPanel()
+      // refresh the list — both paths must yield the same coerced state.
+      control.render();
+      control.showPanel();
+
+      const layers = control.getLayers();
+      expect(layers[0]!.blendMode).toBe('normal');
+      expect(callback).toHaveBeenCalled();
+      // The emit payload is a shallow clone of the layer with blendMode='normal'.
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: layer.id, blendMode: 'normal' }));
+    });
   });
 
   describe('layer opacity', () => {

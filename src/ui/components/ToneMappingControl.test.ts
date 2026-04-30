@@ -799,6 +799,16 @@ describe('ToneMappingControl', () => {
         control.dispose();
       }).not.toThrow();
     });
+
+    it('TONE-DISP-OCR-001: dispose without ever opening — no error, no leftover registration', () => {
+      // Pin the dispose() contract: when the popover was never opened, the
+      // deregisterDismiss handle is null and the optional chain
+      // `this.deregisterDismiss?.()` must safely no-op. This test guards the
+      // guard.
+      expectRegistrationCount(0);
+      expect(() => control.dispose()).not.toThrow();
+      expectRegistrationCount(0);
+    });
   });
 
   describe('dropdown body append (H-07)', () => {

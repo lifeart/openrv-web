@@ -264,6 +264,62 @@ describe('HotReloadManager integration', () => {
     });
   });
 
+  describe('__openrvDev.reloadPlugin handle (dev console)', () => {
+    it('PHRINT-040: reloadPlugin invokes manager.reload(id), promise resolves, plugin reactivates', async () => {
+      // Mirrors the dev-console handle wiring in clientBridge.ts:
+      //   __openrvDev.reloadPlugin = (id) => manager.reload(id)
+      // We attach the same shape directly to a stand-in window object so
+      // the test does not depend on the bridge's `import.meta.hot` path.
+      const v1: Plugin = makePlugin({
+        id: 'integ.devhandle.v1',
+        name: 'Dev Handle Demo',
+        version: '1.0.0',
+        contributes: ['decoder'],
+      });
+      const v2: Plugin = makePlugin({
+        id: 'integ.devhandle.v2',
+        name: 'Dev Handle Demo',
+        version: '2.0.0',
+        contributes: ['decoder'],
+      });
+
+      const reloadSpy = vi.spyOn(manager, 'reload');
+
+      registry.register(v1);
+      await registry.activate(v1.manifest.id);
+
+      vi.spyOn(registry, 'loadFromURL').mockImplementation(async () => {
+        registry.register(v2);
+        return v2.manifest.id;
+      });
+      manager.trackURL(v1.manifest.id, 'http://localhost/devHandlePlugin.ts');
+
+      // Capture state transitions for the reactivation assertion.
+      const seenStates: PluginState[] = [];
+      registry.pluginStateChanged.connect((current) => {
+        if (current.id === v1.manifest.id || current.id === v2.manifest.id) {
+          seenStates.push(current.state);
+        }
+      });
+
+      // Simulate the dev-console handle.
+      const devHandle = {
+        reloadPlugin: (id: string) => manager.reload(id),
+      };
+      const newId = await devHandle.reloadPlugin(v1.manifest.id);
+
+      // (1) manager.reload(id) was called with the requested id.
+      expect(reloadSpy).toHaveBeenCalledWith(v1.manifest.id);
+      // (2) The promise resolved with the post-reload id (PR-2 contract).
+      expect(newId).toBe(v2.manifest.id);
+      // (3) The reloaded plugin is in 'active' state — i.e. registry-driven
+      //     reactivation completed end-to-end.
+      expect(registry.getState(v2.manifest.id)).toBe('active');
+      // The state machine for v2 must have crossed 'active'.
+      expect(seenStates).toContain('active');
+    });
+  });
+
   // Suppress unused-import warning on PluginContext under noUnusedLocals.
   it('PHRINT-099: PluginContext type import is referenced', () => {
     const _ctx: PluginContext | undefined = undefined;

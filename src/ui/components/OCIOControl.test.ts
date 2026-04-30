@@ -8,6 +8,7 @@ import { OCIOProcessor } from '../../color/ColorProcessingFacade';
 import {
   resetOutsideClickRegistry,
   dispatchOutsideClick,
+  dispatchOutsideEscape,
   expectRegistrationCount,
 } from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
@@ -68,6 +69,46 @@ describe('OCIOControl', () => {
 
       dispatchOutsideClick();
 
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+    });
+
+    it('OCIO-OCR-NESTED-001: Escape dismisses inner DropdownMenu first, then the OCIO panel', () => {
+      // Validates "innermost-wins" Escape semantics across nested popovers:
+      // OCIOControl panel registers a top-level dismiss; opening one of its
+      // child DropdownMenu popovers registers a SECOND dismiss. The first
+      // Escape closes only the inner dropdown; a second Escape closes the
+      // panel.
+      control = new OCIOControl();
+      document.body.appendChild(control.render());
+
+      // Open the OCIO panel (registers dismiss #1).
+      control.show();
+      const panel = document.querySelector('[data-testid="ocio-panel"]') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+      expectRegistrationCount(1);
+
+      // Open one of the panel's child DropdownMenu popovers (the Config
+      // selector). This registers dismiss #2 — the innermost.
+      const configButton = panel.querySelector('[data-testid="ocio-config-select"]') as HTMLButtonElement;
+      expect(configButton).not.toBeNull();
+      configButton.click();
+      expectRegistrationCount(2);
+
+      // The DropdownMenu element is rendered inside the panel by default.
+      // Locate the visible (display !== 'none') menu role=listbox.
+      const dropdowns = Array.from(document.querySelectorAll<HTMLElement>('[role="listbox"]'));
+      const openDropdown = dropdowns.find((el) => el.style.display !== 'none');
+      expect(openDropdown).toBeDefined();
+
+      // First Escape: only the inner dropdown closes; panel stays open.
+      dispatchOutsideEscape();
+      expect(openDropdown!.style.display).toBe('none');
+      expect(panel.style.display).toBe('block');
+      expectRegistrationCount(1);
+
+      // Second Escape: panel closes.
+      dispatchOutsideEscape();
       expect(panel.style.display).toBe('none');
       expectRegistrationCount(0);
     });
