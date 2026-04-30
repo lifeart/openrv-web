@@ -1356,7 +1356,9 @@ describe('Phase 4: WebGPU Migration Path', () => {
     });
 
     it('AC-P4-4.1c: createRenderer returns WebGPUBackend when webgpuAvailable && webgpuHDR', () => {
-      const caps = makeCaps({ webgpuAvailable: true, webgpuHDR: true });
+      // Force WebGPU via backendOverride since MED-55 P-pre-5 added a default-disabled
+      // feature flag that gates capability-based WebGPU selection.
+      const caps = makeCaps({ webgpuAvailable: true, webgpuHDR: true, backendOverride: 'webgpu' });
       const backend = createRenderer(caps);
       expect(backend).toBeInstanceOf(WebGPUBackend);
     });
