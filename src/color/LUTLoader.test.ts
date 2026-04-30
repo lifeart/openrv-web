@@ -3,7 +3,16 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isLUT3D, isLUT1D, parseCubeLUT, applyLUT3D, applyLUT1D, applyLUTToImageData, type LUT3D } from './LUTLoader';
+import {
+  isLUT3D,
+  isLUT1D,
+  parseCubeLUT,
+  applyLUT3D,
+  applyLUT1D,
+  applyLUTToImageData,
+  type LUT3D,
+  type LUT1D,
+} from './LUTLoader';
 import { createSampleCubeLUT, createSample1DLUT } from '../../test/utils';
 
 describe('LUTLoader', () => {
@@ -439,6 +448,191 @@ LUT_1D_SIZE 4
         expect(typeof result[0]).toBe('number');
         expect(typeof result[1]).toBe('number');
         expect(typeof result[2]).toBe('number');
+      });
+    });
+
+    describe('zero-width domain guards (COLOR-W4-02)', () => {
+      it('applyLUT3D returns finite values when domainMin === domainMax on one channel', () => {
+        // Construct a 3D LUT manually with a degenerate red domain
+        const size = 2;
+        const data = new Float32Array(size * size * size * 3);
+        // Identity-ish data
+        let idx = 0;
+        for (let r = 0; r < size; r++) {
+          for (let g = 0; g < size; g++) {
+            for (let b = 0; b < size; b++) {
+              data[idx++] = r / (size - 1);
+              data[idx++] = g / (size - 1);
+              data[idx++] = b / (size - 1);
+            }
+          }
+        }
+        const lut: LUT3D = {
+          type: '3d',
+          title: 'Degenerate Red Domain',
+          size,
+          domainMin: [0.5, 0, 0],
+          domainMax: [0.5, 1, 1], // R range is zero
+          data,
+        };
+
+        const result = applyLUT3D(lut, 0.5, 0.5, 0.5);
+
+        expect(Number.isFinite(result[0])).toBe(true);
+        expect(Number.isFinite(result[1])).toBe(true);
+        expect(Number.isFinite(result[2])).toBe(true);
+      });
+
+      it('applyLUT3D returns finite values when all three channels have zero-width domain', () => {
+        const size = 2;
+        const data = new Float32Array(size * size * size * 3);
+        for (let i = 0; i < data.length; i++) data[i] = 0.42;
+        const lut: LUT3D = {
+          type: '3d',
+          title: 'All Degenerate',
+          size,
+          domainMin: [0.5, 0.5, 0.5],
+          domainMax: [0.5, 0.5, 0.5],
+          data,
+        };
+
+        const result = applyLUT3D(lut, 0.5, 0.5, 0.5);
+
+        expect(Number.isFinite(result[0])).toBe(true);
+        expect(Number.isFinite(result[1])).toBe(true);
+        expect(Number.isFinite(result[2])).toBe(true);
+      });
+
+      it('applyLUT1D returns finite values when domainMin === domainMax on one channel', () => {
+        const size = 4;
+        const data = new Float32Array(size * 3);
+        for (let i = 0; i < size; i++) {
+          const v = i / (size - 1);
+          data[i * 3] = v;
+          data[i * 3 + 1] = v;
+          data[i * 3 + 2] = v;
+        }
+        const lut: LUT1D = {
+          type: '1d',
+          title: 'Degenerate Green Domain',
+          size,
+          domainMin: [0, 0.5, 0],
+          domainMax: [1, 0.5, 1], // G range is zero
+          data,
+        };
+
+        const result = applyLUT1D(lut, 0.5, 0.5, 0.5);
+
+        expect(Number.isFinite(result[0])).toBe(true);
+        expect(Number.isFinite(result[1])).toBe(true);
+        expect(Number.isFinite(result[2])).toBe(true);
+      });
+
+      it('applyLUT1D returns finite values when all three channels have zero-width domain', () => {
+        const size = 4;
+        const data = new Float32Array(size * 3);
+        for (let i = 0; i < size * 3; i++) data[i] = 0.25;
+        const lut: LUT1D = {
+          type: '1d',
+          title: 'All Degenerate 1D',
+          size,
+          domainMin: [0.5, 0.5, 0.5],
+          domainMax: [0.5, 0.5, 0.5],
+          data,
+        };
+
+        const result = applyLUT1D(lut, 0.5, 0.5, 0.5);
+
+        expect(Number.isFinite(result[0])).toBe(true);
+        expect(Number.isFinite(result[1])).toBe(true);
+        expect(Number.isFinite(result[2])).toBe(true);
+      });
+    });
+
+    describe('parser DOMAIN_MIN/MAX validation (COLOR-W4-03)', () => {
+      it('rejects DOMAIN_MIN with non-numeric tokens', () => {
+        const content = `TITLE "Bad Domain"
+LUT_3D_SIZE 2
+DOMAIN_MIN abc def ghi
+DOMAIN_MAX 1.0 1.0 1.0
+0.0 0.0 0.0
+0.5 0.5 0.5
+0.5 0.5 0.5
+1.0 1.0 1.0
+0.5 0.5 0.5
+1.0 1.0 1.0
+1.0 1.0 1.0
+1.0 1.0 1.0`;
+
+        expect(() => parseCubeLUT(content)).toThrow(/Invalid DOMAIN_MIN/);
+      });
+
+      it('rejects DOMAIN_MAX with non-numeric tokens', () => {
+        const content = `TITLE "Bad Domain"
+LUT_3D_SIZE 2
+DOMAIN_MIN 0.0 0.0 0.0
+DOMAIN_MAX foo bar baz
+0.0 0.0 0.0
+0.5 0.5 0.5
+0.5 0.5 0.5
+1.0 1.0 1.0
+0.5 0.5 0.5
+1.0 1.0 1.0
+1.0 1.0 1.0
+1.0 1.0 1.0`;
+
+        expect(() => parseCubeLUT(content)).toThrow(/Invalid DOMAIN_MAX/);
+      });
+
+      it('rejects DOMAIN_MIN with inf/-inf/nan tokens', () => {
+        const content = `TITLE "Inf Domain"
+LUT_3D_SIZE 2
+DOMAIN_MIN inf -inf nan
+DOMAIN_MAX 1.0 1.0 1.0
+0.0 0.0 0.0
+0.5 0.5 0.5
+0.5 0.5 0.5
+1.0 1.0 1.0
+0.5 0.5 0.5
+1.0 1.0 1.0
+1.0 1.0 1.0
+1.0 1.0 1.0`;
+
+        expect(() => parseCubeLUT(content)).toThrow(/Invalid DOMAIN_MIN/);
+      });
+
+      it('rejects DOMAIN_MAX with inf/-inf/nan tokens', () => {
+        const content = `TITLE "Inf Domain"
+LUT_3D_SIZE 2
+DOMAIN_MIN 0.0 0.0 0.0
+DOMAIN_MAX inf -inf nan
+0.0 0.0 0.0
+0.5 0.5 0.5
+0.5 0.5 0.5
+1.0 1.0 1.0
+0.5 0.5 0.5
+1.0 1.0 1.0
+1.0 1.0 1.0
+1.0 1.0 1.0`;
+
+        expect(() => parseCubeLUT(content)).toThrow(/Invalid DOMAIN_MAX/);
+      });
+
+      it('rejects DOMAIN_MIN with one non-finite value', () => {
+        const content = `TITLE "Partial Bad"
+LUT_3D_SIZE 2
+DOMAIN_MIN 0.0 NaN 0.0
+DOMAIN_MAX 1.0 1.0 1.0
+0.0 0.0 0.0
+0.5 0.5 0.5
+0.5 0.5 0.5
+1.0 1.0 1.0
+0.5 0.5 0.5
+1.0 1.0 1.0
+1.0 1.0 1.0
+1.0 1.0 1.0`;
+
+        expect(() => parseCubeLUT(content)).toThrow(/Invalid DOMAIN_MIN/);
       });
     });
 

@@ -224,6 +224,14 @@ export class PluginRegistry {
     for (const depId of entry.plugin.manifest.dependencies ?? []) {
       const dep = this.plugins.get(depId);
       if (!dep) throw new Error(`Plugin "${id}" depends on "${depId}" which is not registered`);
+      // A disposed dependency is effectively no longer available — treat it
+      // distinctly from "not registered" so the error points at the real cause
+      // and we do not attempt to reactivate a disposed plugin (which would
+      // throw a misleading "cannot be reactivated" error from a different code
+      // path).
+      if (dep.state === 'disposed') {
+        throw new Error(`Plugin "${id}" depends on "${depId}" which is disposed`);
+      }
       if (dep.state !== 'active') {
         await this.activate(depId);
       }
@@ -580,7 +588,18 @@ export class PluginRegistry {
       }
       inProgress.add(id);
       const entry = this.plugins.get(id);
-      if (!entry) return;
+      if (!entry) {
+        inProgress.delete(id);
+        return;
+      }
+      // Skip disposed plugins: they remain in the Map (so getState() still
+      // reports 'disposed') but must never appear in the sorted output, since
+      // callers like activateAll() and the dependency walker in activate()
+      // rely on the result containing only live plugins.
+      if (entry.state === 'disposed') {
+        inProgress.delete(id);
+        return;
+      }
       for (const dep of entry.plugin.manifest.dependencies ?? []) {
         visit(dep);
       }

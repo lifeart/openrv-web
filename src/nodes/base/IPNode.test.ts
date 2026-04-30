@@ -29,7 +29,7 @@ describe('IPNode', () => {
       // Verify the forwarding works before dispose
       prop.value = 0.5;
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith({ name: 'opacity', value: 0.5 }, { name: 'opacity', value: 0.5 });
+      expect(listener).toHaveBeenCalledWith({ name: 'opacity', value: 0.5 }, { name: 'opacity', value: 1.0 });
 
       // Dispose the node
       node.dispose();
@@ -40,6 +40,33 @@ describe('IPNode', () => {
 
       // Listener should NOT have been called after dispose
       expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('NODE-W4-06: propertyChanged forwards oldValue (not duplicated newValue) to subscribers', () => {
+      const node = new TestNode('oldValueTest');
+      const prop = node.properties.add({ name: 'gain', defaultValue: 1.0 });
+
+      const listener = vi.fn();
+      node.propertyChanged.connect(listener);
+
+      // First change: 1.0 -> 2.5
+      prop.value = 2.5;
+      expect(listener).toHaveBeenCalledTimes(1);
+      const [firstNew, firstOld] = listener.mock.calls[0]!;
+      expect(firstNew).toEqual({ name: 'gain', value: 2.5 });
+      expect(firstOld).toEqual({ name: 'gain', value: 1.0 });
+      // Critical: ensure the oldValue object is NOT identical to newValue (the original bug)
+      expect(firstOld).not.toBe(firstNew);
+      expect((firstOld as { value: unknown }).value).not.toBe((firstNew as { value: unknown }).value);
+
+      // Second change: 2.5 -> 3.0; oldValue should reflect 2.5, not 3.0
+      prop.value = 3.0;
+      expect(listener).toHaveBeenCalledTimes(2);
+      const [secondNew, secondOld] = listener.mock.calls[1]!;
+      expect(secondNew).toEqual({ name: 'gain', value: 3.0 });
+      expect(secondOld).toEqual({ name: 'gain', value: 2.5 });
+
+      node.dispose();
     });
 
     it('IPNODE-DISP-002: after dispose(), properties.propertyChanged has no connections (forwarding subscription removed)', () => {

@@ -55,9 +55,9 @@ export abstract class IPNode {
     this.properties = new PropertyContainer();
 
     // Forward property changes
-    this.properties.propertyChanged.connect((data) => {
+    this.properties.propertyChanged.connect((data, oldData) => {
       this.markDirty();
-      this.propertyChanged.emit(data, data);
+      this.propertyChanged.emit(data, oldData);
     });
   }
 

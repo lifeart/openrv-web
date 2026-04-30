@@ -346,6 +346,50 @@ describe('PluginRegistry', () => {
       await registry.activateAll();
       expect(order).toEqual(['a', 'b']);
     });
+
+    it('PLUGIN-W4-01: activateAll skips already-disposed plugins', async () => {
+      const activateA = vi.fn();
+      const activateB = vi.fn();
+      const pluginA = createPlugin({
+        manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] },
+        activate: activateA,
+      });
+      const pluginB = createPlugin({
+        manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'] },
+        activate: activateB,
+      });
+      registry.register(pluginA);
+      registry.register(pluginB);
+      // Dispose A before activateAll runs — A must not be re-activated, and B
+      // (which has no deps) must still come up cleanly. This exercises the
+      // topologicalSort() filter: if A leaked into the sorted output, the
+      // activate(a) call would throw "cannot be reactivated" and abort.
+      await registry.dispose('a');
+      await registry.activateAll();
+      expect(activateA).not.toHaveBeenCalled();
+      expect(activateB).toHaveBeenCalledTimes(1);
+      expect(registry.getState('a')).toBe('disposed');
+      expect(registry.getState('b')).toBe('active');
+    });
+
+    it('PLUGIN-W4-01: activate throws clear "disposed" error when dep is disposed', async () => {
+      const pluginA = createPlugin({
+        manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+      });
+      const pluginB = createPlugin({
+        manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'], dependencies: ['a'] },
+        activate: vi.fn(),
+      });
+      registry.register(pluginA);
+      registry.register(pluginB);
+      await registry.dispose('a');
+      // Must surface the disposed-dep cause directly, not the generic
+      // "not registered" message and not the misleading
+      // "has been disposed and cannot be reactivated" message from the
+      // recursive activate(depId) call.
+      await expect(registry.activate('b')).rejects.toThrow('"b" depends on "a" which is disposed');
+    });
   });
 
   // -------------------------------------------------------------------------
