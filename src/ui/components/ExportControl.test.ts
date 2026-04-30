@@ -7,16 +7,23 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ExportControl } from './ExportControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('ExportControl', () => {
   let control: ExportControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ExportControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -268,11 +275,13 @@ describe('ExportControl export request structure', () => {
   let control: ExportControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ExportControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   it('EXPORT-U070: export request has format property', () => {
@@ -323,6 +332,7 @@ describe('ExportControl Escape key handling (M-14)', () => {
   let control: ExportControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ExportControl();
     document.body.appendChild(control.render());
   });
@@ -333,6 +343,7 @@ describe('ExportControl Escape key handling (M-14)', () => {
     if (el.parentNode) {
       el.parentNode.removeChild(el);
     }
+    resetOutsideClickRegistry();
   });
 
   function getExportButton(): HTMLButtonElement {
@@ -358,26 +369,27 @@ describe('ExportControl Escape key handling (M-14)', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('EXPORT-M14c: the keydown listener should be removed when the dropdown closes', () => {
-    const spy = vi.spyOn(document, 'removeEventListener');
-
+  it('EXPORT-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+    expectRegistrationCount(0);
     const button = getExportButton();
     button.click(); // open
+    expectRegistrationCount(1);
     button.click(); // close
-
-    expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-    spy.mockRestore();
+    expectRegistrationCount(0);
   });
 
-  it('EXPORT-M14d: the keydown listener should be removed on dispose', () => {
-    const spy = vi.spyOn(document, 'removeEventListener');
-
+  it('EXPORT-OCR-002: outside-click after open dismisses the dropdown', () => {
     const button = getExportButton();
     button.click(); // open
-    control.dispose();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
 
-    expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-    spy.mockRestore();
+    const outside = document.createElement('div');
+    document.body.appendChild(outside);
+    dispatchOutsideClick(outside);
+
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expectRegistrationCount(0);
+    document.body.removeChild(outside);
   });
 });
 
@@ -385,6 +397,7 @@ describe('ExportControl RV/GTO session export menu items', () => {
   let control: ExportControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ExportControl();
     document.body.appendChild(control.render());
   });
@@ -395,6 +408,7 @@ describe('ExportControl RV/GTO session export menu items', () => {
     if (el.parentNode) {
       el.parentNode.removeChild(el);
     }
+    resetOutsideClickRegistry();
   });
 
   function openDropdown(): void {
@@ -459,6 +473,7 @@ describe('ExportControl keyboard accessibility', () => {
   let control: ExportControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ExportControl();
     document.body.appendChild(control.render());
   });
@@ -469,6 +484,7 @@ describe('ExportControl keyboard accessibility', () => {
     if (el.parentNode) {
       el.parentNode.removeChild(el);
     }
+    resetOutsideClickRegistry();
   });
 
   function getExportButton(): HTMLButtonElement {
@@ -643,6 +659,7 @@ describe('ExportControl EDL/OTIO playlist export menu items (Issue #465)', () =>
   let control: ExportControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ExportControl();
     document.body.appendChild(control.render());
   });
@@ -653,6 +670,7 @@ describe('ExportControl EDL/OTIO playlist export menu items (Issue #465)', () =>
     if (el.parentNode) {
       el.parentNode.removeChild(el);
     }
+    resetOutsideClickRegistry();
   });
 
   function openDropdown(): void {

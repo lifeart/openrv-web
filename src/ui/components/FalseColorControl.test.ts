@@ -8,6 +8,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FalseColorControl } from './FalseColorControl';
 import { FalseColor } from './FalseColor';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 // Create a mock FalseColor class
 function createMockFalseColor(): FalseColor {
@@ -20,6 +25,7 @@ describe('FalseColorControl', () => {
   let falseColor: FalseColor;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     falseColor = createMockFalseColor();
     control = new FalseColorControl(falseColor);
   });
@@ -27,6 +33,7 @@ describe('FalseColorControl', () => {
   afterEach(() => {
     control.dispose();
     falseColor.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -351,60 +358,30 @@ describe('FalseColorControl', () => {
     });
   });
 
-  describe('outside click listener lifecycle', () => {
-    it('FALSE-M21a: outside click listener should NOT be registered when dropdown is closed', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      control.dispose();
-      falseColor.dispose();
-      addSpy.mockClear();
-
-      falseColor = createMockFalseColor();
-      control = new FalseColorControl(falseColor);
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(0);
-      addSpy.mockRestore();
-    });
-
-    it('FALSE-M21b: outside click listener should be registered when dropdown opens', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
+  describe('OutsideClickRegistry integration', () => {
+    it('FALSE-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-
-      addSpy.mockClear();
       button.click(); // open
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      addSpy.mockRestore();
-    });
-
-    it('FALSE-M21c: outside click listener should be removed when dropdown closes', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-
-      button.click(); // open
-      removeSpy.mockClear();
+      expectRegistrationCount(1);
       button.click(); // close
-
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
+      expectRegistrationCount(0);
     });
 
-    it('FALSE-M21d: dispose should remove outside click listener regardless of dropdown state', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
+    it('FALSE-OCR-002: outside-click after open dismisses the dropdown', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
+      button.click(); // open
+      expect(button.getAttribute('aria-expanded')).toBe('true');
 
-      button.click(); // open dropdown
-      removeSpy.mockClear();
-      control.dispose();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
 
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 

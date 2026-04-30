@@ -7,16 +7,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StabilizationControl } from './StabilizationControl';
 import { DEFAULT_STABILIZATION_PARAMS } from '../../filters/StabilizeMotion';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('StabilizationControl', () => {
   let control: StabilizationControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new StabilizationControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -418,25 +425,28 @@ describe('StabilizationControl', () => {
 
       expect(control.isOpen).toBe(false);
     });
+  });
 
-    it('SC-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+  describe('OutsideClickRegistry integration', () => {
+    it('SC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
       control.show();
+      expectRegistrationCount(1);
       control.hide();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      expectRegistrationCount(0);
     });
 
-    it('SC-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+    it('SC-OCR-002: outside-click after open dismisses the panel', () => {
       control.show();
-      control.dispose();
+      expect(control.isOpen).toBe(true);
 
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+
+      expect(control.isOpen).toBe(false);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 

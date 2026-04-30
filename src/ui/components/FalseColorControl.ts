@@ -14,6 +14,7 @@ import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export class FalseColorControl {
   private container: HTMLElement;
@@ -24,6 +25,7 @@ export class FalseColorControl {
   private presetButtons: Map<FalseColorPreset, HTMLButtonElement> = new Map();
   private customEditorSection: HTMLElement | null = null;
   private boundHandleReposition: () => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private subs = new DisposableSubscriptionManager();
 
   constructor(falseColor: FalseColor) {
@@ -590,15 +592,27 @@ export class FalseColorControl {
       }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
-      document.addEventListener('click', this.handleOutsideClick);
+      this.deregisterDismiss = outsideClickRegistry.register({
+        elements: [this.container, this.dropdown],
+        onDismiss: () => this.closeDropdown(),
+        dismissOn: 'click',
+        dismissOnEscape: true,
+      });
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
-      this.dropdown.style.display = 'none';
-      document.removeEventListener('click', this.handleOutsideClick);
-      window.removeEventListener('resize', this.boundHandleReposition);
-      window.removeEventListener('scroll', this.boundHandleReposition, true);
+      this.closeDropdown();
     }
+  }
+
+  private closeDropdown(): void {
+    this.isDropdownOpen = false;
+    this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.dropdown.style.display = 'none';
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
+    window.removeEventListener('resize', this.boundHandleReposition);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
   }
 
   private positionDropdown(): void {
@@ -606,19 +620,6 @@ export class FalseColorControl {
     this.dropdown.style.top = `${rect.bottom + 4}px`;
     this.dropdown.style.left = `${rect.left}px`;
   }
-
-  private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      if (this.isDropdownOpen) {
-        this.isDropdownOpen = false;
-        this.toggleButton.setAttribute('aria-expanded', 'false');
-        this.dropdown.style.display = 'none';
-        document.removeEventListener('click', this.handleOutsideClick);
-        window.removeEventListener('resize', this.boundHandleReposition);
-        window.removeEventListener('scroll', this.boundHandleReposition, true);
-      }
-    }
-  };
 
   /**
    * Get the false color instance
@@ -638,7 +639,8 @@ export class FalseColorControl {
    * Dispose
    */
   dispose(): void {
-    document.removeEventListener('click', this.handleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

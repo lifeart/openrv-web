@@ -24,7 +24,6 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   private _muted = false;
   private _previousVolume = 0.7;
   private _audioScrubEnabled = true;
-  private _boundDocumentClick: (e: MouseEvent) => void;
   private _cleanupA11yFocus: (() => void) | null = null;
   private scrubToggle: HTMLLabelElement | null = null;
   private scrubCheckbox: HTMLInputElement | null = null;
@@ -171,9 +170,9 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       this.volumeContainer.style.width = '0';
     });
 
-    // No longer needed: outside-click collapse (hover/focus handles disclosure)
-    this._boundDocumentClick = () => {};
-    document.addEventListener('click', this._boundDocumentClick);
+    // Disclosure is fully handled by hover/focus (pointerenter/pointerleave/
+    // focus/focusout). No outside-click dismiss is needed because the slider
+    // collapses automatically when pointer or focus leaves the control.
 
     this.container.appendChild(this.muteButton);
     this.container.appendChild(this.volumeContainer);
@@ -300,7 +299,6 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('click', this._boundDocumentClick);
     this._cleanupA11yFocus?.();
     this._cleanupA11yFocus = null;
   }
