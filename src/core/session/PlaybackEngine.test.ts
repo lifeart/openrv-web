@@ -1414,4 +1414,232 @@ describe('PlaybackEngine', () => {
       expect(engine.isStarved).toBe(false);
     });
   });
+
+  // ---------------------------------------------------------------
+  // SESSION-W4-01: stale getFrameAsync callback guard
+  // ---------------------------------------------------------------
+  describe('SESSION-W4-01: stale getFrameAsync callback guard', () => {
+    type DeferredVoid = {
+      promise: Promise<void>;
+      resolve: () => void;
+      reject: (err: unknown) => void;
+    };
+
+    const createDeferred = (): DeferredVoid => {
+      let resolve!: () => void;
+      let reject!: (err: unknown) => void;
+      const promise = new Promise<void>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+
+    type MockVideoSourceNode = {
+      isUsingMediabunny: () => boolean;
+      hasFrameCached: () => boolean;
+      getFrameAsync: ReturnType<typeof vi.fn>;
+      updatePlaybackBuffer: ReturnType<typeof vi.fn>;
+      startPlaybackPreload: ReturnType<typeof vi.fn>;
+      stopPlaybackPreload: ReturnType<typeof vi.fn>;
+      setPlaybackDirection: ReturnType<typeof vi.fn>;
+      preloadFrames: () => Promise<void>;
+      isHDR: () => boolean;
+    };
+
+    type MockSource = {
+      type: 'video';
+      name: string;
+      url: string;
+      width: number;
+      height: number;
+      duration: number;
+      fps: number;
+      element: HTMLVideoElement | undefined;
+      videoSourceNode: MockVideoSourceNode;
+    };
+
+    const createMockVideoSourceNode = (deferred: DeferredVoid): MockVideoSourceNode => ({
+      isUsingMediabunny: () => true,
+      hasFrameCached: () => false,
+      getFrameAsync: vi.fn().mockReturnValue(deferred.promise),
+      updatePlaybackBuffer: vi.fn(),
+      startPlaybackPreload: vi.fn(),
+      stopPlaybackPreload: vi.fn(),
+      setPlaybackDirection: vi.fn(),
+      preloadFrames: () => Promise.resolve(),
+      isHDR: () => false,
+    });
+
+    const createMockSource = (
+      name: string,
+      videoSourceNode: MockVideoSourceNode,
+    ): MockSource => ({
+      type: 'video',
+      name,
+      url: `file:///${name}`,
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
+      element: undefined,
+      videoSourceNode,
+    });
+
+    /**
+     * Sets up a host whose currentSource is read from a mutable ref, primes
+     * the engine with an in-flight fetch against the initial source, and
+     * returns helpers so the test can swap sources or resolve/reject the
+     * fetch on demand.
+     */
+    const setupInFlightFetch = (): {
+      deferred: DeferredVoid;
+      initialNode: MockVideoSourceNode;
+      initialSource: MockSource;
+      sourceRef: { value: MockSource };
+      perfNowSpy: ReturnType<typeof vi.spyOn>;
+    } => {
+      const deferred = createDeferred();
+      const initialNode = createMockVideoSourceNode(deferred);
+      const initialSource = createMockSource('initial.mp4', initialNode);
+      const sourceRef: { value: MockSource } = { value: initialSource };
+
+      const customHost = {
+        ...createMockPlaybackEngineHost(100),
+        getCurrentSource: () => sourceRef.value as never,
+      };
+      engine.setHost(customHost as PlaybackEngineHost);
+      engine.setOutPointInternal(100);
+
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(1000);
+      engine.play();
+      // Give the timing controller enough delta (>= one frame at 24fps) to
+      // enter the while-loop and reach the getFrameAsync branch, but stay
+      // well under STARVATION_TIMEOUT_MS so we don't trip starvation.
+      perfNowSpy.mockReturnValue(1100);
+      engine.update();
+
+      // Sanity: the fetch went out against the initial source's node (the
+      // exact call count is not asserted because triggerInitialBufferLoad
+      // also calls getFrameAsync to preload upcoming frames) and we are now
+      // in a buffering state.
+      expect((initialNode.getFrameAsync as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
+      expect(initialNode.updatePlaybackBuffer).not.toHaveBeenCalled();
+
+      return { deferred, initialNode, initialSource, sourceRef, perfNowSpy };
+    };
+
+    it('SESSION-W4-01: stale callback after source switch does NOT touch any buffer', async () => {
+      const { deferred, initialNode, sourceRef, perfNowSpy } = setupInFlightFetch();
+
+      // Simulate the user switching sources mid-flight.
+      const newNode = createMockVideoSourceNode(createDeferred());
+      const newSource = createMockSource('switched.mp4', newNode);
+      sourceRef.value = newSource;
+
+      // Resolve the in-flight fetch.
+      deferred.resolve();
+      await deferred.promise;
+      // Drain microtasks (the .then chain).
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // The stale callback must NOT touch either source's buffer.
+      expect(newNode.updatePlaybackBuffer).not.toHaveBeenCalled();
+      expect(initialNode.updatePlaybackBuffer).not.toHaveBeenCalled();
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('SESSION-W4-01: stale callback still decrements buffering count (success path)', async () => {
+      const { deferred, sourceRef, perfNowSpy } = setupInFlightFetch();
+
+      const tcState = (engine as unknown as { _ts: { bufferingCount: number } })._ts;
+      const bufferingCountBefore = tcState.bufferingCount;
+      expect(bufferingCountBefore).toBeGreaterThan(0);
+
+      // Swap the source to make the in-flight callback stale.
+      const newNode = createMockVideoSourceNode(createDeferred());
+      sourceRef.value = createMockSource('switched.mp4', newNode);
+
+      deferred.resolve();
+      await deferred.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // The stale callback must still balance the buffering increment.
+      expect(tcState.bufferingCount).toBe(bufferingCountBefore - 1);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('SESSION-W4-01: stale callback still decrements buffering count (error path)', async () => {
+      const { deferred, initialNode, sourceRef, perfNowSpy } = setupInFlightFetch();
+
+      const tcState = (engine as unknown as { _ts: { bufferingCount: number } })._ts;
+      const bufferingCountBefore = tcState.bufferingCount;
+      expect(bufferingCountBefore).toBeGreaterThan(0);
+
+      const newNode = createMockVideoSourceNode(createDeferred());
+      sourceRef.value = createMockSource('switched.mp4', newNode);
+
+      deferred.reject(new Error('decode failed'));
+      await deferred.promise.catch(() => {});
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(tcState.bufferingCount).toBe(bufferingCountBefore - 1);
+      // No source's buffer should have been touched.
+      expect(newNode.updatePlaybackBuffer).not.toHaveBeenCalled();
+      expect(initialNode.updatePlaybackBuffer).not.toHaveBeenCalled();
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('SESSION-W4-01: happy path still calls updatePlaybackBuffer and clears _pendingFetchFrame', async () => {
+      const { deferred, initialNode, perfNowSpy } = setupInFlightFetch();
+
+      // _pendingFetchFrame is set to the frame being fetched (must match
+      // the value passed to the live update() fetch — which is the engine's
+      // pendingFetchFrame).
+      const requestedFrame = engine.pendingFetchFrame;
+      expect(requestedFrame).not.toBeNull();
+
+      const tcState = (engine as unknown as { _ts: { bufferingCount: number } })._ts;
+      const bufferingCountBefore = tcState.bufferingCount;
+
+      // Resolve the fetch — source has NOT changed, so the callback is fresh.
+      deferred.resolve();
+      await deferred.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(initialNode.updatePlaybackBuffer).toHaveBeenCalledWith(requestedFrame);
+      expect(tcState.bufferingCount).toBe(bufferingCountBefore - 1);
+      // _pendingFetchFrame must be cleared on success so the next tick can
+      // re-issue a fetch if the cache still doesn't contain the frame.
+      expect(engine.pendingFetchFrame).toBeNull();
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('SESSION-W4-01: dispose between fetch and resolution skips updatePlaybackBuffer', async () => {
+      const { deferred, initialNode, perfNowSpy } = setupInFlightFetch();
+
+      // Dispose the engine while the fetch is in flight.
+      engine.dispose();
+
+      // Resolve the (now-stale) fetch.
+      deferred.resolve();
+      await deferred.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // No buffer mutation should have happened on the disposed engine.
+      expect(initialNode.updatePlaybackBuffer).not.toHaveBeenCalled();
+
+      perfNowSpy.mockRestore();
+    });
+  });
 });

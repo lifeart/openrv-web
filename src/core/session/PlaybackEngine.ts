@@ -951,16 +951,51 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
             this.emit('buffering', true);
           }
 
-          videoSourceNode
-            .getFrameAsync(nextFrame)
+          // Capture refs locally so the async callback can detect a stale fetch
+          // (source switch, supersession by a newer fetch, or engine disposal)
+          // before mutating buffer state belonging to the wrong source.
+          const fetchSource = source;
+          const fetchVideoSourceNode = videoSourceNode;
+          const fetchFrame = nextFrame;
+
+          const isStillRelevant = (): boolean => {
+            // Engine disposed (dispose() nulls out _host)
+            if (!this._host) return false;
+            // A newer fetch superseded this one (or _pendingFetchFrame was
+            // cleared by pause()/starvation/cache-hit handling)
+            if (this._pendingFetchFrame !== fetchFrame) return false;
+            // The current source / video source node changed under us
+            const currentSource = this._host.getCurrentSource();
+            if (currentSource !== fetchSource) return false;
+            if (currentSource?.videoSourceNode !== fetchVideoSourceNode) return false;
+            return true;
+          };
+
+          fetchVideoSourceNode
+            .getFrameAsync(fetchFrame)
             .then(() => {
-              source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
-              this.updateSourceBPlaybackBuffer(nextFrame);
+              if (!isStillRelevant()) {
+                // Stale resolution — still balance the buffering increment,
+                // but do NOT touch any buffer state (which may belong to a
+                // different source now).
+                this.decrementBufferingCount();
+                return;
+              }
+              fetchSource.videoSourceNode?.updatePlaybackBuffer(fetchFrame);
+              this.updateSourceBPlaybackBuffer(fetchFrame);
+              // Clear the pending marker so the next tick can issue a fresh
+              // fetch if needed (otherwise we could short-circuit the
+              // `_pendingFetchFrame !== nextFrame` guard above).
+              this._pendingFetchFrame = null;
               this.decrementBufferingCount();
             })
             .catch((err) => {
               if (err?.name !== 'AbortError') {
                 log.warn('Frame fetch error:', err);
+              }
+              // Always balance the buffering counter, even if stale.
+              if (isStillRelevant()) {
+                this._pendingFetchFrame = null;
               }
               this.decrementBufferingCount();
             });
