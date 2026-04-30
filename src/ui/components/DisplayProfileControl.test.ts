@@ -12,6 +12,11 @@ import {
   isDisplayStateActive,
   type DisplayColorState,
 } from '../../color/ColorProcessingFacade';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 // ---------------------------------------------------------------------------
 // Mock localStorage
@@ -43,12 +48,47 @@ describe('DisplayProfileControl', () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+    resetOutsideClickRegistry();
   });
 
   afterEach(() => {
     if (control) {
       control.dispose();
     }
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('DPC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      control = new DisplayProfileControl();
+      const root = control.render();
+      document.body.appendChild(root);
+      const button = root.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+
+      expectRegistrationCount(0);
+      button.click(); // open
+      expectRegistrationCount(1);
+      button.click(); // close
+      expectRegistrationCount(0);
+      root.remove();
+    });
+
+    it('DPC-OCR-002: outside click dismisses the dropdown', () => {
+      control = new DisplayProfileControl();
+      const root = control.render();
+      document.body.appendChild(root);
+      const button = root.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = root.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('block');
+
+      dispatchOutsideClick();
+
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      root.remove();
+    });
   });
 
   // ========================================================================

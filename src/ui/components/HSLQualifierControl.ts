@@ -15,6 +15,7 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export class HSLQualifierControl {
   private container: HTMLElement;
@@ -26,6 +27,7 @@ export class HSLQualifierControl {
   private subs = new DisposableSubscriptionManager();
   private eyedropperActive = false;
   private onEyedropperCallback: ((active: boolean) => void) | null = null;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor(hslQualifier: HSLQualifier) {
     this.hslQualifier = hslQualifier;
@@ -724,16 +726,29 @@ export class HSLQualifierControl {
       }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
-      document.addEventListener('click', this.handleOutsideClick);
+      // Outside-click + Escape dismiss owned by OutsideClickRegistry.
+      this.deregisterDismiss = outsideClickRegistry.register({
+        elements: [this.container, this.dropdown],
+        onDismiss: () => this.closeDropdown(),
+        dismissOn: 'click',
+        dismissOnEscape: true,
+      });
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
-      this.dropdown.style.display = 'none';
-      this.deactivateEyedropper();
-      document.removeEventListener('click', this.handleOutsideClick);
-      window.removeEventListener('resize', this.boundHandleReposition);
-      window.removeEventListener('scroll', this.boundHandleReposition, true);
+      this.closeDropdown();
     }
+  }
+
+  private closeDropdown(): void {
+    this.isDropdownOpen = false;
+    this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.dropdown.style.display = 'none';
+    this.deactivateEyedropper();
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
+    window.removeEventListener('resize', this.boundHandleReposition);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
   }
 
   private positionDropdown(): void {
@@ -750,20 +765,6 @@ export class HSLQualifierControl {
     this.dropdown.style.top = `${Math.max(10, top)}px`;
     this.dropdown.style.left = `${Math.min(rect.left, window.innerWidth - 320)}px`;
   }
-
-  private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      if (this.isDropdownOpen) {
-        this.isDropdownOpen = false;
-        this.toggleButton.setAttribute('aria-expanded', 'false');
-        this.dropdown.style.display = 'none';
-        this.deactivateEyedropper();
-        document.removeEventListener('click', this.handleOutsideClick);
-        window.removeEventListener('resize', this.boundHandleReposition);
-        window.removeEventListener('scroll', this.boundHandleReposition, true);
-      }
-    }
-  };
 
   /**
    * Set callback for eyedropper activation
@@ -815,7 +816,8 @@ export class HSLQualifierControl {
   dispose(): void {
     this.deactivateEyedropper();
     this.subs.dispose();
-    document.removeEventListener('click', this.handleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

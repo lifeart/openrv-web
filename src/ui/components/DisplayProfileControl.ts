@@ -16,6 +16,7 @@ import {
 import { detectBrowserColorSpace, colorSpaceLabel, gamutLabel } from '../../color/BrowserColorSpace';
 import { getIconSvg } from './shared/Icons';
 import { TRANSITIONS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface DisplayProfileControlEvents extends EventMap {
   stateChanged: DisplayColorState;
@@ -61,6 +62,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   private profileButtons: Map<DisplayTransferFunction, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
   private state: DisplayColorState;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   // Slider elements
   private gammaSlider: HTMLInputElement | null = null;
@@ -401,7 +403,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.isDropdownOpen = false;
     this.toggleButton.setAttribute('aria-expanded', 'false');
     this.dropdown.style.display = 'none';
-    document.removeEventListener('click', this.handleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     document.removeEventListener('keydown', this.handleDocumentKeydown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
@@ -421,7 +424,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
   dispose(): void {
     this.closeDropdown();
-    document.removeEventListener('click', this.handleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     document.removeEventListener('keydown', this.handleDocumentKeydown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
@@ -492,7 +496,15 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
       this.toggleButton.setAttribute('aria-expanded', 'true');
       this.dropdown.style.display = 'block';
       this.positionDropdown();
-      document.addEventListener('click', this.handleOutsideClick);
+      // Outside-click + Escape dismiss owned by OutsideClickRegistry.
+      // Navigation keys (Arrow/Home/End) remain in the local keydown handler
+      // because the registry only owns Escape.
+      this.deregisterDismiss = outsideClickRegistry.register({
+        elements: [this.container, this.dropdown],
+        onDismiss: () => this.closeDropdown(),
+        dismissOn: 'click',
+        dismissOnEscape: true,
+      });
       document.addEventListener('keydown', this.handleDocumentKeydown);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
@@ -527,18 +539,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.dropdown.style.left = `${left}px`;
   }
 
-  private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node)) {
-      this.closeDropdown();
-    }
-  };
-
   private handleDocumentKeydown = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') {
-      this.closeDropdown();
-      return;
-    }
-
+    // Escape is now owned by OutsideClickRegistry — only handle navigation here.
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
       const focusable = Array.from(this.dropdown.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]')).filter(

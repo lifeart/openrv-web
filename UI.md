@@ -1326,8 +1326,11 @@ ZebraControl, ToneMappingControl, ScopesControl, StereoControl, SafeAreasControl
 **Migrated (MED-25 Phase 4)**:
 - `layout/HeaderBar.ts` — migrated all 4 `setTimeout(() => document.addEventListener('click', closeMenu), 0)` shims (showVersionMenu, showSpeedMenu, showHelpMenu, showLayoutMenu) to `outsideClickRegistry.register({ elements: [menu, anchor], dismissOn: 'click' })`. The setTimeout shim becomes unnecessary because of the register-during-dispatch contract (`OutsideClickRegistry.ts:188-191`): a synchronous `register()` inside the trigger's bubble-phase click handler is invisible to the in-flight click that opened the menu, so the same-tick click cannot dismiss it. The trigger anchor is included in `elements` per the footgun docs at `OutsideClickRegistry.ts:96-105`. Re-entry safety is preserved by the existing `closeAllHeaderMenus()` (called at the top of every `show*Menu`), which deregisters the previous menu before the new one registers. New tests: `HB-VER-OCR-001/002/003`, `HB-HLP-OCR-001/002`, `HB-LAY-OCR-001`, `HB-CROSS-OCR-001`, `HB-DISP-OCR-001` (8 total).
 
+**Migrated (MED-25 Phase 3)** — complex controls (custom Escape behavior, multi-popover surfaces, mousedown semantics, scroll/reposition listener bundles):
+NetworkControl, HSLQualifierControl, DisplayProfileControl (batch 1).
+
 **Known follow-up (still unmigrated controls — Phase 3 / complex Escape behavior)**:
-AutoSaveIndicator, DisplayProfileControl, ExportControl, FalseColorControl, GamutMappingControl, HSLQualifierControl, LUTPipelinePanel, LuminanceVisualizationControl, MultiSourceLayoutControl, NetworkControl, OCIOControl, PerspectiveCorrectionControl, StackControl, StereoEyeTransformControl, TimelineContextMenu, TimelineEditor.
+AutoSaveIndicator, ExportControl, FalseColorControl, GamutMappingControl, LUTPipelinePanel, LuminanceVisualizationControl, MultiSourceLayoutControl, OCIOControl, PerspectiveCorrectionControl, StackControl, StereoEyeTransformControl, TimelineContextMenu, TimelineEditor.
 
 Each migration replaces the per-component listener bind/unbind pair with a single `register()`/`deregister()` and updates any test asserting `expect(document.addEventListener).toHaveBeenCalledWith(...)` to assert on `outsideClickRegistry.getRegistrationCount()` instead. Tracked as a follow-up batch — do not block new feature work, but new components should use the registry from day one.
 

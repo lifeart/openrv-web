@@ -46,6 +46,9 @@ During each component migration, the implementer audits that component's `stopPr
 | `src/ui/components/VolumeControl.ts` | (none) | — | — | MED-25 Phase 2. No `stopPropagation` calls. The legacy no-op `document.addEventListener('click', () => {})` was removed (hover/focus handles slider disclosure; no outside-click dismiss needed). |
 | `src/ui/components/ColorControls.ts` | (none) | — | — | MED-25 Phase 2. No `stopPropagation` calls. |
 | `src/ui/components/CropControl.ts` | (none) | — | — | MED-25 Phase 2. No `stopPropagation` calls. The viewer-container is now passed in `outsideClickRegistry.register({ elements: [container, panel, viewer], … })` so clicks inside the viewer (e.g., dragging crop handles) do not dismiss the panel. |
+| `src/ui/components/NetworkControl.ts` | trigger button click | `e.stopPropagation()` on the trigger | **safe** | MED-25 Phase 3. Bubble-phase only; capture-phase registry already saw the click. Left in place to prevent ancestor click handlers from also reacting. The local `requestAnimationFrame`-deferred `keydown` Escape listener was removed; registry's `dismissOnEscape: true` replaces it with innermost-wins semantics. |
+| `src/ui/components/HSLQualifierControl.ts` | trigger button click | `e.stopPropagation()` on the trigger | **safe** | MED-25 Phase 3. Same shape as NetworkControl. Outside-click + Escape dismiss now go through the registry; the local `handleOutsideClick` arrow-function field was deleted. |
+| `src/ui/components/DisplayProfileControl.ts` | (none on dismiss path) | — | **n/a** | MED-25 Phase 3. Outside-click + Escape dismiss go through the registry; the navigation `keydown` handler is preserved (Arrow/Home/End for focus traversal) since the registry only owns Escape. The Escape branch was removed from the local handler. |
 
 ---
 
