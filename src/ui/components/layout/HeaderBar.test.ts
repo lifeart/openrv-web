@@ -12,6 +12,7 @@ import type { LayoutPreset } from '../../layout/LayoutStore';
 import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
 import {
   dispatchOutsideClick,
+  dispatchOutsideEscape,
   resetOutsideClickRegistry,
 } from '../../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
@@ -971,6 +972,52 @@ describe('HeaderBar', () => {
       layoutBtn.click();
       expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
       expect(document.querySelector('[data-testid="help-menu-dropdown"]')).toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-VER-OCR-004: registry-driven Escape dismissal restores focus to the version label trigger', () => {
+      // Regression: showVersionMenu's removeMenu was missing anchor.focus(),
+      // unlike showSpeedMenu/Help/Layout. When the registry dismisses via
+      // its capture-phase Escape (dismissOnEscape: true), the menu detaches
+      // before the bubble-phase keydown handler can run, so the local
+      // anchor.focus() inside that handler is skipped. Keyboard users hit
+      // Escape and ended up on document.body. removeMenu now restores focus
+      // unconditionally so registry- and keyboard-driven dismissal agree.
+      // Add a second source and a version group so the selector renders.
+      (session as any).addSource({
+        name: 'test_v2.mp4',
+        url: 'blob:test2',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+      session.versionManager.createGroup('test', [0, 1]);
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      headerBar.updateVersionSelector();
+
+      const versionLabelBtn = el.querySelector('[data-testid="version-label-button"]') as HTMLButtonElement;
+      expect(versionLabelBtn).not.toBeNull();
+      // Focus the trigger first so we can verify focus is restored to it.
+      versionLabelBtn.focus();
+      versionLabelBtn.click();
+
+      expect(document.getElementById('version-menu')).not.toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      // Dispatch outside Escape — registry's capture-phase listener fires
+      // first and detaches the menu before the menu's own keydown handler
+      // would have run.
+      dispatchOutsideEscape(document);
+
+      expect(document.getElementById('version-menu')).toBeNull();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+      expect(document.activeElement).toBe(versionLabelBtn);
 
       document.body.removeChild(el);
     });

@@ -754,10 +754,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         items[ci > 0 ? ci - 1 : items.length - 1]?.focus();
-      } else if (e.key === 'Escape' || e.key === 'Tab') {
+      } else if (e.key === 'Tab') {
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase). The registry detaches the menu before this
+        // bubble-phase handler can run, so the inner Escape branch was dead
+        // code in the dominant path. anchor.focus() is now restored inside
+        // removeMenu() so registry-driven dismiss also restores focus.
         e.preventDefault();
         removeMenu();
-        anchor.focus();
       }
     });
 
@@ -780,6 +784,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       deregister = null;
       menu.remove();
       this._activeVersionMenuCleanup = null;
+      // Restore focus to the trigger anchor so keyboard users do not get
+      // dropped on document.body when the registry dismisses via Escape
+      // (capture phase) — matches showSpeedMenu/Help/Layout.
+      anchor.focus();
     };
     deregister = outsideClickRegistry.register({
       elements: [menu, anchor],
@@ -1109,16 +1117,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           items[prevIndex]?.focus();
           break;
         }
-        case 'Escape': {
-          e.preventDefault();
-          removeMenu();
-          anchor.focus();
-          break;
-        }
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase) — see registry contract notes below. The registry
+        // detaches the menu before this bubble-phase handler runs, so the
+        // inner Escape branch was dead code. anchor.focus() inside
+        // removeMenu() handles focus restore for the registry path too.
         case 'Tab': {
           e.preventDefault();
           removeMenu();
-          anchor.focus();
           break;
         }
       }
@@ -1257,11 +1263,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           menuItems[prevIndex]?.focus();
           break;
         }
-        case 'Escape':
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase). The registry detaches the menu before this
+        // bubble-phase handler runs, so the inner Escape branch was dead
+        // code; anchor.focus() inside removeMenu() handles focus restore.
         case 'Tab': {
           e.preventDefault();
           removeMenu();
-          anchor.focus();
           break;
         }
       }
@@ -1409,11 +1417,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           items[prevIndex]?.focus();
           break;
         }
-        case 'Escape':
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase). The registry detaches the menu before this
+        // bubble-phase handler runs, so the inner Escape branch was dead
+        // code; anchor.focus() inside removeMenu() handles focus restore.
         case 'Tab': {
           e.preventDefault();
           removeMenu();
-          anchor.focus();
           break;
         }
       }

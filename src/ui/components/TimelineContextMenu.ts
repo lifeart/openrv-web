@@ -341,11 +341,11 @@ export class TimelineContextMenu {
           }
           break;
         }
-        case 'Escape': {
-          e.preventDefault();
-          this.hide();
-          break;
-        }
+        // Escape dismiss is owned by OutsideClickRegistry (dismissOnEscape:
+        // true on the registration in setupDismissHandlers below). The
+        // registry's capture-phase listener detaches the menu before this
+        // bubble-phase handler can run, so the inner Escape branch was dead
+        // code.
       }
     });
   }
