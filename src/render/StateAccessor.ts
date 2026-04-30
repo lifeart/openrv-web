@@ -262,6 +262,14 @@ export interface StateAccessor {
    */
   applyUniforms(shader: ShaderProgram, texCb: TextureCallbacks): void;
 
+  /**
+   * Force every uniform to re-upload on the next applyUniforms() call.
+   * Called by the Renderer after a WebGL context restore: the new GL context
+   * starts with default uniform values but the dirty flags were already
+   * cleared by prior frames, so without this state would silently desync.
+   */
+  markAllDirty(): void;
+
   // --- Texture data access (replaces getInternalState() coupling) ---
 
   /** Get the current curves LUT texture data and dirty state. */
