@@ -8,12 +8,18 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ZebraControl } from './ZebraControl';
 import { ZebraStripes } from './ZebraStripes';
 import { MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('ZebraControl', () => {
   let control: ZebraControl;
   let zebraStripes: ZebraStripes;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     zebraStripes = new ZebraStripes();
     control = new ZebraControl(zebraStripes);
   });
@@ -21,6 +27,7 @@ describe('ZebraControl', () => {
   afterEach(() => {
     control.dispose();
     zebraStripes.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -506,60 +513,27 @@ describe('ZebraControl', () => {
     });
   });
 
-  describe('outside click listener lifecycle', () => {
-    it('ZEBRA-M21a: outside click listener should NOT be registered when dropdown is closed', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      control.dispose();
-      zebraStripes.dispose();
-      addSpy.mockClear();
-
-      zebraStripes = new ZebraStripes();
-      control = new ZebraControl(zebraStripes);
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(0);
-      addSpy.mockRestore();
+  describe('OutsideClickRegistry integration', () => {
+    it('ZEBRA-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
     });
 
-    it('ZEBRA-M21b: outside click listener should be registered when dropdown opens', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-
-      addSpy.mockClear();
-      button.click(); // open
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      addSpy.mockRestore();
-    });
-
-    it('ZEBRA-M21c: outside click listener should be removed when dropdown closes', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-
-      button.click(); // open
-      removeSpy.mockClear();
-      button.click(); // close
-
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
-    });
-
-    it('ZEBRA-M21d: dispose should remove outside click listener regardless of dropdown state', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-
-      button.click(); // open dropdown
-      removeSpy.mockClear();
-      control.dispose();
-
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
+    it('ZEBRA-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('block');
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 
@@ -588,6 +562,16 @@ describe('ZebraControl', () => {
       control.dispose();
 
       expect(unsubSpy).toHaveBeenCalled();
+    });
+
+    it('ZEBRA-DISP-OCR-001: dispose without ever opening — no error, no leftover registration', () => {
+      // Pin the dispose() contract: when the popover was never opened, the
+      // deregisterDismiss handle is null and the optional chain
+      // `this.deregisterDismiss?.()` must safely no-op. This test guards the
+      // guard.
+      expectRegistrationCount(0);
+      expect(() => control.dispose()).not.toThrow();
+      expectRegistrationCount(0);
     });
   });
 

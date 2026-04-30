@@ -292,8 +292,14 @@ export class WorkerPool<TResult = unknown> {
     if (type === 'result') {
       task.resolve(event.data);
     } else if (type === 'error') {
+      // LOW-23: Reconstruct an Error from the worker's serialized payload.
+      // Error.stack is non-enumerable so workers must serialize name/message/
+      // stack as plain string fields; we use them here to rehydrate an Error
+      // with full source context for production debugging.
       const workerError = new Error(event.data.error || 'Worker error');
-      // Preserve the original stack trace from the worker if available
+      if (typeof event.data.name === 'string' && event.data.name) {
+        workerError.name = event.data.name;
+      }
       if (event.data.stack) {
         workerError.stack = `Worker Error: ${event.data.error}\n${event.data.stack}`;
       }

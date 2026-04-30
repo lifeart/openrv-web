@@ -215,10 +215,15 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
         g = 0.4,
         b = 0.2;
       const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
-      // mix(luma, color, 2.0) = luma + 2*(color - luma)
+      // mix(luma, color, 2.0) = luma + 2*(color - luma). For this input the
+      // raw saturation result on B is ~-0.028 (saturation amplifies away from
+      // luma and pulls the lowest channel below zero). The viewer.frag gamma
+      // stage applies pow(max(color, 0), 1/u_gammaRGB) unconditionally, so
+      // negative channels get clamped to 0 before reaching the framebuffer.
+      // Expect that clamped output, not the pre-clamp raw saturation value.
       const er = luma + 2 * (r - luma);
       const eg = luma + 2 * (g - luma);
-      const eb = luma + 2 * (b - luma);
+      const eb = Math.max(luma + 2 * (b - luma), 0);
       const pixels = renderWith(r, g, b, (gl, prog) => {
         gl.uniform1f(gl.getUniformLocation(prog, 'u_saturation'), 2);
       });
@@ -252,6 +257,25 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
         gl.uniform3f(gl.getUniformLocation(prog, 'u_offsetRGB'), 0.1, 0.1, 0.1);
       });
       expectPixel(pixels, W, 0, 0, { r: 0.7, g: 0.7, b: 0.7, a: 1.0 }, EPSILON.HDR_HALF);
+    });
+  });
+
+  // --- Brightness + Contrast combined ---
+
+  describe('Brightness + Contrast combined', () => {
+    it('MED-49: negative brightness + high contrast clamps before contrast', () => {
+      setup();
+      // Input: 0.3, brightness = -0.8, contrast = 2
+      // After brightness: 0.3 - 0.8 = -0.5, clamped to 0
+      // After contrast: (0 - 0.5) * 2 + 0.5 = -0.5
+      // Shader should clamp negative brightness result before contrast stage
+      const pixels = renderWith(0.3, 0.3, 0.3, (gl, prog) => {
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_brightness'), -0.8);
+        gl.uniform3f(gl.getUniformLocation(prog, 'u_contrastRGB'), 2, 2, 2);
+      });
+      // After brightness clamp: 0, contrast: (0-0.5)*2+0.5 = -0.5
+      // Final output after gamma clamp: 0
+      expectPixel(pixels, W, 0, 0, { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, EPSILON.HDR_HALF);
     });
   });
 

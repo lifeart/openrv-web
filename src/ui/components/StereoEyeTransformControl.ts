@@ -15,6 +15,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import {
   type StereoEyeTransformState,
   DEFAULT_EYE_TRANSFORM,
@@ -39,13 +40,11 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     linked: false,
   };
   private isPanelOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private _cleanupA11y: (() => void) | null = null;
 
   constructor() {
     super();
-
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
 
     // Create container
     this.container = document.createElement('div');
@@ -405,12 +404,6 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     }
   }
 
-  private handleOutsideClick(e: MouseEvent): void {
-    if (this.isPanelOpen && !this.toggleButton.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hidePanel();
-    }
-  }
-
   private positionPanel(): void {
     if (!this.isPanelOpen) return;
     const rect = this.toggleButton.getBoundingClientRect();
@@ -729,7 +722,13 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     this.positionPanel();
     this.updateAllUI();
 
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    // Outside-click + Escape dismiss owned by OutsideClickRegistry.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.toggleButton, this.panel],
+      onDismiss: () => this.hidePanel(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
     this.emit('visibilityChanged', true);
   }
 
@@ -738,7 +737,8 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
     this.toggleButton.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     this.updateToggleButtonStyle();
     this.emit('visibilityChanged', false);
   }

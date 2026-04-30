@@ -263,10 +263,6 @@ export function compositeImageData(
   return result;
 }
 
-/**
- * Composite multiple layers together
- * Layers are composited from bottom to top (first layer is bottom)
- */
 export interface CompositeLayer {
   imageData: ImageData;
   blendMode: BlendMode;
@@ -274,6 +270,15 @@ export interface CompositeLayer {
   visible: boolean;
 }
 
+/**
+ * Composite multiple layers together
+ * Layers are composited from bottom to top (first layer is bottom)
+ *
+ * @internal Currently exercised only by tests. Production stack-mode dispatch
+ * lives in `StackGroupNode.compositeLayers` and
+ * `ViewerImageRenderer.compositeStackLayers`. See ISSUES.md REFACTOR-01 for
+ * the planned consolidation.
+ */
 export function compositeMultipleLayers(
   layers: CompositeLayer[],
   width: number,
@@ -291,7 +296,16 @@ export function compositeMultipleLayers(
     result.data[i + 3] = 0;
   }
 
-  // Topmost: return only the last visible layer (topmost in the stack)
+  // Topmost: return only the last visible layer (topmost in the stack).
+  //
+  // Invariant: 'topmost' is a stack-level blend mode set uniformly on all
+  // layers — checking layers[0] is correct as long as all layers share the
+  // mode. The stack-level setter must propagate uniformly; this fast-path
+  // assumes that contract holds and returns the topmost visible layer
+  // without inspecting the rest. Production stack dispatch (see ISSUES.md
+  // REFACTOR-01) short-circuits via `getCompositeType()` before reaching
+  // per-layer compositing, so divergent layer modes never reach here in
+  // production.
   if (layers.length > 0 && layers[0]?.blendMode === 'topmost') {
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i]!;

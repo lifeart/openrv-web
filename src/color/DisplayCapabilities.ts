@@ -62,6 +62,21 @@ export interface DisplayCapabilities {
   // Derived
   activeColorSpace: 'srgb' | 'display-p3';
   activeHDRMode: 'sdr' | 'hlg' | 'pq' | 'extended' | 'none';
+
+  // Backend selection
+  /**
+   * Optional override for renderer backend selection (MED-55 Phase 4-pre).
+   *
+   * When unset (the default), `createRenderer()` runs capability-based
+   * detection gated by the WebGPU stage pipeline feature flag.
+   *
+   * When set, the value forces a specific backend regardless of capabilities
+   * or feature flag state. Used for engineering, A/B comparisons, and tests.
+   *
+   * Note: this field is intentionally an extension of DisplayCapabilities
+   * (per Lap-2 review) rather than a separate `BackendCapabilities` type.
+   */
+  backendOverride?: 'webgl2' | 'webgpu';
 }
 
 // =============================================================================

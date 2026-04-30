@@ -9,11 +9,14 @@ import type {
   CDLProvider,
   CurvesProvider,
   LUTProvider,
+  LUTPipelineProvider,
+  LUTPipelineStage,
   ToneMappingProvider,
   DisplayProvider,
   DisplayCapabilitiesProvider,
   OCIOProvider,
 } from './types';
+import type { ColorPrimaries, TransferFunction } from '../core/image/Image';
 import type { ColorAdjustments } from '../core/types/color';
 import type { CDLValues } from '../color/CDL';
 import { DEFAULT_CDL } from '../color/CDL';
@@ -85,10 +88,24 @@ export class ColorAPI extends DisposableAPI {
   private cdlControl: CDLProvider;
   private curvesControl: CurvesProvider;
   private lutProvider: LUTProvider | undefined;
+  private lutPipelineProvider: LUTPipelineProvider | undefined;
   private toneMappingProvider: ToneMappingProvider | undefined;
   private displayProvider: DisplayProvider | undefined;
   private displayCapabilitiesProvider: DisplayCapabilitiesProvider | undefined;
   private ocioProvider: OCIOProvider | undefined;
+
+  /** One-shot guard so the OCIO-active warning only logs once per session per ColorAPI instance. */
+  private ocioOverrideWarned = false;
+
+  // Validation sets for per-stage output color-space declarations.
+  private static readonly VALID_LUT_PIPELINE_STAGES = new Set<LUTPipelineStage>([
+    'precache',
+    'file',
+    'look',
+    'display',
+  ]);
+  private static readonly VALID_PRIMARIES = new Set<ColorPrimaries>(['bt709', 'bt2020', 'p3']);
+  private static readonly VALID_TRANSFERS = new Set<TransferFunction>(['srgb', 'hlg', 'pq', 'smpte240m', 'linear']);
 
   constructor(
     colorControls: ColorAdjustmentProvider,
@@ -99,6 +116,7 @@ export class ColorAPI extends DisposableAPI {
     displayProvider?: DisplayProvider,
     displayCapabilitiesProvider?: DisplayCapabilitiesProvider,
     ocioProvider?: OCIOProvider,
+    lutPipelineProvider?: LUTPipelineProvider,
   ) {
     super();
     this.colorControls = colorControls;
@@ -109,6 +127,7 @@ export class ColorAPI extends DisposableAPI {
     this.displayProvider = displayProvider;
     this.displayCapabilitiesProvider = displayCapabilitiesProvider;
     this.ocioProvider = ocioProvider;
+    this.lutPipelineProvider = lutPipelineProvider;
   }
 
   /**
@@ -514,6 +533,162 @@ export class ColorAPI extends DisposableAPI {
       throw new ValidationError(`applyLUTPreset() unknown preset "${name}". Available: ${available}`);
     }
     provider.setLUT(lut);
+  }
+
+  // =========================================================================
+  // LUT Pipeline — Per-stage output color-space declarations (MED-51)
+  // =========================================================================
+
+  /**
+   * Assert that a LUT pipeline provider is available.
+   */
+  private assertLUTPipelineProvider(): LUTPipelineProvider {
+    if (!this.lutPipelineProvider) {
+      throw new APIError('LUT pipeline operations are not available (no LUT pipeline provider configured)');
+    }
+    return this.lutPipelineProvider;
+  }
+
+  /**
+   * Validate that `stage` is one of the four pipeline stage identifiers.
+   */
+  private validateLUTPipelineStage(stage: unknown, methodName: string): asserts stage is LUTPipelineStage {
+    if (typeof stage !== 'string' || !ColorAPI.VALID_LUT_PIPELINE_STAGES.has(stage as LUTPipelineStage)) {
+      throw new ValidationError(`${methodName}() "stage" must be one of: precache, file, look, display`);
+    }
+  }
+
+  /**
+   * Log a one-shot warning when manual stage declarations are issued for
+   * the display stage while OCIO is active. Manual declarations are still
+   * stored but will not affect rendering until OCIO is disabled.
+   */
+  private warnOCIOOverride(method: string): void {
+    if (this.ocioOverrideWarned) return;
+    this.ocioOverrideWarned = true;
+    console.warn(
+      `[ColorAPI.${method}] OCIO is active for display; manual declaration is stored but will not affect rendering until OCIO is disabled.`,
+    );
+  }
+
+  /**
+   * Declare the output color primaries for a LUT pipeline stage.
+   *
+   * Pass `null` to mark the stage as color-space-preserving (the default).
+   * Pass a concrete value (`'bt709'`, `'bt2020'`, `'p3'`) when the LUT is
+   * known to convert into that primary set; the per-stage cascade in
+   * {@link Viewer.applyLUTMetadataCascade} layers this on top of the input
+   * image metadata so downstream stages and the renderer interpret pixels
+   * correctly.
+   *
+   * The string `'auto'` is **not** accepted — pass `null` instead. This
+   * matches the underlying pipeline's null-sentinel contract.
+   *
+   * @param stage - One of `'precache'`, `'file'`, `'look'`, `'display'`.
+   * @param primaries - `null` (color-space-preserving) or a concrete primaries value.
+   * @throws {APIError} If no LUT pipeline provider is configured.
+   * @throws {ValidationError} On invalid stage / primaries values.
+   *
+   * @example
+   * ```ts
+   * openrv.color.setLUTStageColorPrimaries('file', 'bt709');
+   * openrv.color.setLUTStageColorPrimaries('file', null); // clear
+   * ```
+   */
+  setLUTStageColorPrimaries(stage: LUTPipelineStage, primaries: ColorPrimaries | null): void {
+    this.assertNotDisposed();
+    const provider = this.assertLUTPipelineProvider();
+    this.validateLUTPipelineStage(stage, 'setLUTStageColorPrimaries');
+    if ((primaries as unknown) === 'auto') {
+      throw new ValidationError('setLUTStageColorPrimaries() does not accept "auto"; pass null instead');
+    }
+    if (
+      primaries !== null &&
+      (typeof primaries !== 'string' || !ColorAPI.VALID_PRIMARIES.has(primaries as ColorPrimaries))
+    ) {
+      throw new ValidationError('setLUTStageColorPrimaries() "primaries" must be null OR one of: bt709, bt2020, p3');
+    }
+    if (stage === 'display' && provider.isOCIOActiveForDisplay?.()) {
+      this.warnOCIOOverride('setLUTStageColorPrimaries');
+    }
+    provider.setLUTStageOutputColorPrimaries(stage, primaries);
+  }
+
+  /**
+   * Read the declared output color primaries for a LUT pipeline stage.
+   *
+   * @param stage - One of `'precache'`, `'file'`, `'look'`, `'display'`.
+   * @returns `null` if the stage is color-space-preserving, otherwise the declared value.
+   * @throws {APIError} If no LUT pipeline provider is configured.
+   * @throws {ValidationError} On invalid stage.
+   *
+   * @example
+   * ```ts
+   * const primaries = openrv.color.getLUTStageColorPrimaries('file');
+   * ```
+   */
+  getLUTStageColorPrimaries(stage: LUTPipelineStage): ColorPrimaries | null {
+    this.assertNotDisposed();
+    const provider = this.assertLUTPipelineProvider();
+    this.validateLUTPipelineStage(stage, 'getLUTStageColorPrimaries');
+    return provider.getLUTStageOutputColorPrimaries(stage);
+  }
+
+  /**
+   * Declare the output transfer function for a LUT pipeline stage.
+   *
+   * Pass `null` to mark the stage as transfer-preserving (the default).
+   * Pass a concrete value (`'srgb'`, `'hlg'`, `'pq'`, `'smpte240m'`,
+   * `'linear'`) when the LUT bakes in an EOTF/OETF transformation so the
+   * downstream renderer can pick the correct shader path.
+   *
+   * The string `'auto'` is **not** accepted — pass `null` instead.
+   *
+   * @param stage - One of `'precache'`, `'file'`, `'look'`, `'display'`.
+   * @param transfer - `null` (transfer-preserving) or a concrete transfer value.
+   * @throws {APIError} If no LUT pipeline provider is configured.
+   * @throws {ValidationError} On invalid stage / transfer values.
+   *
+   * @example
+   * ```ts
+   * openrv.color.setLUTStageTransferFunction('look', 'linear');
+   * openrv.color.setLUTStageTransferFunction('look', null); // clear
+   * ```
+   */
+  setLUTStageTransferFunction(stage: LUTPipelineStage, transfer: TransferFunction | null): void {
+    this.assertNotDisposed();
+    const provider = this.assertLUTPipelineProvider();
+    this.validateLUTPipelineStage(stage, 'setLUTStageTransferFunction');
+    if ((transfer as unknown) === 'auto') {
+      throw new ValidationError('setLUTStageTransferFunction() does not accept "auto"; pass null instead');
+    }
+    if (
+      transfer !== null &&
+      (typeof transfer !== 'string' || !ColorAPI.VALID_TRANSFERS.has(transfer as TransferFunction))
+    ) {
+      throw new ValidationError(
+        'setLUTStageTransferFunction() "transfer" must be null OR one of: srgb, hlg, pq, smpte240m, linear',
+      );
+    }
+    if (stage === 'display' && provider.isOCIOActiveForDisplay?.()) {
+      this.warnOCIOOverride('setLUTStageTransferFunction');
+    }
+    provider.setLUTStageOutputTransferFunction(stage, transfer);
+  }
+
+  /**
+   * Read the declared output transfer function for a LUT pipeline stage.
+   *
+   * @param stage - One of `'precache'`, `'file'`, `'look'`, `'display'`.
+   * @returns `null` if the stage is transfer-preserving, otherwise the declared value.
+   * @throws {APIError} If no LUT pipeline provider is configured.
+   * @throws {ValidationError} On invalid stage.
+   */
+  getLUTStageTransferFunction(stage: LUTPipelineStage): TransferFunction | null {
+    this.assertNotDisposed();
+    const provider = this.assertLUTPipelineProvider();
+    this.validateLUTPipelineStage(stage, 'getLUTStageTransferFunction');
+    return provider.getLUTStageOutputTransferFunction(stage);
   }
 
   // =========================================================================

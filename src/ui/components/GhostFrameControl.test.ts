@@ -6,16 +6,44 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GhostFrameControl } from './GhostFrameControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('GhostFrameControl', () => {
   let control: GhostFrameControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new GhostFrameControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('GHOST-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="ghost-frame-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
+    });
+
+    it('GHOST-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="ghost-frame-button"]') as HTMLButtonElement;
+      button.click();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('ARIA attributes (M-15)', () => {

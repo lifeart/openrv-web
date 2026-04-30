@@ -9,8 +9,10 @@
 
 import { type LUTPipeline, type LUT } from '../../color/ColorProcessingFacade';
 import { LUTStageControl } from './LUTStageControl';
+import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { Z_INDEX } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface LUTPipelinePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -33,7 +35,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
 
   // Help popover
   private helpPopover: HTMLElement | null = null;
-  private boundHelpOutsideClick: ((e: MouseEvent) => void) | null = null;
+  private deregisterHelpDismiss: OutsideClickDeregister | null = null;
 
   // Default source for single-source workflows
   private defaultSourceId = 'default';
@@ -138,22 +140,40 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
 
     // --- Stage Controls ---
 
-    // Pre-Cache LUT
+    // Pre-Cache LUT — wrapped in <details> because pre-cache is the
+    // advanced, software-only path most sessions don't need to touch.
+    // File / Look / Display stay top-level (default visible).
     this.precacheControl = new LUTStageControl(
       {
         stageId: 'precache',
         title: 'Pre-Cache LUT (Software)',
         subtitle: 'Applied at decode time, per-source',
-        showBitDepth: true,
+        showOutputColorSpaceSelectors: true,
       },
       {
         onLUTLoaded: (lut, fileName) => this.onStageLUTLoaded('precache', lut, fileName),
         onLUTCleared: () => this.onStageLUTCleared('precache'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('precache', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('precache', intensity),
+        onOutputColorPrimariesChanged: (primaries) => this.onStageOutputColorPrimariesChanged('precache', primaries),
+        onOutputTransferFunctionChanged: (transfer) => this.onStageOutputTransferFunctionChanged('precache', transfer),
       },
     );
-    this.panel.appendChild(this.precacheControl.render());
+    const precacheDetails = document.createElement('details');
+    precacheDetails.dataset.testid = 'lut-precache-advanced';
+    precacheDetails.style.cssText = 'margin-bottom: 4px;';
+    const precacheSummary = document.createElement('summary');
+    precacheSummary.textContent = 'Advanced: Pre-Cache LUT';
+    precacheSummary.style.cssText = `
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding: 4px 0;
+      user-select: none;
+    `;
+    precacheDetails.appendChild(precacheSummary);
+    precacheDetails.appendChild(this.precacheControl.render());
+    this.panel.appendChild(precacheDetails);
 
     // File LUT
     this.fileControl = new LUTStageControl(
@@ -162,12 +182,15 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         title: 'File LUT (Input Transform)',
         subtitle: 'GPU-applied, per-source file-to-working-space',
         showSourceSelector: true,
+        showOutputColorSpaceSelectors: true,
       },
       {
         onLUTLoaded: (lut, fileName) => this.onStageLUTLoaded('file', lut, fileName),
         onLUTCleared: () => this.onStageLUTCleared('file'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('file', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('file', intensity),
+        onOutputColorPrimariesChanged: (primaries) => this.onStageOutputColorPrimariesChanged('file', primaries),
+        onOutputTransferFunctionChanged: (transfer) => this.onStageOutputTransferFunctionChanged('file', transfer),
       },
     );
     this.panel.appendChild(this.fileControl.render());
@@ -194,12 +217,15 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         title: 'Look LUT (Creative Grade)',
         subtitle: 'GPU-applied, per-source creative look',
         showSourceSelector: true,
+        showOutputColorSpaceSelectors: true,
       },
       {
         onLUTLoaded: (lut, fileName) => this.onStageLUTLoaded('look', lut, fileName),
         onLUTCleared: () => this.onStageLUTCleared('look'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('look', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('look', intensity),
+        onOutputColorPrimariesChanged: (primaries) => this.onStageOutputColorPrimariesChanged('look', primaries),
+        onOutputTransferFunctionChanged: (transfer) => this.onStageOutputTransferFunctionChanged('look', transfer),
       },
     );
     this.panel.appendChild(this.lookControl.render());
@@ -212,12 +238,15 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         subtitle: 'GPU-applied, display calibration',
         showSourceSelector: true,
         sessionWide: true,
+        showOutputColorSpaceSelectors: true,
       },
       {
         onLUTLoaded: (lut, fileName) => this.onStageLUTLoaded('display', lut, fileName),
         onLUTCleared: () => this.onStageLUTCleared('display'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('display', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('display', intensity),
+        onOutputColorPrimariesChanged: (primaries) => this.onDisplayOutputColorPrimariesChanged(primaries),
+        onOutputTransferFunctionChanged: (transfer) => this.onDisplayOutputTransferFunctionChanged(transfer),
       },
     );
     this.panel.appendChild(this.displayControl.render());
@@ -304,24 +333,32 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         hasLUT: config?.preCacheLUT.lutData !== null,
         intensity: config?.preCacheLUT.intensity ?? 1,
         lutName: config?.preCacheLUT.lutName ?? null,
+        outputColorPrimaries: config?.preCacheLUT.outputColorPrimaries ?? null,
+        outputTransferFunction: config?.preCacheLUT.outputTransferFunction ?? null,
       },
       file: {
         enabled: config?.fileLUT.enabled ?? true,
         hasLUT: config?.fileLUT.lutData !== null,
         intensity: config?.fileLUT.intensity ?? 1,
         lutName: config?.fileLUT.lutName ?? null,
+        outputColorPrimaries: config?.fileLUT.outputColorPrimaries ?? null,
+        outputTransferFunction: config?.fileLUT.outputTransferFunction ?? null,
       },
       look: {
         enabled: config?.lookLUT.enabled ?? true,
         hasLUT: config?.lookLUT.lutData !== null,
         intensity: config?.lookLUT.intensity ?? 1,
         lutName: config?.lookLUT.lutName ?? null,
+        outputColorPrimaries: config?.lookLUT.outputColorPrimaries ?? null,
+        outputTransferFunction: config?.lookLUT.outputTransferFunction ?? null,
       },
       display: {
         enabled: state.displayLUT.enabled,
         hasLUT: state.displayLUT.lutData !== null,
         intensity: state.displayLUT.intensity,
         lutName: state.displayLUT.lutName,
+        outputColorPrimaries: this.pipeline.getDisplayLUTOutputColorPrimaries(),
+        outputTransferFunction: this.pipeline.getDisplayLUTOutputTransferFunction(),
       },
     };
   }
@@ -337,19 +374,27 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
       this.precacheControl.setLUTName(config.preCacheLUT.lutName);
       this.precacheControl.setEnabled(config.preCacheLUT.enabled);
       this.precacheControl.setIntensity(config.preCacheLUT.intensity);
+      this.precacheControl.setOutputColorPrimaries(config.preCacheLUT.outputColorPrimaries);
+      this.precacheControl.setOutputTransferFunction(config.preCacheLUT.outputTransferFunction);
 
       this.fileControl.setLUTName(config.fileLUT.lutName);
       this.fileControl.setEnabled(config.fileLUT.enabled);
       this.fileControl.setIntensity(config.fileLUT.intensity);
+      this.fileControl.setOutputColorPrimaries(config.fileLUT.outputColorPrimaries);
+      this.fileControl.setOutputTransferFunction(config.fileLUT.outputTransferFunction);
 
       this.lookControl.setLUTName(config.lookLUT.lutName);
       this.lookControl.setEnabled(config.lookLUT.enabled);
       this.lookControl.setIntensity(config.lookLUT.intensity);
+      this.lookControl.setOutputColorPrimaries(config.lookLUT.outputColorPrimaries);
+      this.lookControl.setOutputTransferFunction(config.lookLUT.outputTransferFunction);
     }
 
     this.displayControl.setLUTName(state.displayLUT.lutName);
     this.displayControl.setEnabled(state.displayLUT.enabled);
     this.displayControl.setIntensity(state.displayLUT.intensity);
+    this.displayControl.setOutputColorPrimaries(state.displayLUT.outputColorPrimaries);
+    this.displayControl.setOutputTransferFunction(state.displayLUT.outputTransferFunction);
   }
 
   // --- Internal: handle stage events ---
@@ -438,6 +483,44 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
     this.emit('pipelineChanged', undefined);
   }
 
+  /**
+   * Forward the per-stage output-color-primaries declaration into the
+   * pipeline. Display LUT goes through the dedicated session-wide setter.
+   */
+  private onStageOutputColorPrimariesChanged(
+    stage: 'precache' | 'file' | 'look',
+    primaries: ColorPrimaries | null,
+  ): void {
+    const sourceId = this.pipeline.getActiveSourceId() ?? this.defaultSourceId;
+    this.pipeline.setStageOutputColorPrimaries(sourceId, stage, primaries);
+    this.emit('pipelineChanged', undefined);
+  }
+
+  /**
+   * Forward the per-stage output-transfer-function declaration into the
+   * pipeline. Display LUT goes through the dedicated session-wide setter.
+   */
+  private onStageOutputTransferFunctionChanged(
+    stage: 'precache' | 'file' | 'look',
+    transfer: TransferFunction | null,
+  ): void {
+    const sourceId = this.pipeline.getActiveSourceId() ?? this.defaultSourceId;
+    this.pipeline.setStageOutputTransferFunction(sourceId, stage, transfer);
+    this.emit('pipelineChanged', undefined);
+  }
+
+  /** Forward the display-stage output-primaries declaration. */
+  private onDisplayOutputColorPrimariesChanged(primaries: ColorPrimaries | null): void {
+    this.pipeline.setDisplayLUTOutputColorPrimaries(primaries);
+    this.emit('pipelineChanged', undefined);
+  }
+
+  /** Forward the display-stage output-transfer-function declaration. */
+  private onDisplayOutputTransferFunctionChanged(transfer: TransferFunction | null): void {
+    this.pipeline.setDisplayLUTOutputTransferFunction(transfer);
+    this.emit('pipelineChanged', undefined);
+  }
+
   private toggleHelpPopover(anchor: HTMLElement): void {
     if (this.helpPopover) {
       this.hideHelpPopover();
@@ -468,18 +551,25 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
       <div style="margin-bottom:4px;"><b>File</b> — Input transform (e.g. log-to-linear), GPU-applied per source.</div>
       <div style="margin-bottom:4px;"><b>Corrections</b> — CDL, curves, and color adjustments (middle of chain).</div>
       <div style="margin-bottom:4px;"><b>Look</b> — Creative grade / look, GPU-applied per source.</div>
-      <div><b>Display</b> — Display calibration LUT, session-wide.</div>
+      <div style="margin-bottom:8px;"><b>Display</b> — Display calibration LUT, session-wide.</div>
+      <div style="font-weight:600; margin-bottom:4px;">Output Color Space</div>
+      <div>Each stage can declare what color space its LUT outputs. Leave on <b>Auto (passthrough)</b> unless your LUT is known to convert into a specific space (e.g., a Display LUT that outputs sRGB after a PQ source).</div>
     `;
 
     this.panel.appendChild(popover);
     this.helpPopover = popover;
 
-    this.boundHelpOutsideClick = (e: MouseEvent) => {
-      if (!popover.contains(e.target as Node) && e.target !== anchor) {
-        this.hideHelpPopover();
-      }
-    };
-    document.addEventListener('mousedown', this.boundHelpOutsideClick);
+    // Outside-click + Escape dismiss for help popover owned by
+    // OutsideClickRegistry. Multi-popover surface: the LUT pipeline panel
+    // itself does not register (no outside-click dismiss), only the help
+    // popover does. The pre-existing semantic was 'mousedown' (popover
+    // closes on press), preserved via dismissOn: 'mousedown'.
+    this.deregisterHelpDismiss = outsideClickRegistry.register({
+      elements: [anchor, popover],
+      onDismiss: () => this.hideHelpPopover(),
+      dismissOn: 'mousedown',
+      dismissOnEscape: true,
+    });
   }
 
   private hideHelpPopover(): void {
@@ -487,10 +577,8 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
       this.helpPopover.remove();
       this.helpPopover = null;
     }
-    if (this.boundHelpOutsideClick) {
-      document.removeEventListener('mousedown', this.boundHelpOutsideClick);
-      this.boundHelpOutsideClick = null;
-    }
+    this.deregisterHelpDismiss?.();
+    this.deregisterHelpDismiss = null;
   }
 
   private resetAll(): void {
@@ -502,6 +590,14 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
   /** Dispose the panel and remove from DOM */
   dispose(): void {
     this.hideHelpPopover();
+    // Tear down child stage controls before removing the panel node so each
+    // control's listeners get cleaned up. Detaching the parent alone leaves
+    // the listeners pinned on the orphaned select / input / button nodes
+    // (pre-existing leak fixed in MED-51 PR-1).
+    this.precacheControl.dispose();
+    this.fileControl.dispose();
+    this.lookControl.dispose();
+    this.displayControl.dispose();
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);
     }

@@ -6,12 +6,44 @@ import {
   clearPatternCache,
   PATTERN_COLORS,
 } from './BackgroundPatternControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('BackgroundPatternControl', () => {
   let control: BackgroundPatternControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new BackgroundPatternControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('BGPAT-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="background-pattern-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
+    });
+
+    it('BGPAT-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="background-pattern-button"]') as HTMLButtonElement;
+      button.click();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('initialization', () => {

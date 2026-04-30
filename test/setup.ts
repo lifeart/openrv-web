@@ -3,7 +3,9 @@
  * Configures global test environment
  */
 
-import { vi, beforeEach } from 'vitest';
+import { vi, beforeEach, afterEach } from 'vitest';
+
+import { outsideClickRegistry } from '../src/utils/ui/OutsideClickRegistry';
 
 // Workaround for jsdom 28 CSS parsing bugs (https://github.com/jsdom/jsdom/issues/4095):
 // 1. `border` shorthand with CSS var() values silently rejects entire cssText
@@ -178,6 +180,23 @@ HTMLCanvasElement.prototype.getContext = createGetContextMock();
 // Re-apply mock before each test so it survives vi.restoreAllMocks()
 beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = createGetContextMock();
+});
+
+// Global reset for the OutsideClickRegistry singleton.
+//
+// Many UI components register against the application-wide `outsideClickRegistry`
+// singleton on mount. If a test doesn't clean up — or worse, if a component's
+// own dispose path fails to deregister — the leaked registration's `onDismiss`
+// will fire on the NEXT test that happens to dispatch a mousedown/click/Escape,
+// holding stale references to disposed components and producing
+// hard-to-diagnose cross-test failures.
+//
+// Resetting the singleton in a global `afterEach` makes cross-test pollution
+// impossible regardless of per-file boilerplate. Per-instance registries
+// (e.g. `new OutsideClickRegistry()` constructed inside individual tests) are
+// unaffected — this only touches the exported singleton.
+afterEach(() => {
+  outsideClickRegistry.reset();
 });
 
 // Mock HTMLCanvasElement.toDataURL since jsdom doesn't support it without canvas npm package

@@ -1249,3 +1249,353 @@ describe('Drago Edge Cases', () => {
     expect(result).toBeGreaterThanOrEqual(0);
   });
 });
+
+// ============================================================================
+// HDR Headroom Convention (MED-52)
+//
+// Verifies the uniform headroom convention adopted by all non-Drago tone
+// mapping operators: every operator accepts an optional `hdrHeadroom`
+// argument that defaults to 1.0. At hdrHeadroom=1.0 behavior is identical
+// to the bare canonical curve. At hdrHeadroom > 1.0 the curve is applied
+// to (input/headroom) and the result is multiplied back by headroom — so
+// the operator's curve identity is preserved while output range scales
+// with display headroom.
+// ============================================================================
+
+describe('HDR Headroom Convention (MED-52)', () => {
+  // Per-operator: default vs explicit hdrHeadroom=1.0 must match exactly.
+  it('HDRTM-MED52-001: default headroom=1.0 matches bare call (Reinhard)', () => {
+    expect(tonemapReinhardChannel(0.5, 4.0, 1.0)).toBeCloseTo(tonemapReinhardChannel(0.5, 4.0), 12);
+    expect(tonemapReinhardChannel(0.18, 4.0, 1.0)).toBeCloseTo(tonemapReinhardChannel(0.18, 4.0), 12);
+    expect(tonemapReinhardChannel(2.0, 4.0, 1.0)).toBeCloseTo(tonemapReinhardChannel(2.0, 4.0), 12);
+  });
+
+  it('HDRTM-MED52-002: default headroom=1.0 matches bare call (Filmic)', () => {
+    expect(tonemapFilmicChannel(0.5, 2.0, 11.2, 1.0)).toBeCloseTo(tonemapFilmicChannel(0.5, 2.0, 11.2), 12);
+    expect(tonemapFilmicChannel(1.0, 2.0, 11.2, 1.0)).toBeCloseTo(tonemapFilmicChannel(1.0, 2.0, 11.2), 12);
+  });
+
+  it('HDRTM-MED52-003: default headroom=1.0 matches bare call (ACES, GT)', () => {
+    expect(tonemapACESChannel(0.5, 1.0)).toBeCloseTo(tonemapACESChannel(0.5), 12);
+    expect(tonemapGTChannel(0.5, 1.0)).toBeCloseTo(tonemapGTChannel(0.5), 12);
+  });
+
+  it('HDRTM-MED52-004: default headroom=1.0 matches bare call (AgX, PBRNeutral, ACESHill)', () => {
+    const v = 0.5;
+    const a1 = tonemapAgX(v, v, v, 1.0);
+    const a0 = tonemapAgX(v, v, v);
+    expect(a1.r).toBeCloseTo(a0.r, 12);
+    expect(a1.g).toBeCloseTo(a0.g, 12);
+    expect(a1.b).toBeCloseTo(a0.b, 12);
+
+    const p1 = tonemapPBRNeutral(v, v, v, 1.0);
+    const p0 = tonemapPBRNeutral(v, v, v);
+    expect(p1.r).toBeCloseTo(p0.r, 12);
+
+    const h1 = tonemapACESHill(v, v, v, 1.0);
+    const h0 = tonemapACESHill(v, v, v);
+    expect(h1.r).toBeCloseTo(h0.r, 12);
+  });
+
+  // Peak-white invariance: f(H*x, H) = H * f(x, 1) for every operator.
+  it('HDRTM-MED52-005: Reinhard peak-white invariance', () => {
+    for (const H of [2.0, 3.0, 5.0]) {
+      for (const x of [0.05, 0.18, 0.5, 0.8]) {
+        expect(tonemapReinhardChannel(H * x, 4.0, H) / H).toBeCloseTo(tonemapReinhardChannel(x, 4.0, 1.0), 9);
+      }
+    }
+  });
+
+  it('HDRTM-MED52-006: Filmic peak-white invariance', () => {
+    for (const H of [2.0, 3.0, 5.0]) {
+      for (const x of [0.05, 0.18, 0.5, 0.8]) {
+        expect(tonemapFilmicChannel(H * x, 2.0, 11.2, H) / H).toBeCloseTo(tonemapFilmicChannel(x, 2.0, 11.2, 1.0), 9);
+      }
+    }
+  });
+
+  it('HDRTM-MED52-007: ACES peak-white invariance', () => {
+    for (const H of [2.0, 3.0, 5.0]) {
+      for (const x of [0.05, 0.18, 0.5, 0.8]) {
+        expect(tonemapACESChannel(H * x, H) / H).toBeCloseTo(tonemapACESChannel(x, 1.0), 9);
+      }
+    }
+  });
+
+  it('HDRTM-MED52-008: GT peak-white invariance', () => {
+    for (const H of [2.0, 3.0, 5.0]) {
+      for (const x of [0.05, 0.18, 0.5, 0.8]) {
+        expect(tonemapGTChannel(H * x, H) / H).toBeCloseTo(tonemapGTChannel(x, 1.0), 9);
+      }
+    }
+  });
+
+  it('HDRTM-MED52-009: AgX peak-white invariance', () => {
+    for (const H of [2.0, 3.0, 5.0]) {
+      const x = 0.5;
+      const a = tonemapAgX(H * x, H * x, H * x, H);
+      const b = tonemapAgX(x, x, x, 1.0);
+      expect(a.r / H).toBeCloseTo(b.r, 9);
+      expect(a.g / H).toBeCloseTo(b.g, 9);
+      expect(a.b / H).toBeCloseTo(b.b, 9);
+    }
+  });
+
+  it('HDRTM-MED52-010: PBRNeutral peak-white invariance', () => {
+    for (const H of [2.0, 3.0, 5.0]) {
+      const x = 0.5;
+      const a = tonemapPBRNeutral(H * x, H * x, H * x, H);
+      const b = tonemapPBRNeutral(x, x, x, 1.0);
+      expect(a.r / H).toBeCloseTo(b.r, 9);
+      expect(a.g / H).toBeCloseTo(b.g, 9);
+      expect(a.b / H).toBeCloseTo(b.b, 9);
+    }
+  });
+
+  it('HDRTM-MED52-011: ACESHill peak-white invariance', () => {
+    for (const H of [2.0, 3.0, 5.0]) {
+      const x = 0.5;
+      const a = tonemapACESHill(H * x, H * x, H * x, H);
+      const b = tonemapACESHill(x, x, x, 1.0);
+      expect(a.r / H).toBeCloseTo(b.r, 9);
+      expect(a.g / H).toBeCloseTo(b.g, 9);
+      expect(a.b / H).toBeCloseTo(b.b, 9);
+    }
+  });
+
+  it('HDRTM-MED52-012: invalid headroom (NaN/Infinity/zero/negative) falls back to 1.0', () => {
+    const baselineR = tonemapReinhardChannel(0.5, 4.0, 1.0);
+    expect(tonemapReinhardChannel(0.5, 4.0, NaN)).toBeCloseTo(baselineR, 12);
+    expect(tonemapReinhardChannel(0.5, 4.0, Infinity)).toBeCloseTo(baselineR, 12);
+    expect(tonemapReinhardChannel(0.5, 4.0, 0)).toBeCloseTo(baselineR, 12);
+    expect(tonemapReinhardChannel(0.5, 4.0, -2)).toBeCloseTo(baselineR, 12);
+
+    const baselineA = tonemapACESChannel(0.5, 1.0);
+    expect(tonemapACESChannel(0.5, NaN)).toBeCloseTo(baselineA, 12);
+    expect(tonemapACESChannel(0.5, 0)).toBeCloseTo(baselineA, 12);
+
+    const baselineG = tonemapGTChannel(0.5, 1.0);
+    expect(tonemapGTChannel(0.5, NaN)).toBeCloseTo(baselineG, 12);
+
+    const baselineX = tonemapAgX(0.5, 0.5, 0.5, 1.0);
+    const nanX = tonemapAgX(0.5, 0.5, 0.5, NaN);
+    expect(nanX.g).toBeCloseTo(baselineX.g, 12);
+  });
+
+  it('HDRTM-MED52-013: at hdrHeadroom=H, peak-white input never produces output > H', () => {
+    // For input == headroom (display peak), all operators that clamp their
+    // internal curve to [0,1] (ACES, AgX, PBRNeutral, GT, ACESHill) have
+    // output ≤ headroom by construction. Reinhard's extended curve at
+    // scaled=1 yields (1+1/wp²)/2, which is ≤ 1 for wp≥1 (so ≤ headroom).
+    // Filmic is well below 1 at scaled=1 with default wp=11.2.
+    for (const H of [2.0, 3.0, 5.0, 10.0]) {
+      const x = H;
+      expect(tonemapReinhardChannel(x, 4.0, H)).toBeLessThanOrEqual(H + 1e-9);
+      expect(tonemapFilmicChannel(x, 2.0, 11.2, H)).toBeLessThanOrEqual(H + 1e-9);
+      expect(tonemapACESChannel(x, H)).toBeLessThanOrEqual(H + 1e-9);
+      expect(tonemapGTChannel(x, H)).toBeLessThanOrEqual(H + 1e-9);
+      const a = tonemapAgX(x, x, x, H);
+      expect(a.g).toBeLessThanOrEqual(H + 1e-9);
+      const h = tonemapACESHill(x, x, x, H);
+      expect(h.g).toBeLessThanOrEqual(H + 1e-9);
+    }
+  });
+
+  it('HDRTM-MED52-014: monotonicity preserved at non-trivial headroom', () => {
+    // Each per-channel operator should remain monotonically non-decreasing
+    // at hdrHeadroom > 1 (the convention preserves curve monotonicity since
+    // it is a linear pre/post-scaling).
+    const H = 4.0;
+    const xs = [0, 0.05, 0.18, 0.5, 1.0, 2.0, 3.0, H];
+    for (const op of [
+      (v: number) => tonemapReinhardChannel(v, 4.0, H),
+      (v: number) => tonemapFilmicChannel(v, 2.0, 11.2, H),
+      (v: number) => tonemapACESChannel(v, H),
+      (v: number) => tonemapGTChannel(v, H),
+    ]) {
+      let prev = op(xs[0]!);
+      for (let i = 1; i < xs.length; i++) {
+        const curr = op(xs[i]!);
+        expect(curr).toBeGreaterThanOrEqual(prev - 1e-9);
+        prev = curr;
+      }
+    }
+  });
+
+  // ----- Drago CPU/GPU equivalence under headroom (Round 2 remediation) -----
+  // Reviewer found that the CPU dispatcher previously dropped hdrHeadroom for
+  // the Drago path while the GLSL/WGSL shaders multiplied Lmax by hdrHeadroom.
+  // These tests pin the corrected behavior: the CPU `tonemapDragoChannel`
+  // accepts hdrHeadroom and uses the same `Lmax * hdrHeadroom` formula as
+  // every shader backend. The dispatchers (`applyToneMappingToChannel` /
+  // `applyToneMappingToRGB`) thread `params.hdrHeadroom` through.
+  describe('XE-TM-MED52-Drago: CPU/GPU equivalence', () => {
+    // Reference formula mirroring the GLSL/WGSL shader exactly.
+    function dragoGpuRef(L: number, bias: number, Lwa: number, Lmax: number, headroom: number): number {
+      if (!Number.isFinite(L) || L < 0) return 0;
+      const safeWa = Math.max(Lwa, 1e-6);
+      const safeMax = Math.max(Lmax, 1e-6) * headroom;
+      const Ln = L / safeWa;
+      const biasP = Math.log(bias) / Math.log(0.5);
+      const denom = Math.log2(1.0 + safeMax / safeWa);
+      const num = Math.log(1.0 + Ln) / Math.log(2.0 + 8.0 * Math.pow(Ln / (safeMax / safeWa), biasP));
+      return num / Math.max(denom, 1e-6);
+    }
+
+    it('XE-TM-MED52-Drago-001: tonemapDragoChannel matches shader formula at H ∈ {1,2,5,10}', () => {
+      const bias = 0.85;
+      const Lwa = 0.2;
+      const Lmax = 1.5;
+      const inputs = [0.05, 0.18, 0.5, 1.0, 2.0, 5.0, 10.0];
+      for (const H of [1.0, 2.0, 5.0, 10.0]) {
+        for (const L of inputs) {
+          const cpu = tonemapDragoChannel(L, bias, Lwa, Lmax, H);
+          const ref = dragoGpuRef(L, bias, Lwa, Lmax, H);
+          expect(cpu).toBeCloseTo(ref, 10);
+        }
+      }
+    });
+
+    it('XE-TM-MED52-Drago-002: applyToneMappingToChannel(drago, hdrHeadroom=H) matches shader', () => {
+      const bias = 0.85;
+      const Lwa = 0.2;
+      const Lmax = 1.5;
+      const brightness = 2.0; // matches the dispatcher default
+      for (const H of [1.0, 2.0, 5.0, 10.0]) {
+        for (const L of [0.05, 0.5, 1.0, 5.0]) {
+          const dispatched = applyToneMappingToChannel(L, 'drago', {
+            dragoBias: bias,
+            dragoLwa: Lwa,
+            dragoLmax: Lmax,
+            dragoBrightness: brightness,
+            hdrHeadroom: H,
+          });
+          const ref = dragoGpuRef(L, bias, Lwa, Lmax, H) * brightness;
+          expect(dispatched).toBeCloseTo(ref, 10);
+        }
+      }
+    });
+
+    it('XE-TM-MED52-Drago-003: applyToneMappingToRGB(drago, hdrHeadroom=H) matches per-channel reference', () => {
+      const bias = 0.85;
+      const Lwa = 0.2;
+      const Lmax = 1.5;
+      const brightness = 2.0;
+      for (const H of [1.0, 2.0, 5.0, 10.0]) {
+        const r = 0.3,
+          g = 0.6,
+          b = 1.2;
+        const out = applyToneMappingToRGB(r, g, b, 'drago', {
+          dragoBias: bias,
+          dragoLwa: Lwa,
+          dragoLmax: Lmax,
+          dragoBrightness: brightness,
+          hdrHeadroom: H,
+        });
+        expect(out.r).toBeCloseTo(dragoGpuRef(r, bias, Lwa, Lmax, H) * brightness, 10);
+        expect(out.g).toBeCloseTo(dragoGpuRef(g, bias, Lwa, Lmax, H) * brightness, 10);
+        expect(out.b).toBeCloseTo(dragoGpuRef(b, bias, Lwa, Lmax, H) * brightness, 10);
+      }
+    });
+
+    it('XE-TM-MED52-Drago-004: H=1.0 is identical to omitted-headroom (backward compatibility)', () => {
+      const bias = 0.85;
+      const Lwa = 0.2;
+      const Lmax = 1.5;
+      for (const L of [0.05, 0.5, 1.0, 5.0]) {
+        expect(tonemapDragoChannel(L, bias, Lwa, Lmax, 1.0)).toBeCloseTo(tonemapDragoChannel(L, bias, Lwa, Lmax), 12);
+      }
+    });
+
+    it('XE-TM-MED52-Drago-005: invalid headroom (NaN/Infinity/0/negative) falls back to 1.0', () => {
+      const bias = 0.85;
+      const Lwa = 0.2;
+      const Lmax = 1.5;
+      const baseline = tonemapDragoChannel(0.5, bias, Lwa, Lmax, 1.0);
+      expect(tonemapDragoChannel(0.5, bias, Lwa, Lmax, NaN)).toBeCloseTo(baseline, 12);
+      expect(tonemapDragoChannel(0.5, bias, Lwa, Lmax, Infinity)).toBeCloseTo(baseline, 12);
+      expect(tonemapDragoChannel(0.5, bias, Lwa, Lmax, 0)).toBeCloseTo(baseline, 12);
+      expect(tonemapDragoChannel(0.5, bias, Lwa, Lmax, -1)).toBeCloseTo(baseline, 12);
+    });
+
+    it('XE-TM-MED52-Drago-006: increasing H expands the effective Lmax (lower output for same input)', () => {
+      // With Lmax * H growing, the same scene-referred L produces a lower
+      // normalized Drago output (the operator has more headroom to spend).
+      const bias = 0.85;
+      const Lwa = 0.2;
+      const Lmax = 1.5;
+      const L = 1.0;
+      const h1 = tonemapDragoChannel(L, bias, Lwa, Lmax, 1.0);
+      const h2 = tonemapDragoChannel(L, bias, Lwa, Lmax, 2.0);
+      const h5 = tonemapDragoChannel(L, bias, Lwa, Lmax, 5.0);
+      expect(h2).toBeLessThan(h1);
+      expect(h5).toBeLessThan(h2);
+      expect(h1).toBeGreaterThan(0);
+      expect(h5).toBeGreaterThan(0);
+    });
+  });
+
+  // ----- Large-headroom numerical stability (Round 2 remediation) -----
+  // The renderer clamps headroom to [1, 100] but defense-in-depth requires
+  // the math to be stable far beyond that ceiling. H=1000 verifies no
+  // operator (including Drago) produces NaN/Infinity at extreme headroom.
+  describe('XE-TM-MED52-LargeHeadroom: numerical stability at H=1000', () => {
+    const H = 1000;
+    const inputs = [0, 0.05, 0.18, 0.5, 1.0, 5.0, 50.0, H];
+
+    it('XE-TM-MED52-LH-001: Reinhard finite at H=1000', () => {
+      for (const x of inputs) {
+        const r = tonemapReinhardChannel(x, 4.0, H);
+        expect(Number.isFinite(r)).toBe(true);
+      }
+    });
+    it('XE-TM-MED52-LH-002: Filmic finite at H=1000', () => {
+      for (const x of inputs) {
+        const r = tonemapFilmicChannel(x, 2.0, 11.2, H);
+        expect(Number.isFinite(r)).toBe(true);
+      }
+    });
+    it('XE-TM-MED52-LH-003: ACES finite at H=1000', () => {
+      for (const x of inputs) {
+        const r = tonemapACESChannel(x, H);
+        expect(Number.isFinite(r)).toBe(true);
+      }
+    });
+    it('XE-TM-MED52-LH-004: GT finite at H=1000', () => {
+      for (const x of inputs) {
+        const r = tonemapGTChannel(x, H);
+        expect(Number.isFinite(r)).toBe(true);
+      }
+    });
+    it('XE-TM-MED52-LH-005: AgX/PBRNeutral/ACESHill finite at H=1000', () => {
+      for (const x of inputs) {
+        const a = tonemapAgX(x, x, x, H);
+        expect(Number.isFinite(a.r)).toBe(true);
+        expect(Number.isFinite(a.g)).toBe(true);
+        expect(Number.isFinite(a.b)).toBe(true);
+        const p = tonemapPBRNeutral(x, x, x, H);
+        expect(Number.isFinite(p.r)).toBe(true);
+        const h = tonemapACESHill(x, x, x, H);
+        expect(Number.isFinite(h.r)).toBe(true);
+      }
+    });
+    it('XE-TM-MED52-LH-006: Drago finite at H=1000', () => {
+      for (const x of inputs) {
+        const r = tonemapDragoChannel(x, 0.85, 0.2, 1.5, H);
+        expect(Number.isFinite(r)).toBe(true);
+        expect(r).toBeGreaterThanOrEqual(0);
+      }
+    });
+    it('XE-TM-MED52-LH-007: dispatcher finite for every operator at H=1000', () => {
+      const ops = ['reinhard', 'filmic', 'aces', 'agx', 'pbrNeutral', 'gt', 'acesHill', 'drago'] as const;
+      for (const op of ops) {
+        for (const x of inputs) {
+          const out = applyToneMappingToRGB(x, x, x, op, { hdrHeadroom: H });
+          expect(Number.isFinite(out.r)).toBe(true);
+          expect(Number.isFinite(out.g)).toBe(true);
+          expect(Number.isFinite(out.b)).toBe(true);
+        }
+      }
+    });
+  });
+});

@@ -5,11 +5,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkControl } from './NetworkControl';
 import type { SyncUser, ParticipantPermission } from '../../network/types';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  dispatchOutsideEscape,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('NetworkControl', () => {
   let control: NetworkControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new NetworkControl();
     // Append to body so getBoundingClientRect works
     document.body.appendChild(control.render());
@@ -19,6 +26,7 @@ describe('NetworkControl', () => {
     control.dispose();
     // Clean up any body-level panels
     document.querySelectorAll('[data-testid="network-panel"]').forEach((el) => el.remove());
+    resetOutsideClickRegistry();
   });
 
   describe('render', () => {
@@ -610,57 +618,45 @@ describe('NetworkControl', () => {
   });
 
   describe('Escape key handling (M-14)', () => {
-    it('NCC-M14a: pressing Escape while the panel is open should close it', async () => {
-      vi.useFakeTimers();
+    it('NCC-M14a: pressing Escape while the panel is open should close it', () => {
       control.openPanel();
 
       const panel = document.querySelector('[data-testid="network-panel"]') as HTMLElement;
       expect(panel.style.display).toBe('flex');
 
-      // Advance past requestAnimationFrame to register the keydown listener
-      vi.advanceTimersByTime(16);
-
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      dispatchOutsideEscape();
 
       expect(panel.style.display).toBe('none');
-      vi.useRealTimers();
     });
 
     it('NCC-M14b: pressing Escape while the panel is closed should have no effect', () => {
       const panel = document.querySelector('[data-testid="network-panel"]');
-      // Panel may or may not be in DOM when closed
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-
+      dispatchOutsideEscape();
       // Should remain closed — no errors thrown
       if (panel) {
         expect((panel as HTMLElement).style.display).not.toBe('flex');
       }
     });
+  });
 
-    it('NCC-M14c: the keydown listener should be removed when the panel closes', () => {
-      vi.useFakeTimers();
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('NCC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
       control.openPanel();
-      vi.advanceTimersByTime(16);
-
-      const spy = vi.spyOn(document, 'removeEventListener');
+      expectRegistrationCount(1);
       control.closePanel();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-      vi.useRealTimers();
+      expectRegistrationCount(0);
     });
 
-    it('NCC-M14d: the keydown listener should be removed on dispose', () => {
-      vi.useFakeTimers();
+    it('NCC-OCR-002: outside click dismisses the panel', () => {
       control.openPanel();
-      vi.advanceTimersByTime(16);
+      const panel = document.querySelector('[data-testid="network-panel"]') as HTMLElement;
+      expect(panel.style.display).toBe('flex');
 
-      const spy = vi.spyOn(document, 'removeEventListener');
-      control.dispose();
+      dispatchOutsideClick();
 
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-      vi.useRealTimers();
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
     });
   });
 

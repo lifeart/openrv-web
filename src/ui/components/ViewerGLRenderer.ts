@@ -11,6 +11,7 @@
  */
 
 import { Renderer } from '../../render/Renderer';
+import { createRenderer } from '../../render/createRenderer';
 import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import { WebGPUHDRBlit } from '../../render/WebGPUHDRBlit';
 import { Canvas2DHDRBlit } from '../../render/Canvas2DHDRBlit';
@@ -19,6 +20,7 @@ import type { IPImage } from '../../core/image/Image';
 import type { TextureFilterMode } from '../../core/types/filter';
 import {
   type DisplayCapabilities,
+  DEFAULT_CAPABILITIES,
   isDefaultCDL,
   isDefaultCurves,
   buildAllCurveLUTs,
@@ -119,7 +121,36 @@ function bakeFilmLUT(stockId: string): Uint8Array | null {
 export class ViewerGLRenderer {
   // WebGL canvas and renderer
   private _glCanvas: HTMLCanvasElement | null = null;
+  // MED-55: cast to Renderer is temporary; widen RendererBackend in Phase 4a
+  // so we can drop the legacy type. Today this field stores the concrete
+  // Renderer (WebGL2) because most call sites invoke Renderer-only methods
+  // (setLUT, setUserTransform, setLinearize, setOCIOShader, ensureImageTexture,
+  // …) that aren't part of the RendererBackend interface yet.
   private _glRenderer: Renderer | null = null;
+  // MED-55 P-pre-1: buffered-init pattern. createRenderer + initialize() returns
+  // a usable WebGL2 renderer synchronously; initAsync() only matters when
+  // KHR_parallel_shader_compile is in use (or on the WebGPU backend, gated by
+  // feature flag — disabled by default in production). We expose the in-flight
+  // initAsync promise so an opt-in caller could await readiness, while keeping
+  // `ensureGLRenderer()` returning `Renderer | null` synchronously to preserve
+  // the contract used by 3 sync render call sites and 24 setter passthroughs.
+  //
+  // KNOWN LIMITATION (MED-55 / WebGPU sync-render race):
+  //   The sync render entry points (`renderHDRWithWebGL`, `renderTiledHDR`,
+  //   `renderSDRWithWebGL`) assume `_glRenderer` returned by `ensureGLRenderer()`
+  //   is fully usable. That contract is honored by the WebGL2 backend (its
+  //   `initialize()` produces a working renderer before `initAsync()` resolves),
+  //   but a future WebGPU backend creates the device asynchronously inside
+  //   `initAsync()`. Sync renders dispatched before `_glRendererInitPromise`
+  //   resolves on the WebGPU path will see a partially-constructed renderer
+  //   and may render to a blank canvas.
+  //
+  //   The WebGPU pipeline backend is gated behind a feature flag whose default
+  //   is `'disabled'`, so production never hits this race. TODO (Phase 4b, when
+  //   the flag is flipped on): early-return at sync render entry points when
+  //   `_glRendererInitPromise !== null` AND backend is `'webgpu'`, OR have the
+  //   render entry points await readiness on first call before dispatching.
+  private _glRendererInitPromise: Promise<Renderer | null> | null = null;
   private _hdrRenderActive = false;
   private _sdrWebGLRenderActive = false;
 
@@ -188,6 +219,18 @@ export class ViewerGLRenderer {
   }
   get isAsyncRenderer(): boolean {
     return this._isAsyncRenderer;
+  }
+  /**
+   * MED-55 P-pre-1: opt-in handle for awaiting renderer initAsync() readiness.
+   * Resolves to the Renderer once async init (parallel shader compile, or
+   * future WebGPU adapter/device when the feature flag is enabled) completes.
+   * Returns null if the sync initialize() failed or no renderer has been
+   * created yet. Existing render call sites use sync access via
+   * `ensureGLRenderer()` / `_glRenderer`; this getter exists for stage
+   * registration and Phase 4a code that needs to wait for full readiness.
+   */
+  get glRendererReady(): Promise<Renderer | null> | null {
+    return this._glRendererInitPromise;
   }
   get capabilities(): DisplayCapabilities | undefined {
     return this._capabilities;
@@ -457,7 +500,16 @@ export class ViewerGLRenderer {
 
     // Sync renderer fallback (tier 2)
     try {
-      const renderer = new Renderer();
+      // MED-55 P-pre-1: route construction through createRenderer() so backend
+      // selection (WebGL2 vs WebGPU) lives at one capability gate. With the
+      // WebGPU stage pipeline feature flag disabled (default), this returns a
+      // plain Renderer (WebGL2) — no behavior change.
+      // The cast to Renderer is temporary; Phase 4a will widen RendererBackend
+      // to cover the Renderer-only methods consumed by Viewer setters and
+      // call sites (setLUT, setUserTransform, setLinearize, setOutOfRange,
+      // setColorPrimaries, setChannelSwizzle, setOCIOShader, setSphericalProjection,
+      // ensureImageTexture, isContextLost, …).
+      const renderer = createRenderer(this._capabilities ?? DEFAULT_CAPABILITIES) as Renderer;
       // initialize() sets drawingBufferColorSpace to rec2100-hlg/pq immediately
       // after context creation (before shaders/buffers) when displayHDR is true.
       renderer.initialize(this._glCanvas, this._capabilities);
@@ -467,6 +519,22 @@ export class ViewerGLRenderer {
       if (this._hdrHeadroom !== null) {
         renderer.setHDRHeadroom(this._hdrHeadroom);
       }
+      // Buffered-init: kick off initAsync() in the background. WebGL2 is usable
+      // immediately after initialize() (initAsync only awaits parallel shader
+      // compile when KHR_parallel_shader_compile is present). For WebGPU,
+      // initAsync awaits adapter/device — but the WebGPU path is gated by the
+      // feature flag (disabled by default), so production uses the WebGL2 path.
+      // Sync call sites can keep using `_glRenderer`; opt-in async callers can
+      // `await this._glRendererInitPromise` (via the `glRendererReady` getter).
+      // We swallow rejections after logging to avoid an unhandled-rejection
+      // warning, matching the existing worker-proxy fire-and-forget pattern.
+      this._glRendererInitPromise = renderer
+        .initAsync()
+        .then(() => renderer)
+        .catch((err) => {
+          console.warn('[Viewer] WebGL renderer initAsync failed:', err);
+          return renderer;
+        });
       return renderer;
     } catch (e) {
       console.warn('[Viewer] WebGL renderer init failed:', e);
@@ -486,6 +554,9 @@ export class ViewerGLRenderer {
     }
     this._isAsyncRenderer = false;
     this._glRenderer = null;
+    // MED-55 P-pre-1: clear stale init promise so the next ensureGLRenderer()
+    // creates a fresh one for the new sync renderer.
+    this._glRendererInitPromise = null;
 
     // Recreate glCanvas since the original was transferred
     this.recreateGLCanvas();
@@ -1517,6 +1588,9 @@ export class ViewerGLRenderer {
       this._glRenderer.dispose();
       this._glRenderer = null;
     }
+    // MED-55 P-pre-1: drop any in-flight init promise reference so the GC
+    // can reclaim the disposed renderer captured by the .then closure.
+    this._glRendererInitPromise = null;
 
     // Cleanup WebGPU HDR blit
     if (this._webgpuBlit) {

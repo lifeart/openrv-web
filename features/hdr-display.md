@@ -176,8 +176,52 @@ The current codebase has a **partial foundation** for tone mapping:
 #### 2. HDR Display Output -- IMPLEMENTED
 - **Implemented**: HLG and PQ output modes for HDR displays (`src/render/WebGPUHDRBlit.ts`, `src/render/Canvas2DHDRBlit.ts`)
 - **Implemented**: Display P3 / wide color gamut detection (`src/color/DisplayCapabilities.ts`)
-- **Implemented**: Browser HDR canvas support detection and WebGPU HDR backend (`src/render/WebGPUBackend.ts`)
+- **Implemented**: Browser HDR canvas support detection (`src/render/WebGPUBackend.ts`)
+- **Experimental (not yet user-facing)**: WebGPU rendering backend (`src/render/WebGPUBackend.ts`, `src/render/createRenderer.ts`). The full color-correction / tone-mapping pipeline ships only on the WebGL2 path today; production renderer construction in `ViewerGLRenderer.ts` and `renderWorker.worker.ts` now route through `createRenderer(caps)` (commits MED-55 P-pre-1/-2). The WebGPU stage pipeline is gated by a tristate feature flag (default disabled) — see `src/render/webgpu/featureFlag.ts`. Phase 4 stage WGSL registration into `WebGPUShaderPipeline` is intentionally pending (see "WebGPU Tone-Mapping Operator Parity" below).
 - **Implemented**: Canvas2D HDR fallback path (srgb-linear, rec2100-hlg, float16)
+- **Implemented (MED-51)**: LUT output-color-space cascade. Each LUT stage
+  (Pre-Cache, File, Look, Display) can declare `outputColorPrimaries` /
+  `outputTransferFunction`, and the framework propagates the cascaded result
+  onto the IPImage handed to the renderer in all three HDR render branches
+  (HDR video, HDR file, HDR procedural). The renderer's `u_inputTransfer`
+  uniform tracks the post-pipeline transfer function — a Display LUT that
+  maps PQ -> sRGB causes the renderer to apply the sRGB EOTF rather than
+  PQ. HDR-video safety: the cascade uses `IPImage.cloneMetadataOnly()` so
+  the underlying `VideoFrame` reference is shared non-owningly and is not
+  double-released. See [Color Management](color-management.md#lut-pipeline-output-color-space-cascade-med-51)
+  and [Color Space Matrices](color-space-matrices.md#architectural-note-ipimage-metadata-flow-through-luts-med-51) for the cascade order, state-surface API, and the
+  HDR-video safety contract.
+  - **Known limitation**: the right-eye IPImage in `'separate'` multi-view
+    stereo (e.g. multi-view EXR) is not currently routed through the
+    cascade — see the TODO at `src/ui/components/Viewer.ts:1527-1535`.
+    Non-blocking; tracked as a separate follow-up.
+
+##### WebGPU Tone-Mapping Operator Parity (MED-55)
+
+Although the WebGPU backend is not yet wired into production, its tone-mapping shaders are held to a runtime CPU/WebGL2/WebGPU equivalence guarantee:
+
+- All eight operators (Reinhard, Filmic, ACES, AgX, PBR Neutral, GT, ACES Hill, Drago) are defined in a single source — `src/render/webgpu/shaders/common.wgsl` — and stage shaders import them via the `WebGPUShaderPipeline` prepend contract (`WebGPUShaderPipeline.ts:521`).
+- Per-operator runtime parity tests at `src/render/__gpu__/tonemap-webgpu.gpu-test.ts` exercise each operator against the CPU reference at `hdrHeadroom = 1` (SDR identity) and `hdrHeadroom = 3` (extended HDR), within `<= 1/256` tolerance.
+- Tests skip gracefully when the environment lacks WebGPU or cannot read pixels back through `copyTextureToBuffer` (gated by a one-shot canary).
+- A follow-up note remains: when Phase 4 wires stage WGSL registration via `registerStage`, the orchestrator must strip per-stage `@vertex fn vs` declarations to avoid duplicate-symbol errors with the prepended common+vertex source. Tracked separately; not blocking MED-55 closure.
+
+##### HDR Video Loading and Frame Lifecycle (CRIT-01)
+
+HDR video files (HLG / PQ in MP4, MOV, MKV, WebM, etc.) are loadable end-to-end today. The path is:
+
+1. `FileSourceNode` detects the container by extension and magic bytes; the file is handed to `MediabunnyFrameExtractor`.
+2. On `load()`, the extractor probes the first frame via a `VideoSampleSink` to read codec-bitstream colorspace metadata and sets `metadata.isHDR`, `metadata.transferFunction` (`'hlg'` / `'pq'`), and `metadata.colorPrimaries` (`'bt2020'`).
+3. `SessionMedia.fetchVideoHDRFrame` and `getVideoHDRIPImage` (`src/core/session/SessionMedia.ts:1105-1135`) route HDR playback through `VideoSourceNode.fetchHDRFrame` and a separate HDR LRU cache. Non-HDR videos remain on the SDR `CanvasSink` path.
+4. `VideoSourceNode.fetchHDRFrame` calls `MediabunnyFrameExtractor.getFrameHDR(frame)`, which transfers ownership of the returned `VideoSample` (and the `VideoFrame` produced via `sample.toVideoFrame()`) to the caller. The frame is wrapped in an `IPImage` with `videoFrame?: VideoFrame` populated and `transferFunction` / `colorPrimaries` propagated through the LUT cascade (MED-51).
+5. The renderer's `u_inputTransfer` uniform (`0=sRGB`, `1=HLG`, `2=PQ`) selects the input EOTF in the fragment shader; on browsers that report `DisplayCapabilities.videoFrameTexImage`, the `VideoFrame` is uploaded directly to a WebGL2/WebGPU texture without a CPU pixel copy.
+
+**Frame-lifecycle guarantees (CRIT-01 / Issue #381).** `VideoFrame` and `VideoSample` are GPU-backed resources whose `close()` must be called on every exit path; missed `close()` leaks GPU memory until process termination. The fix at:
+
+- `src/utils/media/MediabunnyFrameExtractor.ts:782-841` — JSDoc on `getFrameHDR` documents the ownership transfer contract with a recommended `try { … } finally { sample.close(); }` call pattern. The note also makes explicit that `sample.toVideoFrame()` produces a `VideoFrame` whose lifecycle is the caller's responsibility (close it directly, or transfer ownership to an `IPImage` whose `close()` will release it).
+- `src/nodes/sources/VideoSourceNode.ts:1058-1113` — `fetchHDRFrame` body is wrapped in `try/catch/finally`. The `finally` always closes the `VideoSample`, and additionally closes the `IPImage` when ownership has *not* yet been transferred to the HDR LRU cache. This covers the success path, errors during `hdrSampleToIPImage` / resize, errors during `cache.set`, and dispose races where `frameExtractor` is nulled while awaiting `getFrameHDR` or between sample-to-IPImage and cache insertion.
+- `src/utils/media/MediabunnyFrameExtractor.ts:64-101` — `_probeInternals.closeProbePair(probeFrame, probeSample)` releases both ends of the transient probe pair regardless of which (if any) `close()` throws; per-call errors are swallowed because they typically mean "already closed."
+
+The behaviour is locked in by 8 unit tests (`CRIT-01-VSN-001…006` and `CRIT-01-MFE-001…004`), four of which are dispose-race regressions that fail on master without the fix. The only production caller of `getFrameHDR` is `VideoSourceNode.fetchHDRFrame`; tests exercise the same shape against `MediabunnyFrameExtractor` directly. External consumers (plugins, scripting layers) that are added in the future MUST follow the JSDoc-documented `try/finally` pattern — the scripting API does not currently expose `getFrameHDR` or raw `VideoFrame` handles, and any future surface that does should adopt the same ownership contract.
 
 #### 3. Luminance Visualization Modes
 - **Missing**: HSV visualization
@@ -201,10 +245,34 @@ The current codebase has a **partial foundation** for tone mapping:
 - [x] Filmic (Hable/Uncharted 2) tone mapping with configurable shoulder/toe
 - [x] ACES tone mapping with Academy-standard fitted curve
 - [x] Reinhard tone mapping with configurable white point parameter
+- [x] AgX (Sobotka, per-channel matrix-based curve)
+- [x] PBR Neutral (Khronos)
+- [x] GT (Gran Turismo, Uchimura)
+- [x] ACES Hill (Stephen Hill fit)
+- [x] Drago (adaptive logarithmic, physically parameterized via `Lwa`/`Lmax`)
 - [ ] Custom tone mapping via user-adjustable Catmull-Rom spline curve
-- [x] All operators implemented as GLSL fragment shader functions
+- [x] All operators implemented as GLSL fragment shader functions and matching WGSL functions
+- [x] CPU formula-identical implementations in `utils/effects/effectProcessing.shared.ts`
 - [x] All operators preserve alpha channel unchanged
 - [ ] HDR to SDR conversion pipeline
+
+### Unified HDR Headroom Convention (MED-52)
+
+All non-Drago operators (Reinhard, Filmic, ACES, AgX, PBR Neutral, GT, ACES Hill) share a single **peak-white renormalization convention** so that switching between them on the same scene at `hdrHeadroom > 1` produces comparable output dynamic ranges (`[0, hdrHeadroom]`):
+
+```
+scaled = color / hdrHeadroom
+mapped = <operator-specific curve>(scaled)
+result = mapped * hdrHeadroom
+```
+
+- At `hdrHeadroom == 1.0` (SDR output mode) every operator reduces to its canonical SDR curve — bit-for-bit unchanged.
+- At `hdrHeadroom > 1.0` (HDR output mode) every operator produces output in `[0, hdrHeadroom]` and preserves display-side headroom uniformly. Operators are **A/B comparable at any headroom** with no dynamic-range mismatch.
+- **Drago is the documented exception**: physically parameterized via scene-average luminance (`Lwa`) and scene-peak luminance (`Lmax`); display headroom is folded into `Lmax` (`Lmax * hdrHeadroom`) and `Brightness` is the post-multiplier. CPU and GPU paths share the same `Lmax * hdrHeadroom` scaling.
+
+**Robustness guards**:
+- JS entry points (`Renderer.setHDRHeadroom`, `WebGPUShaderPipeline.setGlobalHDRHeadroom`) sanitize non-finite (`NaN`, `±Infinity`) input to `1.0` before clamping to `[1, 100]`.
+- All non-Drago shader operators (GLSL and WGSL) defensively floor the divisor to `max(hdrHeadroom, 1e-6)` to prevent division-by-zero even if a caller bypasses the JS sanitization.
 
 ### Per-Operator Parameters
 - [ ] Reinhard: white point parameter (default 1.0, range 0.1 to 10.0)

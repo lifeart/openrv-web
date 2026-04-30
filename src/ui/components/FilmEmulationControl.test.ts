@@ -7,16 +7,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FilmEmulationControl } from './FilmEmulationControl';
 import { DEFAULT_FILM_EMULATION_PARAMS, FILM_STOCKS } from '../../filters/FilmEmulation';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('FilmEmulationControl', () => {
   let control: FilmEmulationControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new FilmEmulationControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -523,25 +530,28 @@ describe('FilmEmulationControl', () => {
 
       expect(control.isOpen).toBe(false);
     });
+  });
 
-    it('FEC-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+  describe('OutsideClickRegistry integration', () => {
+    it('FEC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
       control.show();
+      expectRegistrationCount(1);
       control.hide();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      expectRegistrationCount(0);
     });
 
-    it('FEC-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+    it('FEC-OCR-002: outside-click after open dismisses the panel', () => {
       control.show();
-      control.dispose();
+      expect(control.isOpen).toBe(true);
 
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+
+      expect(control.isOpen).toBe(false);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 

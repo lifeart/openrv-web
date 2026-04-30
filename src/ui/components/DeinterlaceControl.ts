@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import { createCheckboxRow } from './shared/FormElements';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import type { DeinterlaceParams, DeinterlaceMethod, FieldOrder } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 
@@ -34,8 +35,7 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   private methodSelect: HTMLSelectElement | null = null;
   private fieldOrderSelect: HTMLSelectElement | null = null;
 
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -107,22 +107,8 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
 
     this.createPanelContent();
     this.container.appendChild(this.button);
-
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isPanelOpen) {
-        this.hide();
-      }
-    };
-  }
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hide();
-    }
+    // Outside-click + Escape dismiss are handled by OutsideClickRegistry,
+    // registered in show() and deregistered in hide().
   }
 
   private createPanelContent(): void {
@@ -283,7 +269,12 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     this.panel.style.display = 'block';
     this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel],
+      onDismiss: () => this.hide(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
 
     // Move focus to the first interactive element in the panel
     this.enabledCheckbox?.focus();
@@ -294,7 +285,8 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     this.panel.style.display = 'none';
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
 
     // Return focus to the toggle button
     this.button.focus();
@@ -329,8 +321,8 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);
     }

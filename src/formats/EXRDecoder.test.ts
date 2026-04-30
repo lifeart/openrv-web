@@ -3537,6 +3537,149 @@ function createTestEXRWithUncrop(options: {
 // ===== Tiled EXR Test Helpers =====
 
 /**
+ * Create a minimal tiled EXR file buffer that has a valid header but intentionally
+ * extreme tile grid dimensions. Used to test tile count overflow validation.
+ * The file has a valid header but no actual tile data — validation should reject
+ * the file before attempting to read tile data.
+ */
+function createMalformedTiledEXR(options: {
+  width: number;
+  height: number;
+  tileXSize: number;
+  tileYSize: number;
+}): ArrayBuffer {
+  const { width, height, tileXSize, tileYSize } = options;
+
+  const bufParts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    bufParts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    bufParts.push(bytes);
+    bufParts.push(new Uint8Array([0]));
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  // Magic number
+  writeUint32(EXR_MAGIC);
+
+  // Version 2 with tiled bit (0x200)
+  writeUint32(2 | 0x200);
+
+  // === HEADER ATTRIBUTES ===
+
+  // channels attribute - minimal RGBA HALF
+  const channels = ['A', 'B', 'G', 'R']; // sorted
+  writeString('channels');
+  writeString('chlist');
+  let channelListSize = 1; // trailing null
+  for (const ch of channels) {
+    channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4; // name+null, pixelType, pLinear, reserved, xSampling, ySampling
+  }
+  writeInt32(channelListSize);
+  for (const ch of channels) {
+    writeString(ch);
+    writeInt32(EXRPixelType.HALF); // pixelType
+    writeUint8(0); // pLinear
+    bufParts.push(new Uint8Array([0, 0, 0])); // reserved
+    offset += 3;
+    writeInt32(1); // xSampling
+    writeInt32(1); // ySampling
+  }
+  writeUint8(0); // end of channel list
+
+  // compression attribute
+  writeString('compression');
+  writeString('compression');
+  writeInt32(1);
+  writeUint8(EXRCompression.NONE);
+
+  // dataWindow attribute
+  writeString('dataWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(0); // xMin
+  writeInt32(0); // yMin
+  writeInt32(width - 1); // xMax
+  writeInt32(height - 1); // yMax
+
+  // displayWindow attribute
+  writeString('displayWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(0);
+  writeInt32(0);
+  writeInt32(width - 1);
+  writeInt32(height - 1);
+
+  // lineOrder attribute
+  writeString('lineOrder');
+  writeString('lineOrder');
+  writeInt32(1);
+  writeUint8(0); // INCREASING_Y
+
+  // pixelAspectRatio attribute
+  writeString('pixelAspectRatio');
+  writeString('float');
+  writeInt32(4);
+  writeFloat32(1.0);
+
+  // tiles attribute
+  writeString('tiles');
+  writeString('tiledesc');
+  writeInt32(9);
+  writeInt32(tileXSize);
+  writeInt32(tileYSize);
+  writeUint8(0); // ONE_LEVEL, ROUND_DOWN
+
+  // End of header
+  writeUint8(0);
+
+  // No offset table or tile data — validation should throw before reaching it
+  // Add a small amount of padding to avoid "buffer too small" errors
+  bufParts.push(new Uint8Array(64));
+  offset += 64;
+
+  const result = new Uint8Array(offset);
+  let pos = 0;
+  for (const part of bufParts) {
+    result.set(part, pos);
+    pos += part.length;
+  }
+  return result.buffer;
+}
+
+/**
  * Create a tiled EXR file buffer for testing.
  * Generates uncompressed ONE_LEVEL tiled image with RGBA half-float data.
  */
@@ -4585,6 +4728,118 @@ describe('EXR Tiled Image Support', () => {
       expect(result1.decodedPartIndex).toBe(1);
       // Green for part 1: 0.5 * 0.5 = 0.25
       expect(result1.data[1]).toBeCloseTo(0.25, 1);
+    });
+  });
+
+  // ==================== Tile Count Overflow Validation Tests ====================
+
+  describe('Tile count overflow validation', () => {
+    it('EXR-T030: should accept normal tile counts (4x4 image, 2x2 tiles = 4 tiles)', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+      });
+
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+    });
+
+    it('EXR-T031: should accept tile count at moderate sizes (32x32 image, 1x1 tiles = 1024 tiles)', async () => {
+      // 32x32 with 1x1 tiles = 1,024 tiles, well under the limit
+      const buffer = createTiledTestEXR({
+        width: 32,
+        height: 32,
+        tileXSize: 1,
+        tileYSize: 1,
+      });
+
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(32);
+      expect(result.height).toBe(32);
+      expect(result.data.length).toBe(32 * 32 * 4);
+    });
+
+    it('EXR-T032: should reject extremely large tile counts from malformed tile sizes', async () => {
+      // width=8192, height=8192, tile size 1x1 = 67,108,864 tiles, far exceeding 16M limit.
+      // Note: 8192x8192 = 67M pixels which is under the 268M pixel limit,
+      // so tile count validation is what catches this.
+      const buffer = createMalformedTiledEXR({
+        width: 8192,
+        height: 8192,
+        tileXSize: 1,
+        tileYSize: 1,
+      });
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/tile count.*exceeds maximum/i);
+    });
+
+    it('EXR-T033: should reject large tile counts with asymmetric dimensions', async () => {
+      // width=16384, height=1025, tile size 1x1 = ~16.8M tiles, over 16M limit
+      // Total pixels = 16.7M which is under the 268M pixel limit.
+      const buffer = createMalformedTiledEXR({
+        width: 16384,
+        height: 1025,
+        tileXSize: 1,
+        tileYSize: 1,
+      });
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/tile count.*exceeds maximum/i);
+    });
+
+    it('EXR-T034: should accept reasonable tile counts with larger tile sizes', async () => {
+      // 256x256 image with 4x4 tiles = 64*64 = 4096 tiles (well within limit)
+      const buffer = createTiledTestEXR({
+        width: 256,
+        height: 256,
+        tileXSize: 4,
+        tileYSize: 4,
+      });
+
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(256);
+      expect(result.height).toBe(256);
+      expect(result.data.length).toBe(256 * 256 * 4);
+    });
+
+    it('EXR-T035: should reject tile count just over the limit', async () => {
+      // 4097x4097 with 1x1 tiles = 16,785,409 tiles, just over 16,777,216
+      const buffer = createMalformedTiledEXR({
+        width: 4097,
+        height: 4097,
+        tileXSize: 1,
+        tileYSize: 1,
+      });
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/tile count.*exceeds maximum/i);
+    });
+
+    it('EXR-T036: should include tile grid dimensions in error message', async () => {
+      // 5000x5000 with 1x1 tiles = 25M tiles > 16M limit
+      // Total pixels = 25M which is under the 268M pixel limit
+      const buffer = createMalformedTiledEXR({
+        width: 5000,
+        height: 5000,
+        tileXSize: 1,
+        tileYSize: 1,
+      });
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/5000x5000/);
+    });
+
+    it('EXR-T037: should reject tile count at boundary (just over 2^24)', async () => {
+      // 4096x4097 with 1x1 tiles = 16,781,312 tiles, just over 16,777,216 (2^24)
+      const buffer = createMalformedTiledEXR({
+        width: 4096,
+        height: 4097,
+        tileXSize: 1,
+        tileYSize: 1,
+      });
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/tile count.*exceeds maximum/i);
     });
   });
 

@@ -7,16 +7,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CompareControl, DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './CompareControl';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('CompareControl', () => {
   let control: CompareControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new CompareControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -1297,6 +1304,29 @@ describe('CompareControl', () => {
       control.setDifferenceMatteEnabled(false);
       control.setBlendMode('onionskin');
       expect(control.getBlendMode()).toBe('onionskin');
+    });
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('CMP-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
+    });
+
+    it('CMP-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      button.click();
+      expect(control.isDropdownVisible()).toBe(true);
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expect(control.isDropdownVisible()).toBe(false);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 });

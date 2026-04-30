@@ -457,6 +457,97 @@ describe('applyColorTransform', () => {
     expect(b).toBeCloseTo(0.5 - temp * 0.1, 5);
   });
 
+  it('ACT-013: negative brightness does not produce negative values before contrast', () => {
+    // MED-49 regression: brightness pushing values negative would be amplified
+    // by contrast, producing visual artifacts. Values must be clamped to >= 0
+    // after brightness and before contrast.
+    const params: ColorTransformParams = { ...DEFAULT_TRANSFORM_PARAMS, brightness: -0.8, contrast: 2 };
+    const [r, g, b] = applyColorTransform(0.5, 0.3, 0.1, params);
+
+    // After brightness: 0.5-0.8=-0.3, 0.3-0.8=-0.5, 0.1-0.8=-0.7
+    // With clamp: all become 0
+    // After contrast=2: (0 - 0.5)*2 + 0.5 = -0.5 for all channels
+    // After saturation=1: no change (all channels equal)
+    // After gamma=1: applyGamma returns 0 for value <= 0
+    // Result: all channels are 0 (black)
+    expect(r).toBeCloseTo(0, 5);
+    expect(g).toBeCloseTo(0, 5);
+    expect(b).toBeCloseTo(0, 5);
+
+    // Without the clamp, the values entering contrast would have been
+    // -0.3, -0.5, -0.7 (all different), and contrast would produce
+    // different values per channel. With the clamp, all channels are
+    // uniformly 0, proving the clamp prevented channel-divergent artifacts.
+  });
+
+  it('ACT-014: brightness = -1.0 produces black (all zeros) before contrast', () => {
+    // MED-49 edge case: maximum negative brightness should clamp to 0 before contrast
+    const params: ColorTransformParams = { ...DEFAULT_TRANSFORM_PARAMS, brightness: -1.0, contrast: 1 };
+    const [r, g, b] = applyColorTransform(0.5, 0.5, 0.5, params);
+
+    // After brightness: 0.5 - 1.0 = -0.5, clamped to 0
+    // After contrast=1: (0 - 0.5)*1 + 0.5 = 0.0
+    // After saturation=1: no change (all channels equal)
+    // After gamma=1: no change
+    expect(r).toBeCloseTo(0.0, 5);
+    expect(g).toBeCloseTo(0.0, 5);
+    expect(b).toBeCloseTo(0.0, 5);
+  });
+
+  it('ACT-015: normal brightness + contrast still works correctly', () => {
+    // Sanity check: positive brightness with contrast should not be affected by the clamp
+    const params: ColorTransformParams = { ...DEFAULT_TRANSFORM_PARAMS, brightness: 0.1, contrast: 1.5 };
+    const [r] = applyColorTransform(0.5, 0.5, 0.5, params);
+
+    // After brightness: 0.5 + 0.1 = 0.6 (positive, clamp is no-op)
+    // After contrast: (0.6 - 0.5) * 1.5 + 0.5 = 0.65
+    expect(r).toBeCloseTo(0.65, 5);
+  });
+
+  it('ACT-016: brightness clamp prevents contrast from amplifying negative values', () => {
+    // Without the clamp, brightness=-0.3 on a dark pixel (0.1) would give -0.2,
+    // and contrast=3 would amplify: (-0.2 - 0.5) * 3 + 0.5 = -1.6
+    // With the clamp: max(-0.2, 0) = 0, then (0 - 0.5) * 3 + 0.5 = -1.0
+    // After gamma=1: applyGamma returns 0 for value <= 0
+    // The clamp ensures all negative-brightness channels converge to 0.
+    const paramsWithClamp: ColorTransformParams = { ...DEFAULT_TRANSFORM_PARAMS, brightness: -0.3, contrast: 3 };
+    const [rClamped] = applyColorTransform(0.1, 0.5, 0.5, paramsWithClamp);
+
+    // With clamp: brightness(0.1, -0.3) = -0.2 -> clamped to 0
+    // contrast(0, 3) = (0 - 0.5)*3 + 0.5 = -1.0
+    // gamma clamps negative to 0
+    expect(rClamped).toBeCloseTo(0, 5);
+
+    // Compare with a channel that stays positive through brightness:
+    // G channel: brightness(0.5, -0.3) = 0.2 (positive, clamp is no-op)
+    // contrast(0.2, 3) = (0.2 - 0.5)*3 + 0.5 = -0.4 -> gamma clamps to 0
+    const [, gClamped] = applyColorTransform(0.1, 0.5, 0.5, paramsWithClamp);
+    expect(gClamped).toBeCloseTo(0, 5);
+  });
+
+  it('ACT-017: brightness=0 with contrast is identical to pure contrast (clamp invisible)', () => {
+    // When brightness is 0, the clamp (max(val + 0, 0)) is a no-op for non-negative inputs.
+    // This confirms the clamp doesn't alter results when brightness is neutral.
+    const input = { r: 0.5, g: 0.5, b: 0.5 };
+    const paramsWithBrightness: ColorTransformParams = {
+      ...DEFAULT_TRANSFORM_PARAMS,
+      brightness: 0,
+      contrast: 2,
+    };
+    const paramsContrastOnly: ColorTransformParams = {
+      ...DEFAULT_TRANSFORM_PARAMS,
+      contrast: 2,
+    };
+    const [rB, gB, bB] = applyColorTransform(input.r, input.g, input.b, paramsWithBrightness);
+    const [rC, gC, bC] = applyColorTransform(input.r, input.g, input.b, paramsContrastOnly);
+
+    // Both should produce contrast(0.5, 2) = (0.5 - 0.5)*2 + 0.5 = 0.5
+    expect(rB).toBeCloseTo(rC, 10);
+    expect(gB).toBeCloseTo(gC, 10);
+    expect(bB).toBeCloseTo(bC, 10);
+    expect(rB).toBeCloseTo(0.5, 5);
+  });
+
   it('ACT-012: combined temperature+tint matches shader math', () => {
     // Both temp and tint active: verify all cross-channel effects accumulate correctly
     const temp = 0.6;

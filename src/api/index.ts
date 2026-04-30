@@ -27,7 +27,16 @@
 
 export { OpenRVAPI } from './OpenRVAPI';
 export type { OpenRVAPIConfig } from './OpenRVAPI';
-export type { ViewerProvider, ColorAdjustmentProvider, CDLProvider, CurvesProvider, PixelProbeProvider } from './types';
+export type {
+  ViewerProvider,
+  ColorAdjustmentProvider,
+  CDLProvider,
+  CurvesProvider,
+  PixelProbeProvider,
+  LUTProvider,
+  LUTPipelineProvider,
+  LUTPipelineStage,
+} from './types';
 
 export { PlaybackAPI } from './PlaybackAPI';
 export { MediaAPI } from './MediaAPI';

@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type ExportFormat } from '../../utils/export/FrameExporter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import { type PreferencesManager, type ExportDefaults, getCorePreferencesManager } from '../../core/PreferencesManager';
 import { FrameburnSettingsMenu } from './FrameburnSettingsMenu';
 
@@ -50,7 +51,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private dropdown: HTMLElement;
   private isDropdownOpen = false;
   private annotationsCheckbox: HTMLInputElement | null = null;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private _cleanupA11yFocus: (() => void) | null = null;
   private readonly preferencesManager: PreferencesManager;
   private readonly frameburnSettingsMenu: FrameburnSettingsMenu;
@@ -162,29 +163,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     });
 
     this.container.appendChild(this.exportButton);
-
-    // Close dropdown on outside click
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isDropdownOpen) {
-        this.closeDropdown();
-      }
-    };
-  }
-
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (
-      this.isDropdownOpen &&
-      !this.container.contains(e.target as Node) &&
-      !this.dropdown.contains(e.target as Node)
-    ) {
-      this.closeDropdown();
-    }
+    // Outside-click + Escape dismiss are handled by OutsideClickRegistry,
+    // registered in openDropdown() and deregistered in closeDropdown().
   }
 
   private createDropdownItems(): void {
@@ -443,7 +423,12 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       firstItem.focus();
     }
 
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.dropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
   }
 
   private closeDropdown(): void {
@@ -453,7 +438,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.exportButton.style.background = 'transparent';
     this.exportButton.style.borderColor = 'transparent';
     this.exportButton.style.color = 'var(--text-muted)';
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
   }
 
   private getIncludeAnnotations(): boolean {
@@ -701,8 +687,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     this._cleanupA11yFocus?.();
     this._cleanupA11yFocus = null;
     this.frameburnSettingsMenu.dispose();

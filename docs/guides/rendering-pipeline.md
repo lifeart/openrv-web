@@ -680,6 +680,10 @@ When neither WebGL2 native HDR output nor WebGPU is available, OpenRV Web falls 
 
 The render worker offloads rendering to a background thread using `OffscreenCanvas`. When available, the main canvas is transferred to a Web Worker that runs the full WebGL2 rendering pipeline off the main thread. This keeps the UI responsive during heavy rendering operations such as large-image display, LUT application, or multi-stage color correction. The render worker communicates frame updates and state changes via structured-clone messages.
 
+::: info Worker error response shape (developer note)
+Worker error messages posted to the main thread use the shape `{ type: 'error', id, error: string, name: string, stack?: string }`. The `error` field carries `Error.message`, `name` carries `Error.name`, and `stack` carries `Error.stack`. All three are explicitly captured into plain string fields because `Error.message`, `Error.name`, and `Error.stack` are non-enumerable on V8 / SpiderMonkey and would otherwise be silently dropped by structured-clone when posting an `Error` instance directly. `WorkerPool.handleWorkerMessage` (`src/utils/WorkerPool.ts`) rehydrates an `Error` from this payload so the main thread sees the original name, message, and source-resolved stack for debugging. Any new worker that wants its errors to surface with full context in production must follow the same explicit-capture pattern.
+:::
+
 ## Adaptive Proxy Rendering
 
 Adaptive proxy rendering dynamically adjusts rendering quality based on interaction state to maintain smooth frame rates. During active interactions (panning, zooming, scrubbing), the renderer drops to a lower-resolution proxy by reducing the canvas backing store relative to the display DPI. When interaction stops, the full-resolution render is restored. The system also leverages GL mipmaps for static textures and cache-level resize to minimize GPU memory pressure on large images.
@@ -693,9 +697,75 @@ An experimental WebGPU rendering backend (`src/render/WebGPUBackend.ts`) provide
 - **`WebGPUTextureManager`** (`WebGPUTextureManager.ts`): Format-aware texture lifecycle management. Supports VideoFrame zero-copy upload via `copyExternalImageToTexture`, HDR canvas configuration with `rgba16float`, and texture caching/reuse to minimize GPU allocations.
 - **`WebGPU3DLUT`** (`WebGPU3DLUT.ts`): 3D LUT management with three slots (file, look, display). LUT data is stored as `rgba32float` `texture_3d` textures with trilinear interpolation. Dirty tracking avoids redundant uploads.
 - **`WebGPUReadback`** (`WebGPUReadback.ts`): GPU pixel readback using double-buffered `MAP_READ` staging buffers with 256-byte row alignment. Exposes `readPixelFloatAsync()` for asynchronous pixel inspection.
+- **`WebGPUShaderPipeline`** (`WebGPUShaderPipeline.ts`): Multi-pass orchestrator that mirrors the WebGL2 `ShaderPipeline`. See "WGSL Stage Pipeline Architecture" below for the stage layering and `common.wgsl` prepend contract.
 - **`WebGPUTypes`** (`WebGPUTypes.ts`): Shared type definitions for device state, pipeline configuration, and texture metadata.
 
 The current WGSL shader (`src/render/webgpu/shaders/passthrough.wgsl`) implements texture sampling with a full-screen quad. The backend supports `renderImage()`, `clear()`, `resize()`, `set3DLUT()`, `setLUTEnabled()`, and `readPixelFloatAsync()` operations. The full color correction pipeline remains on the WebGL2 path; the WebGPU backend is opt-in and requires explicit activation. Browser support for WebGPU varies; the application falls back to WebGL2 when WebGPU is unavailable.
+
+Production renderer construction (`src/ui/components/ViewerGLRenderer.ts`, `src/workers/renderWorker.worker.ts`) now routes through `createRenderer(caps)` (commits MED-55 P-pre-1/-2). The factory in `src/render/createRenderer.ts` selects `WebGPUBackend` when `caps.webgpuAvailable && caps.webgpuHDR`, otherwise falls back to the WebGL2 `Renderer`. The WebGPU stage pipeline is gated by a tristate feature flag (default disabled) — see `src/render/webgpu/featureFlag.ts`. Phase 4 stage WGSL registration into `WebGPUShaderPipeline.registerStage` is intentionally pending — when it lands, the orchestrator must strip per-stage `@vertex fn vs` declarations to avoid duplicate-symbol errors with the prepended common+vertex source.
+
+### WebGPU Tone-Mapping Operator Parity
+
+Although the WebGPU backend is not yet wired into production, its tone-mapping shaders are held to a CPU/WebGL2/WebGPU equivalence contract. All eight operators (Reinhard, Filmic, ACES, AgX, PBR Neutral, GT, ACES Hill, Drago) live in a single source (`src/render/webgpu/shaders/common.wgsl`); `WebGPUShaderPipeline` prepends `common.wgsl` to every stage shader at compile time (see `WebGPUShaderPipeline.ts:521`) so stages reference operators without redefining them. Per-operator runtime parity tests at `src/render/__gpu__/tonemap-webgpu.gpu-test.ts` render real GPU pixels through each operator at `hdrHeadroom = 1` and `hdrHeadroom = 3` and compare against the CPU reference within a `<= 1/256` tolerance. The runtime tests are gated by a one-shot readback canary so they skip gracefully on environments where `copyTextureToBuffer` returns all-zero buffers (some headless Chromium builds without GPU rasterization), while compile-only WGSL tests continue to run.
+
+### WGSL Stage Pipeline Architecture
+
+`WebGPUShaderPipeline` (`src/render/webgpu/WebGPUShaderPipeline.ts`) is the WebGPU equivalent of the WebGL2 `ShaderPipeline`. It implements the same 11-stage layout in identical order:
+
+1. `inputDecode`
+2. `linearize`
+3. `primaryGrade`
+4. `secondaryGrade`
+5. `spatialEffects`
+6. `colorPipeline`
+7. `sceneAnalysis`
+8. `spatialEffectsPost`
+9. `displayOutput`
+10. `diagnostics`
+11. `compositing`
+
+Stage descriptors register via `registerStage(descriptor)`. The orchestrator filters out identity stages every frame (`isIdentity(state)`), then takes one of three paths:
+
+- **Zero active stages** -- direct passthrough blit (`PASSTHROUGH_WGSL`).
+- **One active stage** -- single-pass: source -> stage -> output, no ping-pong overhead.
+- **N active stages** -- ping-pong texture chain via `WebGPUPingPong`. The first stage uses the viewer vertex transform (pan/zoom/rotation, `VIEWER_VERT_WGSL`); intermediate and final stages use the identity passthrough vertex (`PASSTHROUGH_VERT_WGSL`).
+
+Stage WGSL lives under `src/render/webgpu/shaders/` as one file per stage:
+
+- `input_decode.wgsl`, `linearize.wgsl`, `primary_grade.wgsl`, `secondary_grade.wgsl`,
+- `spatial_effects.wgsl`, `color_pipeline.wgsl`, `scene_analysis.wgsl`, `spatial_effects_post.wgsl`,
+- `display_output.wgsl`, `diagnostics.wgsl`, `compositing.wgsl`,
+- plus shared `passthrough.wgsl` and `common.wgsl`.
+
+These shader files compile and have full GPU integration test coverage today; production stage registration (calling `registerStage()` with each descriptor) is the remaining Phase 4 wiring. Until that wiring lands, `countActiveStages()` returns zero in production and `WebGPUBackend.execute()` falls through `WebGPUShaderPipeline.execute()`'s zero-stage branch into the passthrough blit.
+
+### `common.wgsl` Single-Source Contract
+
+`common.wgsl` holds every helper shared across stages -- luminance constants (`LUMA`), `applyTemperature`, `applyLUT3DGeneric`, the eight tone-mapping operators (`tonemapReinhard`, `tonemapFilmic`, `tonemapACES`, `tonemapAgX`, `tonemapPBRNeutral`, `tonemapGT`, `tonemapACESHill`, `tonemapDrago`), `gamutSoftClip`, and the EOTF / inverse-EOTF helpers for sRGB, Rec.709, HLG, PQ, and SMPTE 240M. **Stage WGSL files do not redeclare any of these symbols.** Each helper has exactly one definition, in `common.wgsl`. This deduplication is enforced by the MED-55 fix.
+
+The contract is enforced at runtime by `WebGPUShaderPipeline.renderSingleStage`, which prepends `common.wgsl` (imported via Vite `?raw`) to the vertex source and the stage fragment source before calling `device.createShaderModule()`:
+
+```ts
+import commonSrc from './shaders/common.wgsl?raw';
+// ...
+const combined = commonSrc + '\n' + vertSource + '\n' + stage.wgslSource;
+const shaderModule = device.createShaderModule({ code: combined });
+```
+
+Without this prepend, every stage that references a common symbol would fail compilation with `unresolved identifier`. `WGPU-SP-090` in `WebGPUShaderPipeline.test.ts` asserts the prepend at the orchestrator boundary; the GPU integration tests under `src/render/__gpu__/wgsl-compile.gpu-test.ts` and `tonemap-webgpu.gpu-test.ts` mirror the same prepend pattern so test coverage and production share one contract.
+
+**Known follow-up**: when Phase 4 wiring registers stage WGSL via `registerStage()`, the orchestrator must strip each stage's `@vertex fn vs` declaration to avoid duplicate-symbol errors with the prepended `VIEWER_VERT_WGSL` / `PASSTHROUGH_VERT_WGSL`. Today this hasn't bitten production because stage registration is test-only, but the test suite already exercises the combined-shader compile path so the wiring step is a guarded drop-in.
+
+### WebGPU Shader Development Workflow
+
+To author or modify a WebGPU stage shader:
+
+1. Edit the stage `.wgsl` file under `src/render/webgpu/shaders/`. Reference shared symbols (`LUMA`, `tonemapACES`, `srgbToLinear`, ...) from `common.wgsl` directly -- do not redefine them in the stage file.
+2. If a helper is needed by two or more stages, hoist it into `common.wgsl`.
+3. Run `pnpm test:gpu` (config: `vitest.browser.config.ts`) to exercise WGSL compilation and per-operator pixel parity in a real browser GPU. Compile-only tests run regardless of readback support; the runtime pixel tests skip if the canary fails (e.g. on a headless Chromium without GPU rasterization).
+4. Run `npx tsc --noEmit` and `npx vitest run` for the standard unit-test gates.
+
+Stage shaders should be written as if `common.wgsl` were already in scope; they should not use `#include`-style directives or duplicate the declarations.
 
 ## Premultiply / Unpremultiply Alpha
 

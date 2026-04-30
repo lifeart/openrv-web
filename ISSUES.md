@@ -40,41 +40,23 @@ These issues were found and fixed during the audit:
 
 ### Partially Confirmed (with caveats)
 
-#### CRIT-01: HDR VideoFrame lifecycle unmanaged (by design)
-- **File**: `src/utils/media/MediabunnyFrameExtractor.ts` ~lines 737-785
-- **Status**: By design — `getFrameHDR()` transfers ownership to caller. HDR probe path has proper try/finally cleanup. Risk is at call sites.
+#### ~~CRIT-01~~: HDR VideoFrame lifecycle unmanaged at call sites — **FIXED** (see FIXED_ISSUES.md #601)
 
-#### HIGH-25: Topmost blend mode checks only first layer
-- **File**: `src/composite/BlendModes.ts` ~lines 294-309
-- **Status**: Likely correct — topmost is a stack-level mode set uniformly on all layers. Checking `layers[0]` suffices.
+#### ~~HIGH-25~~: Topmost blend mode checks only first layer — **FIXED** (see FIXED_ISSUES.md #604)
 
-#### HIGH-31: MPF offset arithmetic partially unchecked
-- **File**: `src/formats/JPEGGainmapDecoder.ts` ~lines 413, 432
-- **Status**: Won't crash (ArrayBuffer.slice clamps), but truncated JPEG blobs produce opaque errors.
+#### ~~HIGH-31~~: MPF offset arithmetic partially unchecked — **FIXED** (see FIXED_ISSUES.md #594)
 
-#### MED-19: HotReloadManager state capture not deep-cloned
-- **File**: `src/plugin/dev/HotReloadManager.ts` ~lines 59-61
-- **Status**: Design-level concern — depends on plugin's `getState()` returning a copy (which is the contract).
+#### ~~MED-19~~: HotReloadManager state capture not deep-cloned — **FIXED** (see FIXED_ISSUES.md #602)
 
-#### MED-28: JPEG marker segment length partially unchecked
-- **File**: `src/formats/JPEGGainmapDecoder.ts` ~lines 227, 335, 493, 549
-- **Status**: `segmentLength = 0` could cause infinite loop, but `dataLen = segmentLength - 2` goes negative, preventing OOB reads.
+#### ~~MED-28~~: JPEG marker segment length partially unchecked — **FIXED** (see FIXED_ISSUES.md #595)
 
-#### MED-30: MPF IFD entry count unbounded
-- **File**: `src/formats/JPEGGainmapDecoder.ts` ~lines 386-415
-- **Status**: Up to 65535 iterations from uint16. Buffer bounds check prevents OOB reads but CPU cost is unbounded.
+#### ~~MED-30~~: MPF IFD entry count unbounded — **FIXED** (see FIXED_ISSUES.md #596)
 
-#### MED-35: AudioContext resume gap before isPlaying set
-- **File**: `src/audio/AudioPlaybackManager.ts` ~lines 280-308
-- **Status**: Gap exists, but AudioCoordinator already works around it with its own `_isPlaying` flag.
+#### ~~MED-35~~: AudioContext resume gap before isPlaying set — **FIXED** (see FIXED_ISSUES.md #603)
 
-#### MED-39: AudioCoordinator dispose doesn't stop playback first
-- **File**: `src/audio/AudioCoordinator.ts` ~lines 272-277
-- **Status**: `_manager.dispose()` called without pause. Whether this matters depends on AudioPlaybackManager.dispose() handling active playback internally.
+#### ~~MED-39~~: AudioCoordinator dispose doesn't stop playback first — **FIXED** (see FIXED_ISSUES.md #359)
 
-#### MED-42: Detected FPS calculation flawed for edge case
-- **File**: `src/utils/media/MediabunnyFrameExtractor.ts` ~lines 434-448
-- **Status**: Guard at line 435 (`lastTimestamp > 0`) prevents execution for single-frame-at-t=0. Formula would be wrong for 1 frame with non-zero timestamp.
+#### ~~MED-42~~: Detected FPS calculation flawed for edge case — **FIXED** (see FIXED_ISSUES.md #597)
 
 ---
 
@@ -83,54 +65,43 @@ These issues were found and fixed during the audit:
 These findings were not yet verified against actual source code:
 
 #### Render/Shader
-- **MED-49**: Brightness unclamped in SDR path before contrast — `viewer.frag.glsl` ~line 1087
-- **MED-50**: HLG OOTF gain extremely high for near-black — `viewer.frag.glsl` ~line 560
-- **MED-51**: Color primaries metadata lost through LUT stages — `src/color/pipeline/LUTPipeline.ts`
-- **MED-52**: Tone mapping headroom inconsistent across operators — `viewer.frag.glsl` ~lines 253-296
-- **MED-54**: Gamut mapping matrix working space undocumented — `viewer.frag.glsl` ~lines 1069, 1367
-- **MED-55**: WebGPU extended tone mapping not verified at runtime — `hdr-acceptance-criteria.test.ts`
+- ~~**MED-49**~~: Brightness unclamped in SDR path before contrast — **FIXED** (see FIXED_ISSUES.md #361)
+- ~~**MED-50**~~: HLG OOTF gain extremely high for near-black — **FIXED** (see FIXED_ISSUES.md #362)
+- ~~**MED-51**~~: Color primaries metadata lost through LUT stages — **FIXED** (see FIXED_ISSUES.md #590)
+- ~~**MED-52**~~: Tone mapping headroom inconsistent across operators — **FIXED** (see FIXED_ISSUES.md #591)
+- ~~**MED-54**~~: Gamut mapping matrix working space undocumented — **FIXED** (see FIXED_ISSUES.md #600)
+- ~~**MED-55**~~: WebGPU extended tone mapping not verified at runtime — **FIXED** (see FIXED_ISSUES.md #592)
 
 #### Node System
-- **MED-09**: StackGroupNode wipe properties lack min/max — `StackGroupNode.ts` ~lines 80-81
-- **MED-10**: FileSourceNode properties inconsistent with defineNodeProperty — `FileSourceNode.ts` ~lines 584-590
-- **LOW-08**: EXR layer property not synced after setEXRLayer — `FileSourceNode.ts` ~lines 1855-1885
-- **LOW-09**: Stereo input format not serializable — `FileSourceNode.ts` ~lines 574, 2104
-- **LOW-10**: BaseSourceNode.connectInput warns instead of throwing — `BaseSourceNode.ts` ~lines 38-40
-- **LOW-11**: StackGroupNode chosenAudioInput not range-validated — `StackGroupNode.ts` ~lines 93-94
-- **LOW-12**: Canvas dirty flag not reset after load failures — `FileSourceNode.ts` ~lines 1047-1049
+- ~~**MED-10**~~: FileSourceNode properties inconsistent with defineNodeProperty — **FIXED** (see FIXED_ISSUES.md #355)
+- ~~**LOW-09**~~: Stereo input format not serializable — **FIXED** (see FIXED_ISSUES.md #364)
+- ~~**LOW-10**~~: BaseSourceNode.connectInput warns instead of throwing — **FIXED** (see FIXED_ISSUES.md #365)
+- ~~**LOW-11**~~: StackGroupNode chosenAudioInput not range-validated — **FIXED** (see FIXED_ISSUES.md #366)
+- ~~**LOW-12**~~: Canvas dirty flag not reset after load failures — **FIXED** (see FIXED_ISSUES.md #356)
 
 #### UI Controls
-- **MED-23**: DisplayProfileControl slider range not validated on load — `DisplayProfileControl.ts`
-- **MED-24**: Async file upload continues after component disposal — `AppControlRegistry.ts` ~lines 895-925
-- **MED-25**: Multiple global document click listeners without delegation — Multiple UI components
+- ~~**MED-23**~~: DisplayProfileControl slider range not validated on load — **FIXED** (see FIXED_ISSUES.md #363)
+- ~~**MED-25**~~: Multiple global document click listeners without delegation — **FIXED** (see FIXED_ISSUES.md #593)
 
 #### Workers
-- **MED-44**: Worker Transferable validation missing — `renderWorker.worker.ts` ~lines 42-49
-- **MED-45**: LUT cache key incomplete in effect processor — `effectProcessor.worker.ts` ~lines 144-226
-- **LOW-22**: ImageBitmap close error handling incomplete — `renderWorker.worker.ts` ~lines 211-226
-- **LOW-23**: Effect processor error stack unavailable in production — `effectProcessor.worker.ts` ~lines 1088-1099
-- **LOW-24**: Midtone mask integer rounding precision — `effectProcessor.worker.ts` ~lines 124-134
+- ~~**LOW-22**~~: ImageBitmap close error handling incomplete — **FIXED** (see FIXED_ISSUES.md #369)
+- ~~**LOW-23**~~: Effect processor error stack unavailable in production — **FIXED** (see FIXED_ISSUES.md #599)
+- ~~**LOW-24**~~: Midtone mask integer rounding precision — **FIXED** (see FIXED_ISSUES.md #598)
 
 #### Format Decoders
-- **MED-26**: EXR tile count overflow potential — `EXRDecoder.ts` ~lines 1348-1350
-- **MED-27**: DPX negative dimension interpretation — `DPXDecoder.ts` ~lines 92-94
-- **MED-29**: HDR RLE scanline validation — `HDRDecoder.ts` ~lines 414-446 (verified: throws on mismatch — likely FP)
-- **MED-31**: TIFF IFD entry count unbounded — `TIFFFloatDecoder.ts` ~lines 138, 141
-- **MED-32**: DPX scanline width overflow — `DPXDecoder.ts` ~lines 169-170
-- **MED-33**: TIFF LZW chain corruption — `TIFFFloatDecoder.ts` ~lines 323-324
-- **MED-34**: JPEG Gainmap MPF offset+size overflow — `JPEGGainmapDecoder.ts` ~lines 82, 101
-- **LOW-17**: TIFF LZW string length overflow in Uint16Array — `TIFFFloatDecoder.ts` ~lines 316, 371
-- **LOW-18**: TIFF unknown tag type returns 1 silently — `TIFFFloatDecoder.ts` ~lines 166-180
-- **LOW-19**: TIFF bits-per-sample not validated for float format — `TIFFFloatDecoder.ts` ~lines 766-771
+- ~~**MED-33**~~: TIFF LZW chain corruption — **FIXED** (see FIXED_ISSUES.md #350)
+- ~~**MED-34**~~: JPEG Gainmap MPF offset+size overflow — **FIXED** (see FIXED_ISSUES.md #351)
+- ~~**LOW-17**~~: TIFF LZW string length overflow in Uint16Array — **FIXED** (see FIXED_ISSUES.md #352)
+- ~~**LOW-18**~~: TIFF unknown tag type returns 1 silently — **FIXED** (see FIXED_ISSUES.md #353)
+- ~~**LOW-19**~~: TIFF bits-per-sample not validated for float format — **FIXED** (see FIXED_ISSUES.md #354)
 
 #### Misc
-- **MED-18**: WebSocketClient malformed message flood not rate-limited — `WebSocketClient.ts` ~lines 32-38
-- **LOW-07**: Clarity/sharpen sample raw texture (known trade-off) — `viewer.frag.glsl`
-- **LOW-14**: Stereo eye offset not bounds-validated — `StereoRenderer.ts` ~lines 278-300
-- **LOW-15**: Stereo side-by-side odd width asymmetry — `StereoRenderer.ts` ~lines 310-311
-- **LOW-16**: Transform history spurious entries from float precision — `AppTransformWiring.ts` ~lines 53-66
-- **LOW-20**: Frame accumulator overflow on speed changes — `PlaybackEngine.ts` ~lines 312-329
-- **LOW-21**: Dropped frame counter never reset — `PlaybackEngine.ts` ~lines 814-879
+- ~~**MED-18**~~: WebSocketClient malformed message flood not rate-limited — **FIXED** (see FIXED_ISSUES.md #360)
+- ~~**LOW-07**~~: Clarity/sharpen sample raw texture (known trade-off) — **FIXED** (see FIXED_ISSUES.md #605)
+- ~~**LOW-14**~~: Stereo eye offset not bounds-validated — **FIXED** (see FIXED_ISSUES.md #367)
+- ~~**LOW-15**~~: Stereo side-by-side odd width asymmetry — **FIXED** (see FIXED_ISSUES.md #368)
+- ~~**LOW-20**~~: Frame accumulator overflow on speed changes — **FIXED** (see FIXED_ISSUES.md #357)
+- ~~**LOW-21**~~: Dropped frame counter never reset — **FIXED** (see FIXED_ISSUES.md #358)
 
 ---
 
@@ -181,3 +152,15 @@ Wave 2+3 verification rejected these findings:
 | MED-46 | Seek clamp — duration defaults to 1, clamp is correct safeguard |
 | MED-56 | hdrHeadroom — setHDRHeadroom clamps [1, 100] (NaN edge case only) |
 | LOW-02 | LUT domain — clamp(0,1) handles Inf; NaN is theoretical |
+
+---
+
+## REFACTORING BACKLOG
+
+**REFACTOR-01 (low priority)**: Three CPU compositing paths exist for stack layers and should be consolidated:
+
+1. `StackGroupNode.compositeLayers` (`src/nodes/groups/StackGroupNode.ts:280`) — node-tree IPImage path; topmost short-circuits via `getCompositeType()`
+2. `ViewerImageRenderer.compositeStackLayers` (`src/ui/components/ViewerImageRenderer.ts:442`) — viewer-render path; iterates per-layer, applies stencil-box clipping, no topmost short-circuit
+3. `compositeMultipleLayers` (`src/composite/BlendModes.ts:277`) — `@internal` test-only; intended consolidation target
+
+Tracked from HIGH-25 follow-up. Not user-visible; defer until a feature touches stack compositing.

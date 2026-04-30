@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
+import {
+  dispatchOutsideClick,
+  resetOutsideClickRegistry,
+} from '../../../utils/ui/__test-helpers__/outsideClickTestUtils';
 import { DropdownMenu, closeAllDropdowns, getOpenDropdownCount, _resetDropdownState } from './DropdownMenu';
 
 describe('DropdownMenu', () => {
@@ -23,6 +28,7 @@ describe('DropdownMenu', () => {
     dropdown.dispose();
     closeAllDropdowns();
     _resetDropdownState();
+    resetOutsideClickRegistry();
     document.body.innerHTML = '';
   });
 
@@ -1127,6 +1133,32 @@ describe('DropdownMenu', () => {
       expect((buttons[1] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
       expect((buttons[1] as HTMLButtonElement).style.background).toBe('transparent');
       expect(dropdown.getSelectedValues()).toEqual([]);
+    });
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('DM-OCR-001: opening a dropdown registers exactly 1 entry; closing deregisters', () => {
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+
+      dropdown.open(anchor);
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(1);
+
+      dropdown.close();
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
+    });
+
+    it('DM-OCR-002: outside-click dispatched after open dismisses the dropdown', () => {
+      dropdown.open(anchor);
+      expect(dropdown.isVisible()).toBe(true);
+
+      // Click somewhere outside the dropdown and anchor.
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      document.body.removeChild(outside);
+
+      expect(dropdown.isVisible()).toBe(false);
+      expect(outsideClickRegistry.getRegistrationCount()).toBe(0);
     });
   });
 });

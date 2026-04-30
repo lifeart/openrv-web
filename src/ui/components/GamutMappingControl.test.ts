@@ -8,6 +8,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GamutMappingControl, DEFAULT_GAMUT_MAPPING_STATE, getValidTargetGamuts } from './GamutMappingControl';
 import type { GamutMappingState } from '../../core/types/effects';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  dispatchOutsideEscape,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('getValidTargetGamuts', () => {
   it('returns empty array for sRGB source (narrowest gamut)', () => {
@@ -31,6 +37,7 @@ describe('GamutMappingControl', () => {
   let control: GamutMappingControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new GamutMappingControl();
     // Append to DOM so panel positioning works
     document.body.appendChild(control.render());
@@ -39,6 +46,27 @@ describe('GamutMappingControl', () => {
   afterEach(() => {
     control.dispose();
     document.body.innerHTML = '';
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('GM-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      control.show();
+      expectRegistrationCount(1);
+      control.hide();
+      expectRegistrationCount(0);
+    });
+
+    it('GM-OCR-002: outside click dismisses the panel', () => {
+      control.show();
+      expect(control.isOpen).toBe(true);
+
+      dispatchOutsideClick();
+
+      expect(control.isOpen).toBe(false);
+      expectRegistrationCount(0);
+    });
   });
 
   describe('construction', () => {
@@ -372,7 +400,7 @@ describe('GamutMappingControl', () => {
       control.show();
       expect(control.isOpen).toBe(true);
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      dispatchOutsideEscape();
 
       expect(control.isOpen).toBe(false);
     });
@@ -380,29 +408,9 @@ describe('GamutMappingControl', () => {
     it('GM-M14b: pressing Escape while the panel is closed should have no effect', () => {
       expect(control.isOpen).toBe(false);
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      dispatchOutsideEscape();
 
       expect(control.isOpen).toBe(false);
-    });
-
-    it('GM-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.show();
-      control.hide();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
-
-    it('GM-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.show();
-      control.dispose();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
     });
   });
 

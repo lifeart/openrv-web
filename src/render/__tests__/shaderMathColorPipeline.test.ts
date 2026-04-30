@@ -19,6 +19,7 @@ import { applyCDLToValue, applyCDL, DEFAULT_CDL } from '../../color/CDL';
 import { acescctEncode, acescctDecode, logC3Encode, logC3Decode } from '../../color/TransferFunctions';
 import { LOG_CURVES } from '../../color/LogCurves';
 import { COLOR_PRIMARIES_MATRICES } from '../ShaderConstants';
+import { gamutMapRGB, tonemapACESHill, tonemapAgX } from '../../utils/effects/effectProcessing.shared';
 
 // ---------------------------------------------------------------------------
 // Import CPU gamut soft-clip
@@ -451,25 +452,31 @@ describe('Gamut Soft Clip (XE-GAMUT)', () => {
     expect(softClipChannel(1.0)).toBeCloseTo(expected, 10);
   });
 
-  it('XE-GAMUT-005: scene_analysis.wgsl discrepancy (smoothstep vs tanh) documented', () => {
-    // CPU (effectProcessing.shared.ts) and GLSL (viewer.frag.glsl) use:
-    //   0.8 + 0.2 * tanh((x - 0.8) / 0.2)  for all x > 0.8
+  it('XE-GAMUT-005: gamut soft-clip is unified across CPU, GLSL, and WGSL (tanh)', () => {
+    // Historical context (round-1 of MED-55): scene_analysis.wgsl had its
+    // own smoothstep-based soft-clip that diverged from the CPU/GLSL tanh
+    // formula. The deduplication during MED-55 deleted that local
+    // implementation; scene_analysis.wgsl now references the shared
+    // gamutSoftClip() in common.wgsl, which uses the same tanh formula.
     //
-    // scene_analysis.wgsl uses a different formula:
-    //   if x in [0.8, 1.0]: smoothstep Hermite → t = (x-0.8)/0.2; s = t*t*(3-2*t); result = 0.8 + s*0.2
-    //   if x > 1.0: clamp to 1.0
-    //
-    // common.wgsl uses the tanh formula matching CPU/GLSL.
-    //
-    // At x=0.9, the two formulas diverge:
-    const x = 0.9;
-    const tanhResult = 0.8 + 0.2 * Math.tanh((x - 0.8) / 0.2);
-
-    const t = (x - 0.8) / 0.2; // = 0.5
-    const smoothstepResult = 0.8 + t * t * (3.0 - 2.0 * t) * 0.2;
-
-    // They are different
-    expect(Math.abs(tanhResult - smoothstepResult)).toBeGreaterThan(0.001);
+    // This test guards the unification by asserting CPU == WGSL-source
+    // expectation across the soft-clip's active range. We re-implement the
+    // expected formula here (single source of truth: tanh) and verify the
+    // CPU function `softClipChannel` matches it. The compile-time check
+    // that scene_analysis.wgsl picks up common.wgsl's gamutSoftClip lives
+    // in src/render/__gpu__/wgsl-compile.gpu-test.ts.
+    const cases = [0.0, 0.4, 0.8, 0.9, 1.0, 1.5, 2.0, 5.0];
+    for (const x of cases) {
+      let expected: number;
+      if (x <= 0.0) {
+        expected = 0.0;
+      } else if (x <= 0.8) {
+        expected = x;
+      } else {
+        expected = 0.8 + 0.2 * Math.tanh((x - 0.8) / 0.2);
+      }
+      expect(softClipChannel(x), `softClipChannel(${x}) should match unified tanh formula`).toBeCloseTo(expected, 10);
+    }
   });
 
   it('XE-GAMUT-006: monotonically increasing', () => {
@@ -554,6 +561,134 @@ describe('Color Primaries Matrices (XE-MATRIX)', () => {
     expect(SRGB_TO_REC2020[0]).toBeGreaterThan(0.5); // r→r
     expect(SRGB_TO_REC2020[4]).toBeGreaterThan(0.5); // g→g
     expect(SRGB_TO_REC2020[8]).toBeGreaterThan(0.5); // b→b
+  });
+});
+
+// ============================================================================
+// MED-54: Gamut mapping matrix documented intent
+// ============================================================================
+//
+// These tests pin each gamut-mapping / tone-mapping matrix against the
+// source/destination color space documented in code, so a future change that
+// breaks the documented intent (or silently swaps source and destination) is
+// caught immediately.
+//
+// Documented mappings (mirrored across viewer.frag.glsl, common.wgsl,
+// scene_analysis.wgsl, effectProcessing.shared.ts and ShaderConstants.ts):
+//   REC2020_TO_SRGB:  Rec.2020 (D65) → BT.709/sRGB (D65)
+//   REC2020_TO_P3:    Rec.2020 (D65) → Display-P3 (D65)
+//   P3_TO_SRGB:       Display-P3 (D65) → BT.709/sRGB (D65)
+//   ACES Hill input:  BT.709 linear  → AP1 (Hill ODT-tuned, not pure primaries)
+//   ACES Hill output: AP1            → BT.709 linear (Hill ODT-tuned inverse)
+//   AgX inset/outset: BT.709 linear  ↔ AgX inner-gamut (compression, not primaries)
+//
+describe('MED-54: gamut mapping matrices match documented source→dest intent', () => {
+  it('MED-54-001: REC2020_TO_SRGB widens gamut (Rec.2020 red → out-of-gamut sRGB red)', () => {
+    // Pure Rec.2020 red is outside the sRGB gamut; mapping it to sRGB must
+    // produce r > 1.0 (its out-of-gamut signature) and very small g/b.
+    const [r, g, b] = matMul3ColMajor(COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB, 1, 0, 0);
+    expect(r).toBeGreaterThan(1.0);
+    expect(g).toBeLessThan(0);
+    expect(b).toBeLessThan(0);
+    // The reverse claim must NOT hold: pure sRGB red mapped through the
+    // forward matrix would not give r > 1; that's the discriminator that
+    // catches an accidental source/dest swap.
+  });
+
+  it('MED-54-002: REC2020_TO_SRGB preserves D65 white (1,1,1) → (~1,~1,~1)', () => {
+    // Both spaces share the D65 white point, so neutral white must round-trip
+    // through the matrix without chromatic shift.
+    const [r, g, b] = matMul3ColMajor(COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB, 1, 1, 1);
+    expect(r).toBeCloseTo(1, 2);
+    expect(g).toBeCloseTo(1, 2);
+    expect(b).toBeCloseTo(1, 2);
+  });
+
+  it('MED-54-003: P3_TO_SRGB widens gamut (P3 red → slightly out-of-gamut sRGB red)', () => {
+    // Display-P3 red is wider than sRGB red → r > 1, g/b ≈ 0.
+    const [r, g, b] = matMul3ColMajor(COLOR_PRIMARIES_MATRICES.P3_TO_SRGB, 1, 0, 0);
+    expect(r).toBeGreaterThan(1.0);
+    expect(r).toBeLessThan(1.4); // P3 is closer to sRGB than Rec.2020 is
+    expect(Math.abs(g)).toBeLessThan(0.05);
+    expect(Math.abs(b)).toBeLessThan(0.05);
+  });
+
+  it('MED-54-004: P3_TO_SRGB preserves D65 white', () => {
+    const [r, g, b] = matMul3ColMajor(COLOR_PRIMARIES_MATRICES.P3_TO_SRGB, 1, 1, 1);
+    expect(r).toBeCloseTo(1, 2);
+    expect(g).toBeCloseTo(1, 2);
+    expect(b).toBeCloseTo(1, 2);
+  });
+
+  it('MED-54-005: SRGB_TO_P3 narrows gamut (sRGB red → in-gamut P3 red, r<1)', () => {
+    // The reverse direction: sRGB red sits inside the P3 gamut, so r ≤ 1.
+    // This sanity-checks that SRGB_TO_P3 is documented in the right direction.
+    const [r, g, b] = matMul3ColMajor(COLOR_PRIMARIES_MATRICES.SRGB_TO_P3, 1, 0, 0);
+    expect(r).toBeGreaterThan(0.7);
+    expect(r).toBeLessThanOrEqual(1.0);
+    expect(g).toBeGreaterThanOrEqual(0); // small positive bleed
+    expect(b).toBeGreaterThanOrEqual(0);
+  });
+
+  it('MED-54-006: SRGB_TO_REC2020 narrows gamut (sRGB red → in-gamut Rec.2020 red)', () => {
+    // sRGB red sits well inside Rec.2020 → r < 1 with small green bleed.
+    const [r, g, b] = matMul3ColMajor(COLOR_PRIMARIES_MATRICES.SRGB_TO_REC2020, 1, 0, 0);
+    expect(r).toBeGreaterThan(0.5);
+    expect(r).toBeLessThan(1.0);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(b).toBeGreaterThanOrEqual(0);
+  });
+
+  it('MED-54-007: gamutMapRGB(rec2020 → srgb) clip mode clamps Rec.2020 red into [0,1]', () => {
+    // CPU path through documented entry point matches GPU intent: the
+    // out-of-gamut Rec.2020 red gets clamped to (1,0,0) in sRGB.
+    const [r, g, b] = gamutMapRGB(1, 0, 0, 'rec2020', 'srgb', 'clip');
+    expect(r).toBe(1);
+    expect(g).toBe(0);
+    expect(b).toBe(0);
+  });
+
+  it('MED-54-008: gamutMapRGB(srgb → srgb, clip) is identity (no source-mapping branch)', () => {
+    // The CPU path explicitly leaves source==srgb untouched (no matrix
+    // multiplication branch fires), so values < 0 or > 1 still get clipped.
+    const [r, g, b] = gamutMapRGB(0.5, 0.3, 0.7, 'srgb', 'srgb', 'clip');
+    expect(r).toBeCloseTo(0.5, 5);
+    expect(g).toBeCloseTo(0.3, 5);
+    expect(b).toBeCloseTo(0.7, 5);
+  });
+
+  it('MED-54-009: ACES Hill input matrix preserves D65 white close to itself', () => {
+    // The Hill input is BT.709→AP1 ODT-tuned; both bases use D65 so neutral
+    // (1,1,1) BT.709 → ~(1,1,1) AP1. hdrHeadroom=1 and a bright neutral that
+    // still survives the rational fit so the matrices are exercised with a
+    // sensible signal.
+    const result = tonemapACESHill(0.5, 0.5, 0.5, 1.0);
+    // Neutral input must remain neutral (or near-neutral) on output.
+    expect(result.g).toBeCloseTo(result.r, 2);
+    expect(result.b).toBeCloseTo(result.r, 2);
+  });
+
+  it('MED-54-010: AgX inset matrix preserves D65 neutral as neutral', () => {
+    // AgX inset/outset compress saturated colors; pure neutral must remain
+    // neutral both before and after the inset/outset stages.
+    const result = tonemapAgX(0.5, 0.5, 0.5, 1.0);
+    expect(result.g).toBeCloseTo(result.r, 2);
+    expect(result.b).toBeCloseTo(result.r, 2);
+  });
+
+  it('MED-54-011: column-major mat3 storage matches matrix math (Rec.2020 → sRGB)', () => {
+    // Pin the storage convention: index 0..2 is column 0, 3..5 col 1, 6..8 col 2.
+    // For a column-major mat3, math row 0 is (m[0], m[3], m[6]).
+    // First row of REC2020_TO_SRGB math matrix: 1.6605, -0.5877, -0.0728
+    const m = COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB;
+    // Apply to Rec.2020 (1,0,0) — should give the first column of math matrix
+    // = (m[0], m[1], m[2]) when reading row 0 across columns. matMul3ColMajor
+    // computes row 0 result as m[0]*1 + m[3]*0 + m[6]*0 = m[0].
+    const [r0] = matMul3ColMajor(m, 1, 0, 0);
+    expect(r0).toBeCloseTo(m[0]!, 5);
+    // Apply to (0,1,0) → should pick up m[3] (column 1, row 0).
+    const [r1] = matMul3ColMajor(m, 0, 1, 0);
+    expect(r1).toBeCloseTo(m[3]!, 5);
   });
 });
 

@@ -6,16 +6,47 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ScopesControl, type ScopeType } from './ScopesControl';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('ScopesControl', () => {
   let control: ScopesControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new ScopesControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration', () => {
+    it('SCOPE-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
+      const button = control.render().querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      button.click();
+      expectRegistrationCount(1);
+      button.click();
+      expectRegistrationCount(0);
+    });
+
+    it('SCOPE-OCR-002: outside-click after open dismisses the dropdown', () => {
+      const button = control.render().querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('.scopes-dropdown') as HTMLElement;
+      expect(dropdown.style.display).toBe('flex');
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
+    });
   });
 
   describe('initialization', () => {

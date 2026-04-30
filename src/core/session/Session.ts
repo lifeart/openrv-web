@@ -906,11 +906,18 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
-   * Get cumulative dropped frame count since last play() started.
-   * Resets to 0 when playback begins.
+   * Get the dropped frame count for the current playback segment.
+   * Automatically resets only on play(); preserved after pause, seek, and range changes.
    */
   get droppedFrameCount(): number {
     return this._playback.droppedFrameCount;
+  }
+
+  /**
+   * Manually reset the dropped frame counter to zero.
+   */
+  resetDroppedFrames(): void {
+    this._playback.resetDroppedFrames();
   }
 
   stepForward(): void {

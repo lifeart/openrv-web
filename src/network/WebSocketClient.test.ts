@@ -248,8 +248,17 @@ describe('WebSocketClient', () => {
         mockWSInstances[0]!.simulateMessage('bad' + i);
       }
 
-      // Only 5 warnings should have been emitted
-      expect(warningHandler).toHaveBeenCalledTimes(5);
+      // 5 MALFORMED_MESSAGE warnings + 1 MALFORMED_RATE_LIMITED notification
+      expect(warningHandler).toHaveBeenCalledTimes(6);
+
+      // First 5 are MALFORMED_MESSAGE
+      for (let i = 0; i < 5; i++) {
+        expect(warningHandler.mock.calls[i]![0].code).toBe('MALFORMED_MESSAGE');
+      }
+
+      // 6th is the rate-limit notification
+      expect(warningHandler.mock.calls[5]![0].code).toBe('MALFORMED_RATE_LIMITED');
+      expect(warningHandler.mock.calls[5]![0].message).toContain('suppressed');
     });
 
     it('WSC-035: rate-limit resets after time window elapses', async () => {
@@ -262,14 +271,215 @@ describe('WebSocketClient', () => {
       for (let i = 0; i < 10; i++) {
         mockWSInstances[0]!.simulateMessage('bad' + i);
       }
-      expect(warningHandler).toHaveBeenCalledTimes(5);
+      // 5 MALFORMED_MESSAGE + 1 MALFORMED_RATE_LIMITED
+      expect(warningHandler).toHaveBeenCalledTimes(6);
 
       // Advance past the rate-limit window (10 seconds)
       await vi.advanceTimersByTimeAsync(10_000);
 
-      // Should be able to emit warnings again
+      // Should be able to emit warnings again; also emits suppressed count summary
       mockWSInstances[0]!.simulateMessage('bad-again');
+
+      // +1 suppressed summary from previous window + 1 new MALFORMED_MESSAGE
+      expect(warningHandler).toHaveBeenCalledTimes(8);
+
+      // The 7th call is the suppressed summary from the previous window
+      const summaryCall = warningHandler.mock.calls[6]![0];
+      expect(summaryCall.code).toBe('MALFORMED_RATE_LIMITED');
+      expect(summaryCall.message).toMatch(/\b5\b/); // 5 suppressed messages
+
+      // The 8th call is the new MALFORMED_MESSAGE
+      expect(warningHandler.mock.calls[7]![0].code).toBe('MALFORMED_MESSAGE');
+    });
+
+    it('WSC-034a: rate-limit notification is emitted only once per window', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Send 20 malformed messages — should get 5 MALFORMED_MESSAGE + 1 MALFORMED_RATE_LIMITED
+      for (let i = 0; i < 20; i++) {
+        mockWSInstances[0]!.simulateMessage('bad' + i);
+      }
+
+      // Still only 6 total: the rate-limit notification is not repeated
       expect(warningHandler).toHaveBeenCalledTimes(6);
+
+      const rateLimitCalls = warningHandler.mock.calls.filter(
+        (c: unknown[]) => (c[0] as { code: string }).code === 'MALFORMED_RATE_LIMITED',
+      );
+      expect(rateLimitCalls.length).toBe(1);
+    });
+
+    it('WSC-035a: suppressed count is accurate in window reset summary', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Send exactly 8 malformed messages (5 emitted + 3 suppressed)
+      for (let i = 0; i < 8; i++) {
+        mockWSInstances[0]!.simulateMessage('bad' + i);
+      }
+
+      // Advance past the window
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      // Trigger next window with a malformed message
+      mockWSInstances[0]!.simulateMessage('bad-next-window');
+
+      // Find the suppressed summary
+      const summaryCalls = warningHandler.mock.calls.filter((c: unknown[]) => {
+        const w = c[0] as { code: string; message: string };
+        return w.code === 'MALFORMED_RATE_LIMITED' && w.message.includes('suppressed in the previous window');
+      });
+      expect(summaryCalls.length).toBe(1);
+      expect(summaryCalls[0]![0].message).toMatch(/\b3\b/); // exactly 3 suppressed
+    });
+
+    it('WSC-035b: no suppressed summary when no messages were suppressed', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Send exactly 3 malformed messages (under limit, no suppression)
+      for (let i = 0; i < 3; i++) {
+        mockWSInstances[0]!.simulateMessage('bad' + i);
+      }
+
+      // Advance past the window
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      // Trigger next window
+      mockWSInstances[0]!.simulateMessage('bad-next-window');
+
+      // Should NOT have a suppressed summary
+      const summaryCalls = warningHandler.mock.calls.filter((c: unknown[]) => {
+        const w = c[0] as { code: string; message: string };
+        return w.code === 'MALFORMED_RATE_LIMITED' && w.message.includes('suppressed in the previous window');
+      });
+      expect(summaryCalls.length).toBe(0);
+    });
+
+    it('WSC-035c: valid messages are never rate-limited during malformed flood', async () => {
+      const messageHandler = vi.fn();
+      client.on('message', messageHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+
+      // Exhaust the malformed rate limit
+      for (let i = 0; i < 20; i++) {
+        ws.simulateMessage('bad' + i);
+      }
+
+      // Now send valid messages — they should all go through
+      for (let i = 0; i < 5; i++) {
+        ws.simulateMessage(
+          JSON.stringify({
+            id: `msg-${i}`,
+            type: 'sync.playback',
+            roomId: 'room-1',
+            userId: 'user-2',
+            timestamp: Date.now(),
+            payload: { isPlaying: true },
+          }),
+        );
+      }
+
+      expect(messageHandler).toHaveBeenCalledTimes(5);
+    });
+
+    it('WSC-034b: exactly at threshold produces only MALFORMED_MESSAGE warnings', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Send exactly 5 malformed messages (the threshold)
+      for (let i = 0; i < 5; i++) {
+        mockWSInstances[0]!.simulateMessage('bad' + i);
+      }
+
+      // All 5 should produce MALFORMED_MESSAGE warnings
+      expect(warningHandler).toHaveBeenCalledTimes(5);
+      for (let i = 0; i < 5; i++) {
+        expect(warningHandler.mock.calls[i]![0].code).toBe('MALFORMED_MESSAGE');
+      }
+
+      // Zero MALFORMED_RATE_LIMITED events
+      const rateLimitCalls = warningHandler.mock.calls.filter(
+        (c: unknown[]) => (c[0] as { code: string }).code === 'MALFORMED_RATE_LIMITED',
+      );
+      expect(rateLimitCalls.length).toBe(0);
+    });
+
+    it('WSC-035d: no accumulation bugs across 3 consecutive windows', async () => {
+      // Use a dedicated client with a long heartbeat timeout so timer advances
+      // don't trigger disconnects during the test.
+      client.dispose();
+      mockWSInstances = [];
+      client = new WebSocketClient({
+        serverUrl: 'wss://test.example.com',
+        reconnectMaxAttempts: 3,
+        reconnectBaseDelay: 100,
+        reconnectMaxDelay: 1000,
+        heartbeatInterval: 60_000,
+        heartbeatTimeout: 120_000,
+        frameSyncThreshold: 2,
+        userName: 'Test',
+      });
+
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+
+      // Window 1: flood with 10 malformed messages (5 emitted + 5 suppressed)
+      for (let i = 0; i < 10; i++) {
+        ws.simulateMessage('w1-bad' + i);
+      }
+      // 5 MALFORMED_MESSAGE + 1 MALFORMED_RATE_LIMITED
+      expect(warningHandler).toHaveBeenCalledTimes(6);
+
+      // Advance to window 2
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      // Window 2: flood with 8 malformed messages (5 emitted + 3 suppressed)
+      // First message triggers suppressed summary from window 1
+      for (let i = 0; i < 8; i++) {
+        ws.simulateMessage('w2-bad' + i);
+      }
+      // +1 suppressed summary (window 1) + 5 MALFORMED_MESSAGE + 1 MALFORMED_RATE_LIMITED = 7
+      expect(warningHandler).toHaveBeenCalledTimes(13);
+
+      // Verify window 1 suppressed summary reports 5
+      const w1Summary = warningHandler.mock.calls[6]![0];
+      expect(w1Summary.code).toBe('MALFORMED_RATE_LIMITED');
+      expect(w1Summary.message).toMatch(/\b5\b/);
+      expect(w1Summary.message).toContain('suppressed in the previous window');
+
+      // Advance to window 3
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      // Window 3: quiet — send just 1 malformed message to trigger summary
+      ws.simulateMessage('w3-bad0');
+      // +1 suppressed summary (window 2, 3 suppressed) + 1 MALFORMED_MESSAGE = 2
+      expect(warningHandler).toHaveBeenCalledTimes(15);
+
+      // Verify window 2 suppressed summary reports 3
+      const w2Summary = warningHandler.mock.calls[13]![0];
+      expect(w2Summary.code).toBe('MALFORMED_RATE_LIMITED');
+      expect(w2Summary.message).toMatch(/\b3\b/);
+      expect(w2Summary.message).toContain('suppressed in the previous window');
+
+      // The last call is a normal MALFORMED_MESSAGE
+      expect(warningHandler.mock.calls[14]![0].code).toBe('MALFORMED_MESSAGE');
     });
 
     it('WSC-036: malformed messages are not processed even when warning is emitted', async () => {
@@ -657,7 +867,8 @@ describe('WebSocketClient', () => {
       for (let i = 0; i < 10; i++) {
         mockWSInstances[0]!.simulateMessage('bad' + i);
       }
-      expect(warningHandler).toHaveBeenCalledTimes(5);
+      // 5 MALFORMED_MESSAGE + 1 MALFORMED_RATE_LIMITED
+      expect(warningHandler).toHaveBeenCalledTimes(6);
 
       // Simulate disconnect and reconnect
       mockWSInstances[0]!.simulateClose(1006);
@@ -670,7 +881,7 @@ describe('WebSocketClient', () => {
       for (let i = 0; i < 3; i++) {
         latestWs.simulateMessage('bad-after-reconnect' + i);
       }
-      expect(warningHandler).toHaveBeenCalledTimes(8); // 5 + 3
+      expect(warningHandler).toHaveBeenCalledTimes(9); // 6 + 3
     });
   });
 

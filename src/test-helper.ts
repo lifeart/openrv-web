@@ -142,6 +142,11 @@ export interface TestMutations {
   undo(): void;
   redo(): void;
   getLUTPipelinePanel(): any;
+  /**
+   * Returns the last `u_inputTransfer` code bound during a render call,
+   * or `null` if the WebGL renderer is not active. Test-only.
+   */
+  getRendererLastInputTransferCode(): number | null;
   setSessionFrame(frame: number): void;
   getSessionSourceCount(): number;
   // Color adjustments
@@ -1608,6 +1613,21 @@ export function exposeForTesting(app: App): void {
       },
       getLUTPipelinePanel() {
         return getControl('lutPipelinePanel') ?? null;
+      },
+      /**
+       * Returns the last `u_inputTransfer` code bound during a render call,
+       * or `null` if the WebGL renderer is not active. Used by E2E tests to
+       * verify the MED-51 LUT output color space cascade resolves the
+       * expected EOTF code at the GPU boundary.
+       * @internal Test-only.
+       */
+      getRendererLastInputTransferCode(): number | null {
+        const viewer = resolveComponent('app.viewer', () => appAny.viewer);
+        const renderer = viewer?.getGLRenderer?.() ?? null;
+        if (!renderer || typeof renderer.getLastInputTransferCodeForTest !== 'function') {
+          return null;
+        }
+        return renderer.getLastInputTransferCodeForTest();
       },
       setSessionFrame(frame: number) {
         const session = appAny.session;

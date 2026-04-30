@@ -295,6 +295,110 @@ OpenRV Web includes 10 built-in film emulation presets that combine a response c
 
 ---
 
+## Output Color Space Metadata Cascade
+
+The GPU LUT chain transforms pixels but does not, by itself, advertise *what
+those pixels now represent*. A Display LUT that bakes a PQ-to-sRGB transform
+leaves the source's `transferFunction = 'pq'` metadata untouched on the
+underlying `IPImage`, so any downstream consumer that branches on color space
+(scopes, the HDR shader path selector, observability surfaces) would see stale
+information.
+
+The pipeline addresses this with a per-stage *declared output color space*
+plus a cascade walker that propagates the declaration onto a metadata-only
+clone of the `IPImage` handed to the renderer.
+
+### Per-Stage Declarations
+
+Each `LUTStageState` (Pre-Cache, File, Look) and the session-wide Display LUT
+carries two optional fields:
+
+| Field | Type | Semantics |
+|---|---|---|
+| `outputColorPrimaries` | `'bt709' \| 'bt2020' \| 'p3' \| null` | `null` = preserve the running primaries, non-null = override |
+| `outputTransferFunction` | `'srgb' \| 'hlg' \| 'pq' \| 'smpte240m' \| null` | `null` = preserve the running transfer function, non-null = override |
+
+`null` is the default and yields a no-op cascade — the common case where no
+LUT has been loaded incurs zero metadata work.
+
+### Cascade Order
+
+`LUTPipeline.computeOutputMetadata(sourceId, input)` walks the four stages in
+pipeline order:
+
+```
+input metadata
+  -> Pre-Cache LUT  (per-source, software)
+  -> File LUT       (per-source, GPU)
+  -> Look LUT       (per-source, GPU)
+  -> Display LUT    (session-wide, GPU)
+```
+
+For each stage, the declared output is applied **only when the stage actually
+contributes pixels**: enabled, has a LUT loaded, and intensity > 0. Disabled,
+empty, or zero-intensity stages are bypassed at render time and therefore
+must not contribute to the metadata either — the cascade enforces that
+invariant.
+
+The function is pure: it never mutates input metadata or pipeline state, and
+when every stage is metadata-preserving it returns the input unchanged.
+
+### Materializing onto an IPImage
+
+`LUTPipeline.applyToIPImage(sourceId, image)` is the seam used at render time.
+It computes the cascaded metadata, returns the input image by reference if the
+cascade is a no-op (allocation-free steady state), and otherwise produces a
+metadata-only clone via `IPImage.cloneMetadataOnly()`.
+
+`cloneMetadataOnly()` is a deliberately narrow primitive: it shares the
+underlying pixel buffer **and** GPU resources (`managedVideoFrame`,
+`imageBitmap`) with the source, marks itself non-owning so `close()` does not
+release shared resources, and gives the caller a fresh `metadata` object to
+mutate. This is critical for HDR video, where the real pixel source is a
+`VideoFrame` and the `IPImage.data` field holds only a 4-byte placeholder — a
+naive `clone()` would drop the `VideoFrame` reference and the renderer would
+read the placeholder as if it were the full pixel buffer.
+
+### Render-Time Wiring
+
+The Viewer applies the cascade in all three HDR render branches (HDR file
+source, HDR procedural source, HDR video source) immediately before the
+`renderHDRWithWebGL` call, via the private `applyLUTMetadataCascade` helper.
+SDR paths inherit the source metadata directly because they do not branch on
+post-pipeline color space.
+
+### Where the Output Metadata Is Consumed
+
+After cascade, the `IPImage` handed to the renderer carries the
+post-pipeline color space. Current and future consumers:
+
+- **HDR shader path selection** in `Renderer.ts` reads
+  `metadata.transferFunction` to pick the input EOTF uniform (sRGB / HLG / PQ).
+- **Scopes and observability** surfaces that report the displayed color space
+  see the effective post-LUT state, not the raw source state.
+- **OCIO seam** (future): allows OCIO-baked LUTs to declare what working
+  space they output into, so downstream OCIO transforms can assume a known
+  starting point.
+
+### Setter API
+
+The setters that drive these declarations live on `LUTPipeline`:
+
+```typescript
+pipeline.setStageOutputColorPrimaries(sourceId, 'precache' | 'file' | 'look', primaries);
+pipeline.setStageOutputTransferFunction(sourceId, 'precache' | 'file' | 'look', transfer);
+pipeline.setDisplayOutputColorPrimaries(primaries);
+pipeline.setDisplayOutputTransferFunction(transfer);
+```
+
+These are not currently exposed in the LUT panel UI or the public scripting
+API — declarations are produced today only by tests and by the OCIO baking
+path (see [OCIO Color Management](ocio-color-management.md)). The data model
+is in place so that user-facing controls and OCIO auto-population can be added
+without touching the cascade machinery.
+
+---
+
 ## Related Pages
 
 - [Rendering Pipeline](rendering-pipeline.md) -- Full pipeline stage ordering and context

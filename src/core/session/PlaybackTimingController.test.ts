@@ -5,6 +5,8 @@ import {
   MAX_CONSECUTIVE_STARVATION_SKIPS,
   STARVATION_TIMEOUT_MS,
   MAX_REVERSE_SPEED,
+  MAX_FRAME_DELTA_MS,
+  MAX_FRAMES_PER_TICK,
 } from './PlaybackTimingController';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 
@@ -239,10 +241,10 @@ describe('PlaybackTimingController', () => {
 
     it('PTC-U024: respects playback speed and direction', () => {
       state.lastFrameTime = 1000;
-      const result = controller.accumulateDelta(state, 30, 2, -1, 1500);
+      const result = controller.accumulateDelta(state, 30, 2, -1, 1100);
       // Speed 2 in reverse -> effective speed = min(2, MAX_REVERSE_SPEED) = 2
       expect(result.frameDuration).toBeCloseTo(1000 / 30 / 2, 5);
-      expect(result.delta).toBeCloseTo(500, 5);
+      expect(result.delta).toBeCloseTo(100, 5);
     });
   });
 
@@ -1063,6 +1065,183 @@ describe('PlaybackTimingController', () => {
 
     it('PTC-PAF-011: returns false for playAllFrames mode', () => {
       expect(controller.shouldSkipStarvedFrame('playAllFrames')).toBe(false);
+    });
+  });
+
+  // =================================================================
+  // LOW-20: Frame accumulator overflow on speed changes
+  // =================================================================
+
+  describe('accumulator overflow prevention (LOW-20)', () => {
+    it('PTC-LOW20-001: accumulateFrames clamps large deltas to MAX_FRAME_DELTA_MS', () => {
+      const fps = 24;
+      state.lastFrameTime = 1000;
+      // Simulate a 2-second gap (e.g., tab was backgrounded)
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'realtime', 3000);
+      // With clamping, accumulator should be based on MAX_FRAME_DELTA_MS, not 2000ms
+      // At 24fps speed 1: frameDuration = 41.67ms, MAX_FRAME_DELTA_MS / frameDuration ~= 4.8
+      // framesToAdvance should be capped to MAX_FRAMES_PER_TICK
+      expect(result.framesToAdvance).toBeLessThanOrEqual(MAX_FRAMES_PER_TICK);
+    });
+
+    it('PTC-LOW20-002: accumulateFrames caps framesToAdvance in realtime mode', () => {
+      const fps = 24;
+      const frameDuration = 1000 / fps;
+      state.lastFrameTime = 1000;
+      // Inject a large accumulator value directly to simulate overflow
+      state.frameAccumulator = frameDuration * 20;
+      // Even a small delta should not produce more than MAX_FRAMES_PER_TICK
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'realtime', 1000 + 1);
+      expect(result.framesToAdvance).toBeLessThanOrEqual(MAX_FRAMES_PER_TICK);
+    });
+
+    it('PTC-LOW20-003: accumulateFrames resets accumulator after overflow cap', () => {
+      const fps = 24;
+      const frameDuration = 1000 / fps;
+      state.lastFrameTime = 1000;
+      // Inject a large accumulator value
+      state.frameAccumulator = frameDuration * 20;
+      controller.accumulateFrames(state, fps, 1, 1, 'realtime', 1000 + 1);
+      // After capping, accumulator should not still be huge
+      expect(state.frameAccumulator).toBeLessThanOrEqual(frameDuration);
+    });
+
+    it('PTC-LOW20-004: accumulateDelta clamps large deltas to MAX_FRAME_DELTA_MS', () => {
+      state.lastFrameTime = 1000;
+      // Simulate a 5-second gap
+      const result = controller.accumulateDelta(state, 24, 1, 1, 6000);
+      // Delta should be clamped
+      expect(result.delta).toBeLessThanOrEqual(MAX_FRAME_DELTA_MS);
+      // Accumulator should reflect clamped delta, not raw 5000ms
+      expect(state.frameAccumulator).toBeLessThanOrEqual(MAX_FRAME_DELTA_MS);
+    });
+
+    it('PTC-LOW20-005: accumulateFrames clamps negative deltas to 0', () => {
+      const fps = 24;
+      state.lastFrameTime = 2000;
+      // now < lastFrameTime (clock went backward)
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'realtime', 1000);
+      expect(result.framesToAdvance).toBe(0);
+      expect(state.frameAccumulator).toBe(0);
+    });
+
+    it('PTC-LOW20-006: accumulateDelta clamps negative deltas to 0', () => {
+      state.lastFrameTime = 2000;
+      const result = controller.accumulateDelta(state, 24, 1, 1, 1000);
+      expect(result.delta).toBe(0);
+      expect(state.frameAccumulator).toBe(0);
+    });
+
+    it('PTC-LOW20-007: rapid speed changes do not cause frame burst', () => {
+      const fps = 24;
+      state.lastFrameTime = 1000;
+
+      // Simulate accumulating at slow speed (0.1x) for several ticks
+      // frameDuration at 0.1x = 1000/24/0.1 = 416.7ms
+      controller.accumulateFrames(state, fps, 0.1, 1, 'realtime', 1050); // +50ms
+      controller.accumulateFrames(state, fps, 0.1, 1, 'realtime', 1100); // +50ms
+      controller.accumulateFrames(state, fps, 0.1, 1, 'realtime', 1150); // +50ms
+
+      // Now simulate a speed change: reset timing (as PlaybackEngine does)
+      controller.resetTiming(state, 1150);
+
+      // Then accumulate at high speed (8x): frameDuration = 1000/24/8 = 5.2ms
+      const result = controller.accumulateFrames(state, fps, 8, 1, 'realtime', 1166);
+      // 16ms delta at 8x speed: 16/5.2 ~= 3 frames -- should be reasonable
+      expect(result.framesToAdvance).toBeLessThanOrEqual(MAX_FRAMES_PER_TICK);
+      expect(result.framesToAdvance).toBeGreaterThan(0);
+    });
+
+    it('PTC-LOW20-008: multiple rapid speed changes produce stable output', () => {
+      const fps = 24;
+      state.lastFrameTime = 1000;
+      const speeds = [0.1, 8, 0.5, 4, 0.25, 2, 1];
+      let time = 1000;
+
+      for (const speed of speeds) {
+        // Simulate resetTiming on each speed change (as PlaybackEngine does)
+        controller.resetTiming(state, time);
+        time += 16; // one rAF tick
+        const result = controller.accumulateFrames(state, fps, speed, 1, 'realtime', time);
+        // No single tick should produce an unreasonable number of frames
+        expect(result.framesToAdvance).toBeLessThanOrEqual(MAX_FRAMES_PER_TICK);
+      }
+    });
+
+    it('PTC-LOW20-009: normal playback at 1x speed is unaffected by clamping', () => {
+      const fps = 24;
+      state.lastFrameTime = 1000;
+
+      // Simulate 10 normal rAF ticks at ~16.67ms each (60Hz display)
+      let time = 1000;
+      let totalFrames = 0;
+      for (let i = 0; i < 10; i++) {
+        time += 16.67;
+        const result = controller.accumulateFrames(state, fps, 1, 1, 'realtime', time);
+        totalFrames += result.framesToAdvance;
+      }
+      // At 24fps on 60Hz display, expect ~4 frames in 166.7ms
+      // (166.7ms / 41.67ms per frame = 4)
+      expect(totalFrames).toBeGreaterThanOrEqual(3);
+      expect(totalFrames).toBeLessThanOrEqual(5);
+    });
+
+    it('PTC-LOW20-010: MAX_FRAME_DELTA_MS and MAX_FRAMES_PER_TICK are reasonable values', () => {
+      // Sanity checks on the constants
+      expect(MAX_FRAME_DELTA_MS).toBeGreaterThan(0);
+      expect(MAX_FRAME_DELTA_MS).toBeLessThanOrEqual(1000);
+      expect(MAX_FRAMES_PER_TICK).toBeGreaterThan(0);
+      expect(MAX_FRAMES_PER_TICK).toBeLessThanOrEqual(10);
+    });
+
+    it('PTC-LOW20-011: playAllFrames mode with large delta only advances 1 frame and keeps accumulator bounded', () => {
+      const fps = 24;
+      const frameDuration = 1000 / fps; // ~41.67ms
+      state.lastFrameTime = 1000;
+
+      // Simulate a 10-second gap (tab backgrounded)
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'playAllFrames', 11000);
+
+      // playAllFrames mode caps to 1 frame per tick regardless of elapsed time
+      expect(result.framesToAdvance).toBe(1);
+      // Accumulator should be bounded to at most one frameDuration (not grow unbounded)
+      expect(state.frameAccumulator).toBeLessThanOrEqual(frameDuration);
+    });
+
+    it('PTC-LOW20-012: exactly MAX_FRAMES_PER_TICK frames does not trigger the cap', () => {
+      const fps = 24;
+      const frameDuration = 1000 / fps; // ~41.67ms
+      state.lastFrameTime = 1000;
+
+      // We need exactly MAX_FRAMES_PER_TICK frames worth of delta.
+      // Set accumulator to 0, then provide a delta of exactly MAX_FRAMES_PER_TICK * frameDuration.
+      // The delta clamp is MAX_FRAME_DELTA_MS=500, and 4 * 41.67 = 166.67ms which is under 500.
+      const exactDelta = frameDuration * MAX_FRAMES_PER_TICK; // ~166.67ms
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'realtime', 1000 + exactDelta);
+
+      // The cap uses `>` not `>=`, so exactly MAX_FRAMES_PER_TICK should NOT trigger the cap
+      expect(result.framesToAdvance).toBe(MAX_FRAMES_PER_TICK);
+      // Accumulator should not have been forcibly reset (only the normal subtraction in the while loop)
+      // The remaining accumulator should be near 0 (just floating point residual)
+      expect(state.frameAccumulator).toBeLessThan(frameDuration);
+    });
+
+    it('PTC-LOW20-013: high-speed playback (fps=60, speed=8) with normal tick does not trigger cap issues', () => {
+      const fps = 60;
+      const speed = 8;
+      const frameDuration = 1000 / fps / speed; // 1000/60/8 = ~2.083ms
+      state.lastFrameTime = 1000;
+
+      // Normal 16.67ms rAF tick
+      const normalDelta = 16.67;
+      const result = controller.accumulateFrames(state, fps, speed, 1, 'realtime', 1000 + normalDelta);
+
+      // 16.67 / 2.083 ~= 8 frames, which exceeds MAX_FRAMES_PER_TICK (4)
+      // so the cap will apply and limit to MAX_FRAMES_PER_TICK
+      expect(result.framesToAdvance).toBe(MAX_FRAMES_PER_TICK);
+      expect(result.frameDuration).toBeCloseTo(frameDuration, 2);
+      // Accumulator should be bounded after cap
+      expect(state.frameAccumulator).toBeLessThanOrEqual(frameDuration);
     });
   });
 });

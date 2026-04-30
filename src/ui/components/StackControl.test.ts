@@ -8,16 +8,46 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StackControl } from './StackControl';
 import { type BlendMode, BLEND_MODES } from '../../composite/BlendModes';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('StackControl', () => {
   let control: StackControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new StackControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('STACK-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      document.body.appendChild(control.render());
+      expectRegistrationCount(0);
+      control.showPanel();
+      expectRegistrationCount(1);
+      control.hidePanel();
+      expectRegistrationCount(0);
+    });
+
+    it('STACK-OCR-002: outside click dismisses the panel', () => {
+      document.body.appendChild(control.render());
+      control.showPanel();
+      const panel = document.querySelector('[data-testid="stack-panel"]') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+
+      dispatchOutsideClick();
+
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+    });
   });
 
   describe('initialization', () => {
@@ -412,7 +442,10 @@ describe('StackControl', () => {
   });
 
   describe('blend modes', () => {
-    BLEND_MODES.forEach((mode: BlendMode) => {
+    // 'topmost' is a stack-level mode and is coerced to 'normal' at render time
+    // by StackControl (see HIGH-25 follow-up); this parameterized test covers
+    // the per-layer modes the dropdown surfaces.
+    BLEND_MODES.filter((m) => m !== 'topmost').forEach((mode: BlendMode) => {
       it(`STACK-U100-${mode}: layer can have ${mode} blend mode`, () => {
         const layer = control.addLayer({
           name: 'Test Layer',
@@ -424,6 +457,95 @@ describe('StackControl', () => {
 
         expect(layer.blendMode).toBe(mode);
       });
+    });
+
+    // STACK-U101/102/103 cover the per-layer blend dropdown contract enforced
+    // by the HIGH-25 follow-up (commit d60b8f1). They were claimed but not
+    // landed in that commit; this batch closes the gap.
+    function getBlendSelectForFirstLayer(): HTMLSelectElement {
+      control.render();
+      control.showPanel();
+      const layers = control.getLayers();
+      expect(layers.length).toBeGreaterThan(0);
+      const select = document.querySelector(
+        `[data-testid="stack-layer-blend-${layers[0]!.id}"]`,
+      ) as HTMLSelectElement | null;
+      expect(select).not.toBeNull();
+      return select!;
+    }
+
+    it("STACK-U101: dropdown does not include 'topmost' option", () => {
+      control.addLayer({
+        name: 'Layer 1',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        sourceIndex: 0,
+      });
+
+      const select = getBlendSelectForFirstLayer();
+      const values = Array.from(select.options).map((opt) => opt.value);
+      expect(values).not.toContain('topmost');
+    });
+
+    it('STACK-U102: dropdown includes all per-layer modes (normal/add/multiply/screen/overlay/difference/exclusion/dissolve/minus)', () => {
+      control.addLayer({
+        name: 'Layer 1',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        sourceIndex: 0,
+      });
+
+      const select = getBlendSelectForFirstLayer();
+      const values = Array.from(select.options).map((opt) => opt.value);
+
+      const expected: BlendMode[] = [
+        'normal',
+        'add',
+        'multiply',
+        'screen',
+        'overlay',
+        'difference',
+        'exclusion',
+        'dissolve',
+        'minus',
+      ];
+      for (const mode of expected) {
+        expect(values).toContain(mode);
+      }
+    });
+
+    it("STACK-U103: when layer.blendMode='topmost', render coerces to 'normal' AND emits layerChanged", () => {
+      // Add a layer with the stack-level 'topmost' mode (e.g. loaded from an
+      // older session). The render path must coerce it to 'normal' AND emit
+      // layerChanged so the data model converges with the UI.
+      // Subscribe BEFORE adding the layer, since addLayer() triggers
+      // updateLayerList() which runs the coercion immediately.
+      const callback = vi.fn();
+      control.on('layerChanged', callback);
+
+      const layer = control.addLayer({
+        name: 'Layer 1',
+        visible: true,
+        opacity: 1,
+        // Cast: BlendMode includes 'topmost' but the dropdown filters it; we
+        // exercise the coercion guard explicitly.
+        blendMode: 'topmost' as BlendMode,
+        sourceIndex: 0,
+      });
+
+      // Coercion happens during createLayerElement (called from
+      // updateLayerList in addLayer). It runs again when render()/showPanel()
+      // refresh the list — both paths must yield the same coerced state.
+      control.render();
+      control.showPanel();
+
+      const layers = control.getLayers();
+      expect(layers[0]!.blendMode).toBe('normal');
+      expect(callback).toHaveBeenCalled();
+      // The emit payload is a shallow clone of the layer with blendMode='normal'.
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id: layer.id, blendMode: 'normal' }));
     });
   });
 
@@ -578,12 +700,12 @@ describe('StackControl', () => {
       expect(() => control.dispose()).not.toThrow();
     });
 
-    it('STACK-U153: dispose removes document click listener', () => {
-      const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    it('STACK-U153: dispose deregisters from OutsideClickRegistry when open', () => {
       control.render();
+      control.showPanel();
+      expectRegistrationCount(1);
       control.dispose();
-      expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function));
-      removeEventListenerSpy.mockRestore();
+      expectRegistrationCount(0);
     });
   });
 });

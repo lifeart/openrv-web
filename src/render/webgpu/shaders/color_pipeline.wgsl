@@ -1,6 +1,12 @@
 // Stage 6: Color Pipeline — color wheels, CDL, HSL qualifier, film emulation,
 // input primaries matrix, file LUT 3D, look LUT 3D.
 // Ports sections 6a-6f and 0e from viewer.frag.glsl.
+//
+// NOTE: This shader expects common.wgsl to be prepended, which provides:
+//   LUMA. The applyLUT3DStageLocal helper is defined here because it binds
+//   the stage-local `samp` sampler and the per-LUT texture directly —
+//   WGSL with `layout: 'auto'` pipelines cannot share resource-bound
+//   helpers across compilations from a generic prelude.
 
 struct Uniforms {
   // Color Wheels (Lift/Gamma/Gain)
@@ -75,10 +81,8 @@ struct Uniforms {
   lookLUT3DDomainMax: vec4f, // .xyz = max, .w = unused
 }
 
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
+// VSOut is provided by the prepended vertex shader source
+// (_viewer_vert.wgsl or _passthrough_vert.wgsl) at pipeline build time.
 
 @group(0) @binding(0) var samp: sampler;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -88,8 +92,7 @@ struct VSOut {
 
 @group(1) @binding(0) var<uniform> u: Uniforms;
 
-// Luminance coefficients (Rec. 709)
-const LUMA = vec3f(0.2126, 0.7152, 0.0722);
+// LUMA is provided by common.wgsl (prepended).
 
 // --- RGB to HSL conversion ---
 fn rgbToHsl(c: vec3f) -> vec3f {
@@ -195,7 +198,7 @@ fn ACEScctToLinear(color: vec3f) -> vec3f {
 }
 
 // Generic 3D LUT application with domain mapping, trilinear interpolation, and intensity blend
-fn applyLUT3DGeneric(lut: texture_3d<f32>, color: vec3f, lutSize: f32, intensity: f32,
+fn applyLUT3DStageLocal(lut: texture_3d<f32>, color: vec3f, lutSize: f32, intensity: f32,
                      domainMin: vec3f, domainMax: vec3f) -> vec3f {
   var normalized = (color - domainMin) / (domainMax - domainMin);
   normalized = clamp(normalized, vec3f(0.0), vec3f(1.0));
@@ -206,14 +209,7 @@ fn applyLUT3DGeneric(lut: texture_3d<f32>, color: vec3f, lutSize: f32, intensity
   return mix(color, lutColor, intensity);
 }
 
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x, y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
+// `@vertex fn vs(...)` is provided by the prepended vertex shader source.
 
 @fragment fn fs(in: VSOut) -> @location(0) vec4f {
   var color = textureSample(tex, samp, in.uv);
@@ -222,7 +218,7 @@ fn applyLUT3DGeneric(lut: texture_3d<f32>, color: vec3f, lutSize: f32, intensity
   // When active, bypasses automatic input primaries conversion
   if (u.fileLUT3DEnabled == 1) {
     color = vec4f(
-      applyLUT3DGeneric(fileLUT3D, color.rgb, u.fileLUT3DSize,
+      applyLUT3DStageLocal(fileLUT3D, color.rgb, u.fileLUT3DSize,
                         u.fileLUT3DIntensity, u.fileLUT3DDomainMin.xyz,
                         u.fileLUT3DDomainMax.xyz),
       color.a
@@ -288,7 +284,7 @@ fn applyLUT3DGeneric(lut: texture_3d<f32>, color: vec3f, lutSize: f32, intensity
   // 6d. Look LUT (per-source creative grade)
   if (u.lookLUT3DEnabled == 1) {
     color = vec4f(
-      applyLUT3DGeneric(lookLUT3D, color.rgb, u.lookLUT3DSize,
+      applyLUT3DStageLocal(lookLUT3D, color.rgb, u.lookLUT3DSize,
                         u.lookLUT3DIntensity, u.lookLUT3DDomainMin.xyz,
                         u.lookLUT3DDomainMax.xyz),
       color.a

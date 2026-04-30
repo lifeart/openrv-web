@@ -12,6 +12,7 @@ import { MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export class ZebraControl {
   private container: HTMLElement;
@@ -20,7 +21,7 @@ export class ZebraControl {
   private isDropdownOpen = false;
   private toggleButton: HTMLButtonElement;
   private boundHandleReposition: () => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private highCheckbox!: HTMLInputElement;
   private lowCheckbox!: HTMLInputElement;
   private highSlider!: HTMLInputElement;
@@ -32,13 +33,7 @@ export class ZebraControl {
   constructor(zebraStripes: ZebraStripes) {
     this.zebraStripes = zebraStripes;
     this.boundHandleReposition = () => this.positionDropdown();
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isDropdownOpen) {
-        this.toggleDropdown();
-      }
-    };
+    // Outside-click and Escape dismiss are handled by OutsideClickRegistry.
 
     // Create container
     this.container = document.createElement('div');
@@ -330,17 +325,26 @@ export class ZebraControl {
       }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
-      document.addEventListener('click', this.handleOutsideClick);
-      document.addEventListener('keydown', this.boundHandleKeyDown);
+      this.deregisterDismiss = outsideClickRegistry.register({
+        elements: [this.container, this.dropdown],
+        onDismiss: () => this.closeDropdown(),
+        dismissOn: 'click',
+      });
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
-      this.dropdown.style.display = 'none';
-      document.removeEventListener('click', this.handleOutsideClick);
-      document.removeEventListener('keydown', this.boundHandleKeyDown);
-      window.removeEventListener('resize', this.boundHandleReposition);
-      window.removeEventListener('scroll', this.boundHandleReposition, true);
+      this.closeDropdown();
     }
+  }
+
+  private closeDropdown(): void {
+    this.isDropdownOpen = false;
+    this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.dropdown.style.display = 'none';
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
+    window.removeEventListener('resize', this.boundHandleReposition);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
   }
 
   private positionDropdown(): void {
@@ -348,20 +352,6 @@ export class ZebraControl {
     this.dropdown.style.top = `${rect.bottom + 4}px`;
     this.dropdown.style.left = `${rect.left}px`;
   }
-
-  private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      if (this.isDropdownOpen) {
-        this.isDropdownOpen = false;
-        this.toggleButton.setAttribute('aria-expanded', 'false');
-        this.dropdown.style.display = 'none';
-        document.removeEventListener('click', this.handleOutsideClick);
-        document.removeEventListener('keydown', this.boundHandleKeyDown);
-        window.removeEventListener('resize', this.boundHandleReposition);
-        window.removeEventListener('scroll', this.boundHandleReposition, true);
-      }
-    }
-  };
 
   /**
    * Get the zebra stripes instance
@@ -381,8 +371,8 @@ export class ZebraControl {
    * Dispose
    */
   dispose(): void {
-    document.removeEventListener('click', this.handleOutsideClick);
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

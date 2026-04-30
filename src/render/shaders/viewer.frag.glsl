@@ -253,17 +253,50 @@
         return max(color, 0.0);
       }
 
+      // ----- HDR headroom semantics (MED-52) -----
+      // All tone mapping operators (except Drago, see below) use a UNIFORM
+      // headroom convention: the input is scene-referred linear with peak
+      // white at u_hdrHeadroom (i.e. SDR diffuse white = 1.0, display peak
+      // = u_hdrHeadroom). Each operator follows the pattern
+      //
+      //   scaled = color / hdrHeadroom        // normalize so peak = 1.0
+      //   mapped = <operator-specific curve>(scaled)
+      //   result = mapped * hdrHeadroom        // re-scale so result peak = headroom
+      //
+      // Why: this guarantees that
+      //   (a) at hdrHeadroom == 1.0 (SDR display) every operator reduces to
+      //       its canonical [0,1]→[0,1] curve and outputs in the display
+      //       range expected by downstream stages (display LUT, transfer,
+      //       gamma, then SDR clamp). All operators are A/B comparable.
+      //   (b) at hdrHeadroom > 1.0 (HDR display) every operator produces
+      //       output up to hdrHeadroom, preserving display-side headroom in
+      //       the same way for every operator. Output range is [0, headroom]
+      //       and downstream stages (HDR pass-through, no clamp) preserve it.
+      //
+      // Drago is a physically-parameterized operator (Lwa, Lmax) and does
+      // not fit this normalize/rescale pattern; it scales Lmax by headroom
+      // and uses dragoBrightness as its own post-multiplier instead.
+
       // Reinhard tone mapping operator
-      // Simple global operator that preserves detail in highlights
+      // Simple global operator that preserves detail in highlights.
       // Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom, apply extended Reinhard with curve white-point wp, then
+      // re-scale by hdrHeadroom. The curve identity (wp) is preserved.
       vec3 tonemapReinhard(vec3 color) {
-        float wp = u_tmReinhardWhitePoint * u_hdrHeadroom;
+        // Defensive: floor headroom away from zero so divisions never blow up
+        // even if a caller manages to slip a non-finite/zero value past the
+        // CPU-side sanitization in Renderer.setHDRHeadroom.
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        float wp = u_tmReinhardWhitePoint;
         float wp2 = wp * wp;
-        return color * (1.0 + color / wp2) / (1.0 + color);
+        vec3 scaled = color / headroom;
+        vec3 mapped = scaled * (1.0 + scaled / wp2) / (1.0 + scaled);
+        return mapped * headroom;
       }
 
       // Filmic tone mapping (Uncharted 2 style)
-      // S-curve response similar to film stock
+      // S-curve response similar to film stock.
       // Reference: John Hable, "Uncharted 2: HDR Lighting"
       vec3 filmic(vec3 x) {
         float A = 0.15;  // Shoulder strength
@@ -275,16 +308,26 @@
         return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
       }
 
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom, apply Hable filmic curve with normalized white-point,
+      // re-scale by hdrHeadroom. Curve identity (whitePoint, exposureBias)
+      // is preserved.
       vec3 tonemapFilmic(vec3 color) {
-        vec3 curr = filmic(u_tmFilmicExposureBias * color);
-        vec3 whiteScale = vec3(1.0) / filmic(vec3(u_tmFilmicWhitePoint * u_hdrHeadroom));
-        // Clamp to non-negative to match CPU implementation (filmic curve can produce slightly negative values)
-        return max(curr * whiteScale, vec3(0.0));
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
+        vec3 curr = filmic(u_tmFilmicExposureBias * scaled);
+        vec3 whiteScale = vec3(1.0) / filmic(vec3(u_tmFilmicWhitePoint));
+        // Clamp to non-negative (filmic curve can produce slightly negative values)
+        return max(curr * whiteScale, vec3(0.0)) * headroom;
       }
 
       // ACES (Academy Color Encoding System) tone mapping
-      // Industry standard for cinema
-      // Reference: Academy ACES Output Transform
+      // Industry standard for cinema.
+      // Reference: Academy ACES Output Transform (Narkowicz fit)
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom, apply Narkowicz fit which maps [0,1]→[0,1], re-scale by
+      // hdrHeadroom. The curve clamp to [0,1] is part of the operator
+      // identity (saturation behavior) and preserved.
       vec3 tonemapACES(vec3 color) {
         // ACES fitted curve by Krzysztof Narkowicz
         float a = 2.51;
@@ -292,14 +335,18 @@
         float c = 2.43;
         float d = 0.59;
         float e = 0.14;
-        // Scale input to map headroom range to [0,1], apply curve, then scale back
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         vec3 mapped = clamp((scaled * (a * scaled + b)) / (scaled * (c * scaled + d) + e), 0.0, 1.0);
-        return mapped * u_hdrHeadroom;
+        return mapped * headroom;
       }
 
       // AgX tone mapping (Troy Sobotka / Blender 4.x)
-      // Best hue preservation in saturated highlights
+      // Best hue preservation in saturated highlights.
+      // Uniform headroom convention (see comment block above): the AgX curve
+      // expects log2 input in [AgxMinEv, AgxMaxEv]; normalize by hdrHeadroom
+      // before the log2 step so the curve operates on the same dynamic range
+      // regardless of headroom. Re-scale by hdrHeadroom on output.
       vec3 agxDefaultContrastApprox(vec3 x) {
         vec3 x2 = x * x;
         vec3 x4 = x2 * x2;
@@ -313,6 +360,20 @@
       }
 
       vec3 tonemapAgX(vec3 color) {
+        // AgX inset/outset matrices.
+        // Working space: BT.709/sRGB linear (in the OpenRV pipeline AgX runs
+        // AFTER input primaries normalization, i.e. on BT.709 working space).
+        // These are NOT classical primary-conversion matrices: they are an
+        // "inset" (gamut compression toward white) and its near-inverse
+        // "outset" used to gently contract saturated values into the curve's
+        // sigmoid domain and restore them on output. The pair is sometimes
+        // called the AgX "inner/outer gamut" transforms. Source: Troy
+        // Sobotka's AgX (Blender 4.x / Filmic-2 pipeline). Reference values
+        // from MJP/Three.js port of the canonical AgX 0.13.5 LUT-free fit.
+        // Column-major for GLSL: each `vec3(...)` is one column.
+        // Mirrored in:
+        //   - src/render/webgpu/shaders/common.wgsl (column-major)
+        //   - src/utils/effects/effectProcessing.shared.ts (row-major reinterpretation)
         const mat3 AgXInsetMatrix = mat3(
           vec3(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
           vec3(0.0784335999999992, 0.878468636469772, 0.0784336),
@@ -326,7 +387,8 @@
         const float AgxMinEv = -12.47393;
         const float AgxMaxEv = 4.026069;
 
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         scaled = AgXInsetMatrix * scaled;
         scaled = max(scaled, vec3(1e-10));
         scaled = log2(scaled);
@@ -335,34 +397,39 @@
         scaled = agxDefaultContrastApprox(scaled);
         scaled = AgXOutsetMatrix * scaled;
         scaled = clamp(scaled, 0.0, 1.0);
-        return scaled * u_hdrHeadroom;
+        return scaled * headroom;
       }
 
       // PBR Neutral tone mapping (Khronos)
-      // Minimal hue/saturation shift, ideal for color-critical work
+      // Minimal hue/saturation shift, ideal for color-critical work.
+      // Uniform headroom convention (see comment block above).
       vec3 tonemapPBRNeutral(vec3 color) {
         const float startCompression = 0.8 - 0.04;
         const float desaturation = 0.15;
 
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
 
         float x = min(scaled.r, min(scaled.g, scaled.b));
         float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
         scaled -= offset;
 
         float peak = max(scaled.r, max(scaled.g, scaled.b));
-        if (peak < startCompression) return scaled * u_hdrHeadroom;
+        if (peak < startCompression) return scaled * headroom;
 
         float d = 1.0 - startCompression;
         float newPeak = 1.0 - d * d / (peak + d - startCompression);
         scaled *= newPeak / peak;
 
         float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-        return mix(scaled, vec3(newPeak), g) * u_hdrHeadroom;
+        return mix(scaled, vec3(newPeak), g) * headroom;
       }
 
       // GT tone mapping per-channel (Hajime Uchimura / Gran Turismo Sport)
-      // Smooth highlight rolloff with toe and shoulder regions
+      // Smooth highlight rolloff with toe and shoulder regions.
+      // The channel function expects input in [0, P=1.0]; tonemapGT applies
+      // the uniform headroom convention (see comment block above) by
+      // normalizing/rescaling around the channel function.
       float gt_tonemap_channel(float x) {
         const float P = 1.0;
         const float a = 1.0;
@@ -389,17 +456,21 @@
       }
 
       vec3 tonemapGT(vec3 color) {
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         vec3 mapped = vec3(
           gt_tonemap_channel(scaled.r),
           gt_tonemap_channel(scaled.g),
           gt_tonemap_channel(scaled.b)
         );
-        return mapped * u_hdrHeadroom;
+        return mapped * headroom;
       }
 
       // ACES Hill tone mapping (Stephen Hill)
-      // More accurate RRT+ODT fit than Narkowicz
+      // More accurate RRT+ODT fit than Narkowicz.
+      // Uniform headroom convention (see comment block above): normalize by
+      // hdrHeadroom before the AP1 input matrix so the rational fit operates
+      // on the same dynamic range regardless of headroom; re-scale on output.
       vec3 RRTAndODTFit(vec3 v) {
         vec3 a = v * (v + 0.0245786) - 0.000090537;
         vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
@@ -407,6 +478,23 @@
       }
 
       vec3 tonemapACESHill(vec3 color) {
+        // ACES Hill input/output matrices.
+        // ACESInputMat: BT.709 linear → ACES AP1 (ACEScg) — NOT a pure primary
+        //   conversion; it is the Stephen Hill "ODT-tuned" composite matrix
+        //   that combines BT.709→AP0→AP1 with a slight desaturation pre-bake
+        //   so the rational RRT+ODT fit on the next line matches the
+        //   reference ACES 1.0 Output Transform output for BT.709 displays.
+        // ACESOutputMat: AP1 → BT.709 linear, the inverse companion (also
+        //   Stephen Hill's tuned form, not a strict mathematical inverse).
+        // Working space at the call site is BT.709 linear (post input-primaries
+        // normalization, MED-52 headroom convention applied).
+        // Reference: Stephen Hill, "ACES Filmic Tone Mapping Curve",
+        //   https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+        //   (originally derived from ACES 1.0 reference RRT+ODT in CTL).
+        // Column-major for GLSL: each `vec3(...)` is one column.
+        // Mirrored in:
+        //   - src/render/webgpu/shaders/common.wgsl (column-major)
+        //   - src/utils/effects/effectProcessing.shared.ts (row-major reinterpretation)
         const mat3 ACESInputMat = mat3(
           vec3(0.59719, 0.07600, 0.02840),
           vec3(0.35458, 0.90834, 0.13383),
@@ -418,16 +506,22 @@
           vec3(-0.07367, -0.00605,  1.07602)
         );
 
-        vec3 scaled = color / u_hdrHeadroom;
+        float headroom = max(u_hdrHeadroom, 1e-6);
+        vec3 scaled = color / headroom;
         scaled = ACESInputMat * scaled;
         scaled = RRTAndODTFit(scaled);
         scaled = ACESOutputMat * scaled;
         scaled = clamp(scaled, 0.0, 1.0);
-        return scaled * u_hdrHeadroom;
+        return scaled * headroom;
       }
 
       // Drago adaptive logarithmic tone mapping (per-channel)
       // Reference: Drago et al., "Adaptive Logarithmic Mapping For Displaying High Contrast Scenes"
+      // Drago is physically-parameterized: Lwa=scene avg luminance,
+      // Lmax=scene peak. Headroom is folded into Lmax (display peak) and the
+      // post-multiplier u_tmDragoBrightness scales output. Drago therefore
+      // does NOT use the normalize/rescale convention shared by the other
+      // operators, by design — its own parameters express the headroom.
       float tonemapDragoChannel(float L) {
         float Lwa = max(u_tmDragoLwa, 1e-6);
         float Lmax = max(u_tmDragoLmax, 1e-6) * u_hdrHeadroom;
@@ -448,22 +542,53 @@
       }
 
       // --- Gamut mapping matrices and functions ---
+      //
+      // These matrices convert linear-light scene-referred RGB between RGB
+      // working spaces sharing the D65 white point. They are pure 3x3 primary
+      // conversions (no chromatic adaptation needed, since all three spaces
+      // are D65); each row of the math matrix gives the destination primary
+      // contribution from each source primary.
+      //
+      // Storage convention: GLSL `mat3(...)` is COLUMN-MAJOR. The literal
+      // groups of 3 below are columns of the storage matrix, which means the
+      // numbers as you read them across each VISUAL row form one COLUMN of
+      // the math matrix. Thus `M * v` produces:
+      //   r' = m[0][0]*r + m[1][0]*g + m[2][0]*b
+      // where m[col][row] is the GLSL column-major access. Verified by the
+      // tests in src/render/__tests__/shaderMathColorPipeline.test.ts
+      // (XE-MATRIX-002..006) that pin matrix values against documented intent.
+      //
+      // These matrices are mirrored byte-for-byte in:
+      //   - src/render/webgpu/shaders/scene_analysis.wgsl (column-major)
+      //   - src/utils/effects/effectProcessing.shared.ts (row-major, see notes there)
+      //   - src/render/ShaderConstants.ts (COLOR_PRIMARIES_MATRICES, column-major)
 
-      // Rec.2020 to sRGB (derived from ITU-R BT.2020 and sRGB chromaticity coordinates)
-      // Column-major for GLSL: each group of 3 is one column
+      // Rec.2020 (ITU-R BT.2020) → sRGB / BT.709 (D65 → D65)
+      // Source primaries: BT.2020 (R: 0.708,0.292; G: 0.170,0.797; B: 0.131,0.046)
+      // Dest primaries:   BT.709 (R: 0.640,0.330; G: 0.300,0.600; B: 0.150,0.060)
+      // Both spaces share D65 (0.3127, 0.3290), so derivation is RGB→XYZ→RGB
+      // without chromatic adaptation. Reference: ITU-R BT.2020-2 Table 4 and
+      // ITU-R BT.709-6 Item 1.4. Column-major for GLSL: each group of 3 is one column.
       const mat3 REC2020_TO_SRGB = mat3(
          1.6605, -0.1246, -0.0182,
         -0.5876,  1.1329, -0.1006,
         -0.0728, -0.0083,  1.1187
       );
-      // Rec.2020 to Display-P3 (derived from ITU-R BT.2020 and DCI-P3 D65 chromaticity coordinates)
-      // Column-major for GLSL: each group of 3 is one column
+      // Rec.2020 (ITU-R BT.2020) → Display-P3 (D65 → D65)
+      // Source primaries: BT.2020. Dest primaries: Display-P3 / SMPTE RP 431-2 D65
+      // (R: 0.680,0.320; G: 0.265,0.690; B: 0.150,0.060). Both D65, no
+      // chromatic adaptation. Reference: SMPTE EG 432-1 / Apple Display P3
+      // (DCI-P3 primaries with sRGB-style D65 white point).
+      // Column-major for GLSL: each group of 3 is one column.
       const mat3 REC2020_TO_P3 = mat3(
          1.3436, -0.0653,  0.0028,
         -0.2822,  1.0758, -0.0196,
         -0.0614, -0.0105,  1.0168
       );
-      // Display-P3 to sRGB
+      // Display-P3 (D65) → sRGB / BT.709 (D65)
+      // Source primaries: Display-P3. Dest primaries: BT.709. Both D65.
+      // Reference: SMPTE EG 432-1 (Display-P3) and ITU-R BT.709-6.
+      // Column-major for GLSL: each group of 3 is one column.
       const mat3 P3_TO_SRGB = mat3(
          1.2249, -0.0420, -0.0197,
         -0.2247,  1.0419, -0.0786,
@@ -558,8 +683,16 @@
           hlgOETFInverse(signal.b)
         );
         // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ≈ 1.2
+        // Below OOTF_THRESH, use a linear ramp to avoid extreme gain for
+        // near-black values (BT.2100 does not define special handling, but
+        // pow(ys, 0.2) amplifies noise in shadows; a linear extension from
+        // the origin to the threshold keeps the curve C0-continuous).
+        const float OOTF_THRESH = 0.01;
+        const float OOTF_SLOPE  = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
         float ys = dot(scene, LUMA);
-        float ootfGain = pow(max(ys, 1e-6), 0.2); // gamma - 1 = 0.2
+        float ootfGain = (ys < OOTF_THRESH)
+          ? ys * OOTF_SLOPE   // linear ramp: ys * T^(0.2-1)
+          : pow(ys, 0.2);     // normal power curve
         return scene * ootfGain;
       }
 
@@ -1089,6 +1222,10 @@
         // 3. Brightness (simple offset)
         color.rgb += u_brightness;
 
+        // 3a. Clamp after brightness: negative values are physically meaningless
+        // and would be amplified by contrast multiplication, producing artifacts.
+        color.rgb = max(color.rgb, vec3(0.0));
+
         // 4. Contrast (pivot at 0.5, per-channel)
         color.rgb = (color.rgb - 0.5) * u_contrastRGB + 0.5;
 
@@ -1156,13 +1293,41 @@
         }
 
         // 5e. Clarity (local contrast enhancement via unsharp mask on midtones)
-        // NOTE: Clarity samples neighboring pixels from u_texture (the original source image).
-        // In the CPU path, clarity operates on already-modified pixel data within the same
-        // imageData buffer. The GPU single-pass approach samples the original texture for
-        // the blur kernel, which means the high-frequency detail extraction is based on
-        // ungraded pixel differences. This is a known architectural difference between the
-        // GPU and CPU paths, accepted as a design trade-off for single-pass rendering
-        // performance. The visual difference is minimal for most grading scenarios.
+        //
+        // TRADE-OFF (LOW-07): Clarity samples the raw input texture (u_texture)
+        // for its 5x5 Gaussian blur kernel, NOT the post-color-pipeline color
+        // value computed earlier in this fragment. This is intentional and is
+        // the documented design for the single-pass GLSL renderer.
+        //
+        // Why raw texture sampling:
+        //   - Sampling a "post-color-pipeline" value would require routing the
+        //     intermediate pipeline result back through a texture, which is not
+        //     possible inside a single fragment invocation. The only correct
+        //     way to sample neighbours after color processing is to render the
+        //     color pipeline into an offscreen FBO first, then run a SECOND
+        //     pass that samples the FBO for the clarity blur kernel. That
+        //     extra render pass + FBO allocation is exactly the cost we are
+        //     avoiding here for performance and memory.
+        //   - Quality implications: the blur kernel therefore operates on the
+        //     INPUT encoding (whatever u_texture stores: sRGB/HLG/PQ-decoded
+        //     linear with input primaries), not on display-referred values.
+        //     For an unsharp-mask-style perceptual edge enhancer like clarity
+        //     this is acceptable because the effect is dominated by local
+        //     high-frequency differences, which survive the linear pipeline
+        //     transformations well. The CPU path operates on display-referred
+        //     8-bit pixels (it runs after color processing on the imageData
+        //     buffer); GPU/CPU output therefore differs by a small, expected
+        //     amount in heavily-graded scenes.
+        //   - The center pixel for the blend (origCenter) and the blurred
+        //     neighbours are sampled from the SAME texture so the high-freq
+        //     subtraction (origCenter - blurred) is self-consistent.
+        //
+        // If you are tempted to "fix" this by sampling color.rgb here: don't.
+        // The blur kernel needs neighbouring pixels, not the current pixel,
+        // and there is no way to sample post-pipeline neighbours without an
+        // additional render pass. Convert to a multi-pass pipeline (see the
+        // WebGPU backend's spatialEffects stage) if a true post-pipeline
+        // sample is required.
         if (u_clarityEnabled && u_clarity != 0.0) {
           // Compute blur and detail entirely in original texture space
           // to avoid cross-space artifacts between processed color and raw texture.
@@ -1345,13 +1510,34 @@
         }
 
         // 7b. Sharpen (unsharp mask, after tone mapping but before display transfer)
-        // NOTE: Sharpen samples neighboring pixels from u_texture (the original source image).
-        // In the CPU path, sharpen operates on already-modified pixel data within the same
-        // imageData buffer. The GPU single-pass approach samples the original texture for
-        // the convolution kernel, which means the sharpening detail is based on ungraded
-        // pixel differences. This is a known architectural difference between the GPU and
-        // CPU paths, accepted as a design trade-off for single-pass rendering performance.
-        // The visual difference is minimal for most grading scenarios.
+        //
+        // TRADE-OFF (LOW-07): Sharpen samples the raw input texture (u_texture)
+        // for its 4-tap Laplacian neighbours, NOT the post-color-pipeline
+        // value. Same intentional design as clarity above; see that block for
+        // the full rationale.
+        //
+        // Short version:
+        //   - True post-color-pipeline neighbour sampling would require an
+        //     extra FBO + render pass (run the whole color pipeline into a
+        //     texture, then sample THAT texture for the Laplacian kernel).
+        //     The single-pass GLSL renderer avoids that cost on purpose.
+        //   - Operating on the input encoding rather than display-referred
+        //     values is acceptable for an unsharp-mask edge enhancer:
+        //     local high-frequency detail (origCenter - neighbours) is
+        //     dominated by edges, which survive the linear transformations
+        //     in the color pipeline well. The CPU path samples the same
+        //     post-color buffer it writes back to, so it operates on
+        //     display-referred values; GPU/CPU output differs by a small,
+        //     expected amount in heavily-graded scenes.
+        //   - The center sample (origCenter) and the four neighbours come
+        //     from the SAME texture so the Laplacian (origCenter*4 - sum)
+        //     is self-consistent.
+        //
+        // Do not change this to sample color.rgb: the Laplacian needs
+        // NEIGHBOURING pixels, not the current pixel, and post-pipeline
+        // neighbours are unavailable in a single pass. Use the WebGPU
+        // multi-pass spatialEffectsPost stage if a true post-pipeline sample
+        // is required.
         if (u_sharpenEnabled && u_sharpenAmount > 0.0) {
           // Compute Laplacian detail entirely in original texture space
           // to avoid cross-space artifacts between processed color and raw texture.

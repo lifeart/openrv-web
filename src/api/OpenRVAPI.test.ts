@@ -1980,6 +1980,11 @@ describe('ColorAPI', () => {
       'setLUTIntensity',
       'clearLUT',
       'applyLUTPreset',
+      // MED-51 PR-1 Phase 1: per-stage output color-space declarations
+      'setLUTStageColorPrimaries',
+      'getLUTStageColorPrimaries',
+      'setLUTStageTransferFunction',
+      'getLUTStageTransferFunction',
       'setToneMapping',
       'getToneMapping',
       'setDisplayProfile',

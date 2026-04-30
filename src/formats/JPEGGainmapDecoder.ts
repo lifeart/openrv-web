@@ -26,6 +26,7 @@ import {
   reconstructHDR,
   defaultGainMapMetadata,
 } from './GainMapMetadata';
+import { DecoderError } from '../core/errors';
 
 export interface GainmapInfo {
   baseImageOffset: number;
@@ -57,6 +58,9 @@ export function isGainmapJPEG(buffer: ArrayBuffer): boolean {
  * Returns null if the file is not a valid gainmap JPEG.
  */
 export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
+  // Need at least 4 bytes to read SOI + APP0/APP2 marker.
+  if (buffer.byteLength < 4) return null;
+
   const view = new DataView(buffer);
 
   // Verify JPEG
@@ -73,6 +77,17 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
   // First image is the base (SDR), second is the gainmap
   const baseImage = images[0]!;
   const gainmapImage = images[1]!;
+
+  // Validate base image entry bounds. The base image (entry 0) is structurally
+  // forced to offset=0 in parseMPFEntries; the only attacker-controlled field
+  // is `size`. If size > buffer length, the later slice would silently clamp
+  // to a 0-byte blob and createImageBitmap would fail with an opaque error.
+  ensureMPFRange(baseImage.offset, baseImage.size, buffer.byteLength, 'base image (MPEntry #0)');
+
+  // Validate gainmap entry bounds against actual buffer. uint32+uint32 cannot
+  // exceed Number.MAX_SAFE_INTEGER, so the addition itself is safe; we just
+  // need to ensure the range fits.
+  ensureMPFRange(gainmapImage.offset, gainmapImage.size, buffer.byteLength, 'gainmap image (MPEntry #1)');
 
   // Extract headroom and full metadata from XMP
   // First try the primary image's XMP (Apple format)
@@ -130,6 +145,13 @@ export async function decodeGainmapToFloat32(
   data: Float32Array;
   channels: number;
 }> {
+  // Validate that the gainmap and base image regions are within buffer bounds.
+  // Use the shared `ensureMPFRange` helper so error UX (NaN/negative/OOB) is
+  // unified with the parser path; previously the inline check formatted offsets
+  // in decimal while the parser used hex.
+  ensureMPFRange(info.gainmapOffset, info.gainmapLength, buffer.byteLength, 'gainmap slice (decode)');
+  ensureMPFRange(info.baseImageOffset, info.baseImageLength, buffer.byteLength, 'base image slice (decode)');
+
   // Slice out the base JPEG and gainmap JPEG blobs
   // For the first image (offset 0), use gainmap offset as the end boundary.
   // MPF size fields can underreport the first image's actual size (missing EOI marker),
@@ -226,6 +248,17 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
     if (offset + 3 >= length) break;
     const segmentLength = view.getUint16(offset + 2);
 
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so the minimum legal value is 2. A
+    // value < 2 violates the spec. The current loop body always advances
+    // `offset` by `2 + segmentLength`, so a literal infinite loop on `<2`
+    // is not reproducible here — but allowing parsing to continue past a
+    // spec-violating length means we re-interpret arbitrary bytes (whose
+    // alignment is now wrong) as further markers. Bail to the default
+    // orientation rather than producing garbage.
+    if (segmentLength < 2) break;
+
     // APP1 marker (0xFFE1) — may contain EXIF
     if (marker === 0xe1) {
       // Check for 'Exif\0\0' identifier (6 bytes at offset+4)
@@ -296,6 +329,63 @@ interface MPFImageEntry {
 }
 
 /**
+ * Maximum number of IFD entries (TIFF-style tag entries) we are willing to
+ * iterate through in the MPF index IFD before giving up.
+ *
+ * Rationale (MED-30): the IFD entry count is a uint16 read directly from the
+ * file, so a hostile file can declare up to 65535 entries. Even after
+ * `ensureMPFRange` (HIGH-31) prevents out-of-bounds reads on the entry array
+ * itself, the loop still does 65535 iterations of three DataView reads each,
+ * which is wasted CPU on a corrupt input.
+ *
+ * CIPA DC-007 / ISO 21496-1 don't formally cap this count, but practical MPF
+ * gainmap JPEGs have 2-4 entries (NumberOfImages, MPEntry, ImageUIDList,
+ * TotalFrames). 256 is two orders of magnitude above any real file's entry
+ * count and well below the threshold where iteration cost matters.
+ *
+ * Also reused as the cap for NumberOfImages (tag 0xB001): the previous 65535
+ * limit from HIGH-31 was a uint16 ceiling rather than a practical cap. A
+ * single MPF file with > 256 sub-images is not something we want to spend
+ * cycles on either.
+ */
+const MAX_MPF_IFD_ENTRIES = 256;
+
+/**
+ * Throws a DecoderError if a [start, end) byte range falls outside [0, bufferLength].
+ *
+ * Catches three failure modes that ArrayBuffer.slice would otherwise silently
+ * clamp into a 0-byte (or short) view, producing an opaque downstream error:
+ *  - `start` is negative (e.g., a uint32 read as signed produced a wrap)
+ *  - `start` is at or past the buffer end
+ *  - `start + size` exceeds the buffer length (truncated MPF segment)
+ *
+ * `context` is included verbatim in the error message so call sites can
+ * disambiguate which structural element (IFD entry N, sub-image M, value
+ * offset for tag 0xB002, etc.) was being read.
+ */
+function ensureMPFRange(start: number, size: number, bufferLength: number, context: string): void {
+  // Both start and size are uint32 values from the file; their sum is at most
+  // ~8.6e9, well within Number.MAX_SAFE_INTEGER. The arithmetic itself is safe;
+  // we still need to detect ranges that point past the buffer end or have
+  // negative components.
+  if (!Number.isFinite(start) || !Number.isFinite(size)) {
+    throw new DecoderError('JPEG Gainmap', `MPF: ${context} non-finite offset=${start} size=${size}`);
+  }
+  if (start < 0 || size < 0) {
+    throw new DecoderError(
+      'JPEG Gainmap',
+      `MPF: ${context} negative offset=${start} or size=${size} (buffer length 0x${bufferLength.toString(16)})`,
+    );
+  }
+  if (start + size > bufferLength) {
+    throw new DecoderError(
+      'JPEG Gainmap',
+      `MPF: ${context} offset 0x${start.toString(16)} + size 0x${size.toString(16)} exceeds buffer length 0x${bufferLength.toString(16)}`,
+    );
+  }
+}
+
+/**
  * Find the byte offset of the MPF APP2 marker in a JPEG DataView.
  * Returns -1 if not found.
  */
@@ -334,6 +424,18 @@ function findMPFMarkerOffset(view: DataView): number {
     if (offset + 3 >= length) break;
     const segmentLength = view.getUint16(offset + 2);
 
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so values < 2 are spec-violating. The
+    // existing `offset += 2 + segmentLength` always advances at least 2
+    // bytes per iteration, so a strict-`<2` value alone won't infinite-loop
+    // here — but continuing to parse past a corrupt length means we re-read
+    // misaligned bytes as new markers. For a hostile file where the length
+    // field bytes themselves form `0xFFxx`, that re-traversal can scan a
+    // large region many times. Bail with "no MPF found" — the caller
+    // (isGainmapJPEG) will correctly report the file as not a gainmap JPEG.
+    if (segmentLength < 2) break;
+
     // APP2 marker (0xFFE2) - check for MPF identifier
     if (marker === 0xe2) {
       // Check for 'MPF\0' identifier
@@ -358,14 +460,23 @@ function findMPFMarkerOffset(view: DataView): number {
 /**
  * Parse MPF index IFD to extract image entries.
  * MPF structure follows TIFF-like IFD format.
+ *
+ * Returns null when the MPF header itself is structurally invalid (e.g., wrong
+ * byte-order marker, missing TIFF magic) so callers can fall back gracefully.
+ *
+ * Throws a DecoderError when the MPF header looks valid but offsets/sizes
+ * inside it point outside the buffer — those cases indicate a truncated or
+ * corrupted file and would otherwise produce a silent ArrayBuffer.slice clamp.
  */
 function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry[] | null {
   const entries: MPFImageEntry[] = [];
+  const bufferLength = view.byteLength;
 
   // MPF data starts after marker (2 bytes) + length (2 bytes) + 'MPF\0' (4 bytes)
   const mpfDataStart = mpfMarkerOffset + 8;
 
-  if (mpfDataStart + 8 > view.byteLength) return null;
+  // Need at least byte-order(2) + magic(2) + IFD-offset(4) = 8 bytes for the header.
+  if (mpfDataStart + 8 > bufferLength) return null;
 
   // Read byte order (II = little-endian, MM = big-endian)
   const byteOrder = view.getUint16(mpfDataStart);
@@ -376,14 +487,40 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
   const magic = view.getUint16(mpfDataStart + 2, isLittleEndian);
   if (magic !== 0x002a) return null;
 
-  // Read offset to first IFD (relative to mpfDataStart)
+  // Past this point we've confirmed it's a real MPF/TIFF box, so any offsets
+  // pointing outside the buffer are a corruption error worth reporting clearly,
+  // not a "this isn't an MPF" signal.
+
+  // Read offset to first IFD (relative to mpfDataStart). uint32 values up to
+  // 4 GB are well within Number.MAX_SAFE_INTEGER, so the addition is safe; we
+  // just need to bounds-check the result against the buffer.
   const ifdOffset = view.getUint32(mpfDataStart + 4, isLittleEndian);
   const ifdStart = mpfDataStart + ifdOffset;
 
-  if (ifdStart + 2 > view.byteLength) return null;
+  // Need 2 bytes at ifdStart for the entry count.
+  ensureMPFRange(ifdStart, 2, bufferLength, 'IFD start (mpfDataStart + ifdOffset) reading entry count');
 
   // Read number of IFD entries
   const entryCount = view.getUint16(ifdStart, isLittleEndian);
+
+  // MED-30: the entry count is a uint16, so without an explicit cap the loop
+  // below could do up to 65535 iterations on a hostile input. Even after the
+  // HIGH-31 `ensureMPFRange` check forces such a file to be ~786 KB to even
+  // reach the loop, that's still uncapped CPU work derived from attacker-
+  // controlled bytes. Reject early with a descriptive error; real MPF files
+  // never have more than a handful of IFD entries.
+  if (entryCount > MAX_MPF_IFD_ENTRIES) {
+    throw new DecoderError(
+      'JPEG Gainmap',
+      `MPF: IFD entry count ${entryCount} exceeds practical cap ${MAX_MPF_IFD_ENTRIES} ` +
+        `(real MPF gainmap JPEGs have 2-4 entries; this is likely a corrupt or hostile file)`,
+    );
+  }
+
+  // Bounds-check the entire IFD-entry array up front. Each entry is 12 bytes.
+  if (entryCount > 0) {
+    ensureMPFRange(ifdStart + 2, entryCount * 12, bufferLength, `IFD with ${entryCount} entries`);
+  }
 
   // Look for MPEntry tag (0xB002) in IFD
   let mpEntryOffset = -1;
@@ -391,7 +528,6 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
 
   for (let i = 0; i < entryCount; i++) {
     const entryStart = ifdStart + 2 + i * 12;
-    if (entryStart + 12 > view.byteLength) break;
 
     const tag = view.getUint16(entryStart, isLittleEndian);
     const count = view.getUint32(entryStart + 4, isLittleEndian);
@@ -399,7 +535,21 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
 
     if (tag === 0xb001) {
       // NumberOfImages tag: type=LONG, count=1
-      // The value field contains the actual number of images
+      // The value field contains the actual number of images.
+      //
+      // MED-30: tighten the previous HIGH-31 cap (65535, the uint16 ceiling)
+      // to MAX_MPF_IFD_ENTRIES (256). NumberOfImages and the IFD entry count
+      // are conceptually different fields, but both share the same property:
+      // real MPF gainmap JPEGs only have a handful of sub-images, and
+      // allowing values up to 65535 means later loops can still grind through
+      // attacker-controlled byte counts. Use the same practical cap.
+      if (valueOffset > MAX_MPF_IFD_ENTRIES) {
+        throw new DecoderError(
+          'JPEG Gainmap',
+          `MPF: NumberOfImages (tag 0xB001) value ${valueOffset} exceeds practical cap ${MAX_MPF_IFD_ENTRIES} ` +
+            `(real MPF gainmap JPEGs have 2-4 sub-images)`,
+        );
+      }
       mpEntryCount = valueOffset;
     }
 
@@ -408,18 +558,54 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
       // Each entry is 16 bytes; count is byte length, not entry count
       if (mpEntryCount === 0) {
         mpEntryCount = Math.floor(count / 16);
+        // MED-30 round 2: cap the count/16 derivation explicitly. The
+        // buffer-size check below already prevents OOB and unbounded loops
+        // here, but a direct cap surfaces a clearer "exceeds practical cap"
+        // error when 0xB002 appears before 0xB001 (or 0xB001 is missing) and
+        // an attacker supplies a huge `count`. Mirrors the 0xB001 cap above.
+        if (mpEntryCount > MAX_MPF_IFD_ENTRIES) {
+          throw new DecoderError(
+            'JPEG Gainmap',
+            `MPF: MPEntry table implies ${mpEntryCount} entries, exceeds practical cap ${MAX_MPF_IFD_ENTRIES}`,
+          );
+        }
       }
       // If data > 4 bytes, valueOffset is relative to mpfDataStart
       mpEntryOffset = mpfDataStart + valueOffset;
+
+      // Validate the MPEntry table fits within the buffer. We may not yet
+      // know mpEntryCount (if the 0xB001 tag comes after 0xB002 in the IFD),
+      // so use whichever bound we can derive. `count` is the byte length per
+      // the MPF spec for tag 0xB002.
+      const tableBytes = count > 0 ? count : mpEntryCount * 16;
+      if (tableBytes > 0) {
+        ensureMPFRange(
+          mpEntryOffset,
+          tableBytes,
+          bufferLength,
+          `MPEntry table (tag 0xB002 valueOffset=0x${valueOffset.toString(16)})`,
+        );
+      } else {
+        // Empty table: at least make sure the offset itself is in-buffer.
+        ensureMPFRange(mpEntryOffset, 0, bufferLength, 'MPEntry table (tag 0xB002) offset');
+      }
     }
   }
 
   if (mpEntryOffset === -1 || mpEntryCount === 0) return null;
 
-  // Parse MP entries (each 16 bytes: attributes(4) + size(4) + offset(4) + dep1(2) + dep2(2))
+  // Parse MP entries (each 16 bytes: attributes(4) + size(4) + offset(4) + dep1(2) + dep2(2)).
+  // Validate the full entry array fits before reading individual entries; this
+  // converts a silent "ran out of buffer" truncation into a descriptive error.
+  ensureMPFRange(
+    mpEntryOffset,
+    mpEntryCount * 16,
+    bufferLength,
+    `MPEntry array of ${mpEntryCount} entries (16 bytes each) at offset 0x${mpEntryOffset.toString(16)}`,
+  );
+
   for (let i = 0; i < mpEntryCount; i++) {
     const entryStart = mpEntryOffset + i * 16;
-    if (entryStart + 16 > view.byteLength) break;
 
     const size = view.getUint32(entryStart + 4, isLittleEndian);
     let offset = view.getUint32(entryStart + 8, isLittleEndian);
@@ -492,6 +678,17 @@ function extractHeadroomFromXMP(
     if (offset + 3 >= scanEnd) break;
     const segmentLength = view.getUint16(offset + 2);
 
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so values < 2 are spec-violating. Even
+    // though the loop's `offset += 2 + segmentLength` advances by at least
+    // 2 bytes (so a literal infinite loop on `<2` doesn't reproduce here),
+    // continuing past a corrupt length re-interprets misaligned bytes as
+    // further markers. Treat the whole region as "no headroom found" and
+    // let the caller fall back to the default rather than emit a parsed
+    // value derived from garbage.
+    if (segmentLength < 2) return null;
+
     // APP1 marker (0xFFE1) - may contain XMP
     if (marker === 0xe1) {
       const dataLen = Math.min(segmentLength - 2, buffer.byteLength - offset - 4);
@@ -548,6 +745,16 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
     if (offset + 3 >= scanEnd) break;
     const segmentLength = view.getUint16(offset + 2);
 
+    // Defense-in-depth against malformed JPEGs.
+    // ITU-T T.81 §B.1.1.4: APP/COM segment length is 2 bytes BE and
+    // *includes its own 2 bytes*, so values < 2 are spec-violating. The
+    // loop already advances by at least 2 bytes per iteration, so this
+    // isn't a literal infinite-loop guard — but continuing past a corrupt
+    // length re-interprets misaligned bytes as further markers, which can
+    // produce phantom XMP matches on adversarial inputs. Treat the whole
+    // region as "no XMP here" so the caller falls back to the default.
+    if (segmentLength < 2) return null;
+
     if (marker === 0xe1) {
       const dataLen = Math.min(segmentLength - 2, buffer.byteLength - offset - 4);
       if (dataLen > 0) {
@@ -564,6 +771,23 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
 
   return null;
 }
+
+/**
+ * Test-only export of internal helpers. Not part of the public API — consumers
+ * should not import from this namespace; it exists so unit tests can directly
+ * exercise small internal helpers like `ensureMPFRange` without round-tripping
+ * through crafted MPF buffers for every branch.
+ *
+ * `extractHeadroomFromXMP` and `extractXMPFromJPEG` are exposed here so unit
+ * tests can drive their `segmentLength < 2` defense-in-depth branches directly,
+ * without needing to fold a corrupt APP1 region into a structurally-valid MPF
+ * JPEG and rely on the parent parser to delegate.
+ */
+export const _internal = {
+  ensureMPFRange,
+  extractHeadroomFromXMP,
+  extractXMPFromJPEG,
+};
 
 /**
  * Parse headroom value from XMP text content.

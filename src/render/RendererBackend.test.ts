@@ -568,8 +568,10 @@ describe('createRenderer factory', () => {
   });
 
   it('P4-046: returns WebGPUBackend when webgpuAvailable && webgpuHDR and construction succeeds', () => {
-    // WebGPUBackend constructor itself does not throw; it only throws on initialize()
-    const caps = makeCaps({ webgpuAvailable: true, webgpuHDR: true });
+    // WebGPUBackend constructor itself does not throw; it only throws on initialize().
+    // Force WebGPU via backendOverride since MED-55 P-pre-5 added a default-disabled
+    // feature flag that gates capability-based WebGPU selection.
+    const caps = makeCaps({ webgpuAvailable: true, webgpuHDR: true, backendOverride: 'webgpu' });
     const backend = createRenderer(caps);
     expect(backend).toBeInstanceOf(WebGPUBackend);
   });

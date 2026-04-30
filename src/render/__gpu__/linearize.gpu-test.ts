@@ -55,6 +55,12 @@ function hlgOETFInverseRef(e: number): number {
   return (Math.exp((e - c) / a) + b) / 12.0;
 }
 
+// HLG OOTF near-black threshold and linear-ramp slope.
+// Below OOTF_THRESH the power curve ys^0.2 is replaced by a linear ramp
+// (ys * OOTF_SLOPE) to avoid extreme gain amplification of shadow noise.
+const OOTF_THRESH = 0.01;
+const OOTF_SLOPE = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
+
 function hlgToLinearRef(r: number, g: number, b: number): [number, number, number] {
   const LUMA_R = 0.2126,
     LUMA_G = 0.7152,
@@ -63,7 +69,7 @@ function hlgToLinearRef(r: number, g: number, b: number): [number, number, numbe
   const sg = hlgOETFInverseRef(g);
   const sb = hlgOETFInverseRef(b);
   const ys = sr * LUMA_R + sg * LUMA_G + sb * LUMA_B;
-  const ootfGain = Math.pow(Math.max(ys, 1e-6), 0.2);
+  const ootfGain = ys < OOTF_THRESH ? ys * OOTF_SLOPE : Math.pow(ys, 0.2);
   return [sr * ootfGain, sg * ootfGain, sb * ootfGain];
 }
 
@@ -217,8 +223,22 @@ describe('Linearize Stage — EOTF Pixel Accuracy (real GPU)', () => {
     it('HLG 0.0 -> linear 0.0', () => {
       setup();
       const pixels = renderWithTransfer(0.0, 0.0, 0.0, 1);
-      // HLG(0) = 0^2/3 = 0, OOTF gain = pow(~0, 0.2) ~ 0
+      // HLG(0) = 0^2/3 = 0, OOTF gain = 0 * OOTF_SLOPE = 0 (linear ramp path)
       expectPixel(pixels, W, 0, 0, { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, EPSILON.HDR_HALF);
+    });
+
+    it('HLG near-black 0.01 -> exercises OOTF linear ramp path', () => {
+      setup();
+      const [er, eg, eb] = hlgToLinearRef(0.01, 0.01, 0.01);
+      const pixels = renderWithTransfer(0.01, 0.01, 0.01, 1);
+      expectPixel(pixels, W, 0, 0, { r: er, g: eg, b: eb, a: 1.0 }, EPSILON.HDR_HALF);
+    });
+
+    it('HLG very-near-black 0.001 -> exercises OOTF linear ramp path', () => {
+      setup();
+      const [er, eg, eb] = hlgToLinearRef(0.001, 0.001, 0.001);
+      const pixels = renderWithTransfer(0.001, 0.001, 0.001, 1);
+      expectPixel(pixels, W, 0, 0, { r: er, g: eg, b: eb, a: 1.0 }, EPSILON.HDR_HALF);
     });
 
     it('HLG 0.5 (boundary of piecewise) -> known value', () => {

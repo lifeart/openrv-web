@@ -46,6 +46,15 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   private _startOffset = 0;
   private _startTime = 0;
 
+  /**
+   * Monotonic counter incremented on every play() / pause() / dispose() call.
+   * Used to detect a pause-during-resume race: if `pause()` runs while
+   * `play()` is awaiting `audioContext.resume()`, the in-flight play()
+   * captures an older epoch and aborts before starting a source node.
+   * (See MED-35.)
+   */
+  private _playEpoch = 0;
+
   // For HTMLVideoElement fallback
   private videoElement: HTMLVideoElement | null = null;
   private useVideoFallback = false;
@@ -261,7 +270,13 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   }
 
   /**
-   * Start or resume playback
+   * Start or resume playback.
+   *
+   * `isPlaying` is set synchronously to `true` before awaiting
+   * `audioContext.resume()` so that consumers reading the flag during the
+   * 10-30ms first-gesture resume window observe the intended state. If the
+   * resume rejects, or `pause()` is called during the await, `isPlaying`
+   * reverts to `false` and the in-flight play aborts cleanly. (MED-35)
    */
   async play(fromTime?: number): Promise<boolean> {
     if (this._isPlaying) return true;
@@ -276,10 +291,30 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       return false;
     }
 
+    // Snapshot the current epoch so we can detect a pause-during-resume race.
+    const epoch = ++this._playEpoch;
+
+    // Optimistically set isPlaying / startOffset / startTime / state
+    // SYNCHRONOUSLY so consumers reading these during the resume() await
+    // see the correct intent. Setting _startOffset / _startTime keeps
+    // the `currentTime` getter consistent during the resume window.
+    // We revert below if anything fails or pause() is called.
+    this._isPlaying = true;
+    this._startOffset = clamp(startTime, 0, this._duration);
+    this._startTime = this.audioContext.currentTime;
+    this.setState('playing');
+
     try {
-      // Resume context if suspended
+      // Resume context if suspended (async on first user gesture)
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
+      }
+
+      // If pause() / dispose() / another play() was called while we were
+      // awaiting resume(), the epoch will have changed -- abort cleanly
+      // without starting a source node.
+      if (this._playEpoch !== epoch || !this._isPlaying || !this.audioContext || !this.audioBuffer || !this.gainNode) {
+        return false;
       }
 
       // Stop any existing playback
@@ -300,15 +335,20 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
         }
       };
 
-      // Start playback
-      this._startOffset = clamp(startTime, 0, this._duration);
+      // Re-anchor _startTime now that the source actually starts -- this
+      // accounts for any time elapsed during the resume() await so the
+      // `currentTime` getter is still accurate post-resume.
       this._startTime = this.audioContext.currentTime;
       this.sourceNode.start(0, this._startOffset);
 
-      this._isPlaying = true;
-      this.setState('playing');
       return true;
     } catch (error) {
+      // Revert optimistic state only if no later play()/pause() superseded
+      // this attempt. handleError() will then transition state to 'error'.
+      if (this._playEpoch === epoch) {
+        this._isPlaying = false;
+        this._currentTime = this._startOffset;
+      }
       this.handleError('unknown', 'Failed to start playback', error as Error);
       return false;
     }
@@ -316,6 +356,14 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
   private async playWithVideoFallback(startTime: number): Promise<boolean> {
     if (!this.videoElement) return false;
+
+    // Track epoch so a pause-during-await race aborts cleanly. (MED-35)
+    const epoch = ++this._playEpoch;
+
+    // Optimistically set state synchronously so consumers reading
+    // isPlaying during the await see the correct intent.
+    this._isPlaying = true;
+    this.setState('playing');
 
     try {
       // Sync video element time
@@ -329,11 +377,26 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       this.videoElement.playbackRate = this._playbackRate;
 
       await this.videoElement.play();
-      this._isPlaying = true;
-      this.setState('playing');
+
+      // If pause() / dispose() ran during the await, undo and bail.
+      if (this._playEpoch !== epoch || !this._isPlaying || !this.videoElement) {
+        try {
+          this.videoElement?.pause();
+        } catch {
+          /* ignore */
+        }
+        return false;
+      }
+
       return true;
     } catch (error) {
       const err = error as Error;
+
+      // Revert optimistic state only if not superseded.
+      // handleError() will then transition state to 'error'.
+      if (this._playEpoch === epoch) {
+        this._isPlaying = false;
+      }
 
       // Handle autoplay policy
       if (err.name === 'NotAllowedError') {
@@ -349,10 +412,18 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   }
 
   /**
-   * Pause playback
+   * Pause playback.
+   *
+   * Bumps `_playEpoch` so that any in-flight `play()` awaiting
+   * `audioContext.resume()` can detect the pause and abort before
+   * starting a source node. (See MED-35.)
    */
   pause(): void {
     if (!this._isPlaying) return;
+
+    // Invalidate any in-flight play() awaiting resume() so it aborts
+    // cleanly on resume.
+    this._playEpoch++;
 
     // Save current time before stopping
     this._currentTime = this.currentTime;

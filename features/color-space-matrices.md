@@ -14,6 +14,90 @@ OpenRV uses CIE XYZ as the interchange color space for all color transformations
 - [x] Partially implemented
 - [ ] Fully implemented
 
+## GPU Pipeline Color Primaries Matrices (Canonical)
+
+> **MED-54 verification (2026-04-29).** This section was added as part of the
+> MED-54 documentation pass that documented ~10 inline shader matrices with
+> source/destination spaces, derivation references, and column-major storage
+> conventions, and corrected the misleading "Bradford CAT" JSDoc on
+> `COLOR_PRIMARIES_MATRICES`. The user-facing summary lives in
+> [`docs/color/display-profiles.md` "Supported Color Primaries"](../docs/color/display-profiles.md#supported-color-primaries).
+> Pinned-value tests: `MED-54-001..011` in
+> `src/render/__tests__/shaderMathColorPipeline.test.ts`.
+
+The render pipeline carries scene-referred RGB in a BT.709/sRGB linear working
+space and uses a small, fixed set of D65→D65 primary-conversion matrices for
+gamut mapping at stages 7a and 7d. These matrices are the source of truth used
+by the WebGL2, WebGPU, and CPU paths and must stay in sync.
+
+### Canonical Matrix Set
+
+| Matrix | Source space | Destination space | Reference |
+|--------|--------------|-------------------|-----------|
+| `REC2020_TO_SRGB` | BT.2020 (D65) | BT.709/sRGB (D65) | ITU-R BT.2020-2 Table 4 + ITU-R BT.709-6 Item 1.4 |
+| `REC2020_TO_P3` | BT.2020 (D65) | Display-P3 (D65) | SMPTE EG 432-1 + ITU-R BT.2020-2 |
+| `P3_TO_SRGB` | Display-P3 (D65) | BT.709/sRGB (D65) | SMPTE EG 432-1 + ITU-R BT.709-6 |
+| `SRGB_TO_P3` | BT.709/sRGB (D65) | Display-P3 (D65) | SMPTE EG 432-1 + ITU-R BT.709-6 |
+| `SRGB_TO_REC2020` | BT.709/sRGB (D65) | BT.2020 (D65) | ITU-R BT.2020-2 + ITU-R BT.709-6 |
+
+All five share the D65 white point, so derivation is the direct RGB→XYZ→RGB
+chain from the CIE xy chromaticity coordinates with **no chromatic adaptation
+transform**. A Bradford (or other) CAT is only needed when source and
+destination white points differ (for example, theatrical DCI-P3 with white at
+x=0.314, y=0.351 ≠ D65). Earlier JSDoc that referenced "Bradford CAT" for
+these matrices was misleading and has been corrected (see MED-54).
+
+### Storage Convention
+
+GLSL `mat3` and WGSL `mat3x3f` are **column-major**. The matrices are stored
+as nine floats per matrix; reading them as visual rows in the source files
+gives one column per visual row of the storage matrix. Multiplication
+`M * v` resolves to:
+
+```
+r' = m[0]*r + m[3]*g + m[6]*b
+g' = m[1]*r + m[4]*g + m[7]*b
+b' = m[2]*r + m[5]*g + m[8]*b
+```
+
+The CPU path stores the same numerical matrices in **row-major** order so that
+the JavaScript reference implementation reads naturally; the row-major form is
+the transpose of the GPU layout and produces identical math.
+
+### Mirror Locations (kept in sync byte-for-byte)
+
+| File | Layout | Notes |
+|------|--------|-------|
+| `src/render/ShaderConstants.ts` (`COLOR_PRIMARIES_MATRICES`) | Column-major `Float32Array(9)` | TypeScript uniform source |
+| `src/render/shaders/viewer.frag.glsl` | Column-major GLSL `mat3` | WebGL2 fragment shader |
+| `src/render/webgpu/shaders/common.wgsl` | Column-major WGSL `mat3x3f` | WebGPU shared module |
+| `src/render/webgpu/shaders/scene_analysis.wgsl` | Column-major WGSL `mat3x3f` | WebGPU analysis pass |
+| `src/utils/effects/effectProcessing.shared.ts` | Row-major flat array | CPU/test path |
+
+Pinned-value tests live in
+`src/render/__tests__/shaderMathColorPipeline.test.ts` (`XE-MATRIX-002..006`
+plus `MED-54-001..011`) — they fail if any mirror drifts.
+
+### Tone-Mapping Matrices (NOT pure primary conversions)
+
+The following matrices appear in the same shaders alongside the canonical set
+but are **not** interchangeable with primary conversions. They are tone-mapping
+internals and are documented inline at their declaration sites:
+
+- **AgX inset / outset** (`viewer.frag.glsl`, `common.wgsl`,
+  `effectProcessing.shared.ts`): inner/outer gamut compression pair from
+  Troy Sobotka's AgX 0.13.5 LUT-free fit (MJP variant). Working space is
+  BT.709 linear. They are gamut-compression operators, not BT.709↔ACEScg.
+- **ACES Hill input / output** (same files): Stephen Hill's ODT-tuned
+  composite that bakes BT.709→AP0→AP1 with a slight desaturation pre-bake
+  and the AP1→BT.709 tuned inverse. The output approximately matches the
+  reference ACES 1.0 Output Transform output for a BT.709 display.
+  Working space is BT.709 linear (post input-primaries normalization).
+  Source: BakingLab `ACES.hlsl`.
+
+These are flagged in source comments so future readers do not treat them as
+canonical Rec.709↔AP1 primary matrices.
+
 ### What Exists Today
 
 1. **OCIOTransform.ts** (`src/color/OCIOTransform.ts`):
@@ -147,3 +231,47 @@ function logC3Decode(encoded: number): number {
 
 ## Dependencies
 - None (foundational module)
+
+## Architectural Note: IPImage Metadata Flow Through LUTs (MED-51)
+
+`IPImage` (`src/core/image/Image.ts`) carries `colorPrimaries` and
+`transferFunction` fields that drive renderer behavior — for example the
+WebGL2 `u_inputTransfer` uniform selects between sRGB / HLG / PQ / SMPTE 240M
+EOTF in the fragment shader (`src/render/Renderer.ts:617-624`). These fields
+used to be set once at decode time and were never updated when the LUT
+pipeline transformed the pixels into a different color space. A Display LUT
+that did PQ -> sRGB on the GPU left `transferFunction = 'pq'` on the IPImage,
+so the renderer applied the wrong EOTF.
+
+The fix (issue MED-51) is a **metadata cascade** on `LUTPipeline`
+(`src/color/pipeline/LUTPipeline.ts`):
+
+- `LUTPipeline.computeOutputMetadata(sourceId, input)` walks the four stages
+  Pre-Cache -> File -> Look -> Display, layering each enabled stage's
+  declared output color space (`outputColorPrimaries` /
+  `outputTransferFunction`) onto the running metadata. `null` preserves the
+  running value; a concrete value overrides. Disabled, no-LUT-loaded, and
+  zero-intensity stages are skipped because they are bypassed at render time.
+- `LUTPipeline.applyToIPImage(sourceId, image)` materializes the cascaded
+  metadata onto an IPImage. The pixel buffer is shared (zero copy); only
+  metadata is freshly allocated. No-op cascades return the input by reference
+  so steady-state rendering is allocation-free.
+- HDR-video safety: `applyToIPImage` uses `IPImage.cloneMetadataOnly()`
+  rather than `clone()`. For HDR video the IPImage holds a 4-byte placeholder
+  `data` buffer and the real pixels live in `managedVideoFrame` (a
+  `VideoFrame`); a plain `clone()` would drop that reference and the renderer
+  would read 4 bytes as the full pixel buffer. The metadata-only clone shares
+  the `VideoFrame` ref via a non-owning view — `_nonOwning = true`
+  short-circuits `close()` so the GPU resource is not double-released.
+- Stage state is exposed via setter / getter pairs on `LUTPipeline`
+  (`getStageState`, `getDisplayLUTState`, `getStageOutputColorPrimaries`,
+  `getStageOutputTransferFunction`, etc.) so UI / inspector code can both
+  read and write the declared output color space.
+- The Viewer calls `applyLUTMetadataCascade()` on the IPImage handed to the
+  renderer in all three HDR branches (HDR video, HDR file, HDR procedural —
+  `src/ui/components/Viewer.ts` around lines 1804, 1832, 1859). SDR sources
+  do not currently use the cascade because the SDR path does not read color-
+  space metadata from the IPImage. The right-eye IPImage in `'separate'`
+  multi-view stereo is also not currently routed through the cascade — see
+  the TODO at `src/ui/components/Viewer.ts:1527-1535`. Both are tracked as
+  non-blocking follow-ups.

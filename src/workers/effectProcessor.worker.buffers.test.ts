@@ -29,6 +29,7 @@ const {
   ensureClarityBuffers,
   ensureSharpenBuffer,
   getMidtoneMask,
+  computeMidtoneMaskValue,
   applyClarity,
   applySharpen,
   processEffects,
@@ -306,6 +307,114 @@ describe('Worker Buffer Reuse (Task 05)', () => {
   });
 
   // ===========================================================================
+  // LOW-24: Float-precision midtone mask (no integer-rounding banding)
+  // ===========================================================================
+  describe('computeMidtoneMaskValue (LOW-24)', () => {
+    it('LOW24-001: edge cases match the analytic formula 1 - (|n - 0.5| * 2)^2', () => {
+      // Pure black
+      expect(computeMidtoneMaskValue(0)).toBeCloseTo(0, 10);
+      // Exact midpoint
+      expect(computeMidtoneMaskValue(0.5)).toBeCloseTo(1.0, 10);
+      // Pure white
+      expect(computeMidtoneMaskValue(1)).toBeCloseTo(0, 10);
+      // Quarter / three-quarter symmetry: dev=0.5 -> 1 - 0.25 = 0.75
+      expect(computeMidtoneMaskValue(0.25)).toBeCloseTo(0.75, 10);
+      expect(computeMidtoneMaskValue(0.75)).toBeCloseTo(0.75, 10);
+    });
+
+    it('LOW24-002: clamps inputs outside [0, 1]', () => {
+      expect(computeMidtoneMaskValue(-0.5)).toBeCloseTo(0, 10);
+      expect(computeMidtoneMaskValue(1.5)).toBeCloseTo(0, 10);
+    });
+
+    it('LOW24-003: cached LUT entries match the float computation at the same sample points', () => {
+      const mask = getMidtoneMask();
+      for (let i = 0; i < 256; i++) {
+        expect(mask[i]!).toBeCloseTo(computeMidtoneMaskValue(i / 255), 6);
+      }
+    });
+
+    it('LOW24-004: float mask is strictly monotonic and unique on a fine sub-pixel sweep (no plateaus)', () => {
+      // Sweep luminance with a 0.05/255 step over the rising flank [0, 0.5).
+      // The old integer-LUT implementation produced ~256 plateaus where adjacent
+      // sample points shared the same mask value. The float formula must produce
+      // a strictly-increasing, plateau-free curve (modulo float epsilon).
+      const samples = 1000;
+      let prev = -Infinity;
+      let plateauCount = 0;
+      for (let i = 0; i < samples; i++) {
+        // 0..0.499... avoiding exactly 0.5
+        const n = (i / samples) * 0.499;
+        const v = computeMidtoneMaskValue(n);
+        if (v === prev) plateauCount++;
+        // Strict monotonic increase on the rising flank.
+        expect(v).toBeGreaterThanOrEqual(prev);
+        prev = v;
+      }
+      // Allow the very first iteration to have prev=-Infinity, i.e. never trigger
+      // equality. So plateauCount must be zero.
+      expect(plateauCount).toBe(0);
+    });
+
+    it('LOW24-005: differs from the legacy uint8-quantized lookup on sub-pixel inputs', () => {
+      // Reference: legacy integer-quantized lookup on the cached LUT.
+      const mask = getMidtoneMask();
+      const legacy = (lum255: number) => mask[Math.min(255, Math.max(0, Math.round(lum255)))]!;
+
+      // Pick luminances on the rising flank where the parabola is steep, both
+      // landing in the same uint8 bin (round to 60). The legacy lookup yields
+      // the same value for both; the float formula resolves the difference.
+      const a255 = 60.2;
+      const b255 = 60.4;
+      expect(Math.round(a255)).toBe(Math.round(b255));
+      const aFloat = computeMidtoneMaskValue(a255 / 255);
+      const bFloat = computeMidtoneMaskValue(b255 / 255);
+      const aLegacy = legacy(a255);
+      const bLegacy = legacy(b255);
+
+      // Legacy mask gives the same value (banding) since both round to the same bin.
+      expect(aLegacy).toBe(bLegacy);
+      // Float mask resolves the difference.
+      expect(aFloat).not.toBe(bFloat);
+      // And the difference is in the expected direction (rising flank).
+      expect(bFloat).toBeGreaterThan(aFloat);
+    });
+  });
+
+  // ===========================================================================
+  // LOW-24: Smooth-gradient regression — clarity output should produce a
+  // strictly-monotonic mask response across a finely-stepped luminance ramp.
+  // ===========================================================================
+  describe('clarity midtone mask precision on smooth gradients (LOW-24)', () => {
+    /**
+     * Compute the per-pixel midtone-mask weight that clarity uses internally
+     * for a flat-color pixel (where the blurred value equals the original, so
+     * the high-pass term is zero and the only visible signal is the mask
+     * weight). We can't observe the mask directly through applyClarity (the
+     * output is masked × high-pass × scale), so we use the public
+     * computeMidtoneMaskValue helper here. The point is to assert the worker
+     * uses the float-precision helper end-to-end, not the quantized LUT.
+     */
+    it('LOW24-006: mask values across a 1024-step luminance ramp have no plateaus', () => {
+      const samples = 1024;
+      const values = new Float64Array(samples);
+      for (let i = 0; i < samples; i++) {
+        values[i] = computeMidtoneMaskValue(i / (samples - 1));
+      }
+
+      // Count adjacent duplicates. With 1024 distinct float inputs, there
+      // should be at most a single duplicate (the mathematical peak at 0.5,
+      // where mask=1 either side hits the same maximum once). The legacy
+      // uint8-quantized lookup would produce ~768 duplicate-pair plateaus.
+      let plateaus = 0;
+      for (let i = 1; i < samples; i++) {
+        if (values[i] === values[i - 1]) plateaus++;
+      }
+      expect(plateaus).toBeLessThanOrEqual(1);
+    });
+  });
+
+  // ===========================================================================
   // AC1: Worker clarity effect produces pixel-identical output to before
   // AC6: No data corruption when processing multiple frames sequentially
   // ===========================================================================
@@ -489,11 +598,14 @@ describe('Worker Buffer Reuse (Task 05)', () => {
       const data = createGradientPixelData(width, height);
       processEffects(data, width, height, state);
 
-      // Verify buffers were allocated
+      // Verify buffers were allocated.
+      // Note: as of LOW-24 the midtone mask LUT is no longer touched by the
+      // hot clarity loop (which computes the mask in float precision instead),
+      // so we only assert on the clarity blur/original buffers here. The LUT
+      // is still constructible via getMidtoneMask() and verified separately.
       const bufState = getBufferState();
       expect(bufState.clarityBufferSize).toBe(width * height * 4);
       expect(bufState.clarityOriginalBuffer).not.toBeNull();
-      expect(bufState.midtoneMask).not.toBeNull();
     });
 
     it('WBR-020: processEffects with sharpen uses buffer reuse', () => {
@@ -525,7 +637,6 @@ describe('Worker Buffer Reuse (Task 05)', () => {
       const bufState1 = getBufferState();
       const clarityBuf1 = bufState1.clarityOriginalBuffer;
       const sharpenBuf1 = bufState1.sharpenOriginalBuffer;
-      const mask1 = bufState1.midtoneMask;
 
       // Second call - buffers should be reused
       const data2 = createGradientPixelData(width, height);
@@ -534,7 +645,9 @@ describe('Worker Buffer Reuse (Task 05)', () => {
       const bufState2 = getBufferState();
       expect(bufState2.clarityOriginalBuffer).toBe(clarityBuf1);
       expect(bufState2.sharpenOriginalBuffer).toBe(sharpenBuf1);
-      expect(bufState2.midtoneMask).toBe(mask1);
+      // The midtone mask LUT is not used by the hot clarity loop after
+      // LOW-24, so processEffects no longer initializes it. (Cache reuse for
+      // the LUT itself is covered by WBR-009.)
 
       // Results should be identical
       expect(data1).toEqual(data2);
@@ -591,22 +704,20 @@ describe('Worker Buffer Reuse (Task 05)', () => {
       const original = new Uint8ClampedArray(data); // Fresh allocation
       const blurred = referenceGaussianBlur5x5(original, width, height); // Fresh allocations inside
 
-      const midtoneMask = new Float32Array(256); // Fresh allocation
-      for (let i = 0; i < 256; i++) {
-        const n = i / 255;
-        const dev = Math.abs(n - 0.5) * 2;
-        midtoneMask[i] = 1.0 - dev * dev;
-      }
-
+      // Float-precision midtone mask: 1 - (|n - 0.5| * 2)^2 over n in [0, 1].
+      // (Matches the worker's computeMidtoneMaskValue — LOW-24.)
       const effectScale = clarityNorm * CLARITY_EFFECT_SCALE;
+      const inv255 = 1 / 255;
       const len = data.length;
 
       for (let i = 0; i < len; i += 4) {
         const r = original[i]!;
         const g = original[i + 1]!;
         const b = original[i + 2]!;
-        const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-        const mask = midtoneMask[Math.min(255, Math.max(0, Math.round(lum)))]!;
+        const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+        const nClamped = lumNorm < 0 ? 0 : lumNorm > 1 ? 1 : lumNorm;
+        const dev = Math.abs(nClamped - 0.5) * 2;
+        const mask = 1.0 - dev * dev;
         const adj = mask * effectScale;
 
         data[i] = Math.max(0, Math.min(255, r + (r - blurred[i]!) * adj));

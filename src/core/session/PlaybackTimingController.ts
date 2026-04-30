@@ -10,6 +10,22 @@ import { MAX_CONSECUTIVE_STARVATION_SKIPS, MAX_REVERSE_SPEED } from '../../confi
 import { STARVATION_TIMEOUT_MS } from '../../config/TimingConfig';
 
 /**
+ * Maximum delta time (in ms) to accumulate in a single tick.
+ * Prevents huge accumulator jumps from tab-backgrounding, GC pauses,
+ * or rapid speed changes that leave a stale lastFrameTime.
+ * Set to 500ms to accommodate low-FPS content (e.g., 10fps) while
+ * still preventing multi-second bursts.
+ */
+export const MAX_FRAME_DELTA_MS = 500;
+
+/**
+ * Maximum number of frames to advance in a single tick (realtime mode).
+ * Prevents visual glitches from accumulator overflow on speed changes
+ * or timing discontinuities.
+ */
+export const MAX_FRAMES_PER_TICK = 4;
+
+/**
  * Mutable timing state owned by Session and passed into PlaybackTimingController methods.
  *
  * Session keeps these as individual fields for backward compatibility with
@@ -118,8 +134,12 @@ export class PlaybackTimingController {
     playbackMode: PlaybackMode = 'realtime',
     now: number = performance.now(),
   ): { framesToAdvance: number; frameDuration: number } {
-    const delta = now - state.lastFrameTime;
+    const rawDelta = now - state.lastFrameTime;
     state.lastFrameTime = now;
+
+    // Clamp delta to prevent accumulator overflow from tab-backgrounding,
+    // GC pauses, or rapid speed changes leaving a stale lastFrameTime.
+    const delta = Math.min(Math.max(0, rawDelta), MAX_FRAME_DELTA_MS);
 
     const effectiveSpeed = this.getEffectiveSpeed(playbackSpeed, playDirection);
     const frameDuration = this.getFrameDuration(fps, effectiveSpeed);
@@ -136,6 +156,14 @@ export class PlaybackTimingController {
       framesToAdvance = Math.min(framesToAdvance, 1);
       // Don't let accumulator grow unbounded (prevents burst on resume)
       if (framesToAdvance > 0) {
+        state.frameAccumulator = Math.min(state.frameAccumulator, frameDuration);
+      }
+    } else {
+      // Realtime mode: cap frames per tick to prevent visual glitches
+      // from accumulator overflow on speed changes or timing spikes
+      if (framesToAdvance > MAX_FRAMES_PER_TICK) {
+        framesToAdvance = MAX_FRAMES_PER_TICK;
+        // Reset accumulator to prevent continued overflow on next tick
         state.frameAccumulator = Math.min(state.frameAccumulator, frameDuration);
       }
     }
@@ -166,8 +194,12 @@ export class PlaybackTimingController {
     playDirection: number,
     now: number = performance.now(),
   ): { delta: number; frameDuration: number } {
-    const delta = now - state.lastFrameTime;
+    const rawDelta = now - state.lastFrameTime;
     state.lastFrameTime = now;
+
+    // Clamp delta to prevent accumulator overflow from tab-backgrounding,
+    // GC pauses, or rapid speed changes leaving a stale lastFrameTime.
+    const delta = Math.min(Math.max(0, rawDelta), MAX_FRAME_DELTA_MS);
 
     const effectiveSpeed = this.getEffectiveSpeed(playbackSpeed, playDirection);
     const frameDuration = this.getFrameDuration(fps, effectiveSpeed);

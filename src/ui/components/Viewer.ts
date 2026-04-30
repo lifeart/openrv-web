@@ -7,6 +7,7 @@ import { type WipeState, type WipeMode } from '../../core/types/wipe';
 import { type Transform2D } from './TransformControl';
 import { type FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import type { TextureFilterMode } from '../../core/types/filter';
+import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 import type { GamutMappingState } from '../../core/types/effects';
@@ -1524,6 +1525,15 @@ export class Viewer {
       // Pass right-eye image data for 'separate' stereo (multi-view EXR)
       const rightEyeIPImage = source?.fileSourceNode?.getIPImage()?.rightEyeImage;
       if (detectedStereoFormat === 'separate' && rightEyeIPImage) {
+        // TODO(MED-51 follow-up): for symmetry with the left-eye HDR paths
+        // below (lines ~1795/1823/1850 — `applyLUTMetadataCascade(...)`),
+        // the right-eye IPImage should also pass through the LUT cascade
+        // before `toImageData()` so its metadata reflects the post-pipeline
+        // color space. Skipped for now because: (a) `toImageData()` lossy-
+        // converts to 8-bit and the renderer's right-eye 2D path doesn't
+        // currently consume the cascaded metadata, and (b) `separate`
+        // multi-view EXR is rare enough that the wiring deserves its own
+        // dedicated test pass. Non-blocking for the NEW-B4 fix.
         this.stereoManager.setRightEyeImageData(rightEyeIPImage.toImageData());
       } else {
         this.stereoManager.setRightEyeImageData(null);
@@ -1791,7 +1801,9 @@ export class Viewer {
       const hdrIPImage = this.session.getVideoHDRIPImage(currentFrame);
       PerfTrace.end('getVideoHDRIPImage');
       if (!hdrIPImage) PerfTrace.count('hdrIPImage.miss');
-      if (hdrIPImage && this.renderHDRWithWebGL(hdrIPImage, displayWidth, displayHeight)) {
+      // Apply LUT pipeline metadata cascade — see hdrFileSource branch below (issue MED-51).
+      const cascadedHdrIPImage = hdrIPImage ? this.applyLUTMetadataCascade(hdrIPImage) : null;
+      if (cascadedHdrIPImage && this.renderHDRWithWebGL(cascadedHdrIPImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
         // Preload nearby HDR frames in background for smoother scrubbing.
@@ -1814,7 +1826,12 @@ export class Viewer {
       // Fall through to SDR while waiting (element was set by the video path above)
     } else if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
       const ipImage = hdrFileSource.getIPImage();
-      if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
+      // Apply LUT pipeline metadata cascade so the renderer sees the
+      // post-pipeline color space when the user has declared explicit
+      // LUT-stage outputs (issue MED-51). For the default no-declaration
+      // case the helper returns the input by reference (no-op).
+      const cascadedIpImage = ipImage ? this.applyLUTMetadataCascade(ipImage) : null;
+      if (cascadedIpImage && this.renderHDRWithWebGL(cascadedIpImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
         return; // HDR path complete, skip 2D
@@ -1839,7 +1856,9 @@ export class Viewer {
     } else if (hdrProceduralSource) {
       // Procedural sources produce float32 IPImage — render via WebGL HDR path
       const ipImage = hdrProceduralSource.getIPImage();
-      if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
+      // See note in the hdrFileSource branch above — issue MED-51.
+      const cascadedIpImage = ipImage ? this.applyLUTMetadataCascade(ipImage) : null;
+      if (cascadedIpImage && this.renderHDRWithWebGL(cascadedIpImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
         return; // Procedural HDR path complete
@@ -2593,6 +2612,79 @@ export class Viewer {
     return this.colorPipeline.getLUTIntensity();
   }
 
+  // ---------------------------------------------------------------------
+  // LUTPipelineProvider implementation (MED-51)
+  //
+  // Per-stage output color-space declarations. The active source's
+  // identifier is resolved on each call so that switching sources
+  // automatically re-targets writes/reads to the new source's stage state.
+  // ---------------------------------------------------------------------
+
+  /**
+   * Resolve the source ID for per-source stage setters. Falls back to
+   * `'default'` and auto-registers it if no source config exists yet, so
+   * the public API never silently no-ops at the LUTPipeline layer.
+   */
+  private resolveLUTStageSourceId(): string {
+    const pipe = this.colorPipeline.lutPipeline;
+    const sourceId = pipe.getActiveSourceId() ?? 'default';
+    if (!pipe.getSourceConfig(sourceId)) {
+      pipe.registerSource(sourceId);
+    }
+    return sourceId;
+  }
+
+  setLUTStageOutputColorPrimaries(
+    stage: 'precache' | 'file' | 'look' | 'display',
+    primaries: ColorPrimaries | null,
+  ): void {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') {
+      pipe.setDisplayLUTOutputColorPrimaries(primaries);
+    } else {
+      const sourceId = this.resolveLUTStageSourceId();
+      pipe.setStageOutputColorPrimaries(sourceId, stage, primaries);
+    }
+    this.scheduleRender();
+  }
+
+  getLUTStageOutputColorPrimaries(stage: 'precache' | 'file' | 'look' | 'display'): ColorPrimaries | null {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') return pipe.getDisplayLUTOutputColorPrimaries();
+    const sourceId = pipe.getActiveSourceId() ?? 'default';
+    return pipe.getStageOutputColorPrimaries(sourceId, stage);
+  }
+
+  setLUTStageOutputTransferFunction(
+    stage: 'precache' | 'file' | 'look' | 'display',
+    transfer: TransferFunction | null,
+  ): void {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') {
+      pipe.setDisplayLUTOutputTransferFunction(transfer);
+    } else {
+      const sourceId = this.resolveLUTStageSourceId();
+      pipe.setStageOutputTransferFunction(sourceId, stage, transfer);
+    }
+    this.scheduleRender();
+  }
+
+  getLUTStageOutputTransferFunction(stage: 'precache' | 'file' | 'look' | 'display'): TransferFunction | null {
+    const pipe = this.colorPipeline.lutPipeline;
+    if (stage === 'display') return pipe.getDisplayLUTOutputTransferFunction();
+    const sourceId = pipe.getActiveSourceId() ?? 'default';
+    return pipe.getStageOutputTransferFunction(sourceId, stage);
+  }
+
+  /**
+   * True iff OCIO is currently active and overriding manual declarations
+   * on the display stage. Used by the public API surface to log a one-time
+   * warning when a manual declaration would be effectively overridden.
+   */
+  isOCIOActiveForDisplay(): boolean {
+    return this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
+  }
+
   /** Get the multi-point LUT pipeline instance */
   getLUTPipeline(): LUTPipeline {
     return this.colorPipeline.lutPipeline;
@@ -2690,6 +2782,27 @@ export class Viewer {
 
     this.notifyEffectsChanged();
     this.scheduleRender();
+  }
+
+  /**
+   * Apply the LUT pipeline's color-space metadata cascade to an IPImage on
+   * its way to the renderer (issue MED-51).
+   *
+   * The cascade walks every active stage (Pre-Cache → File → Look →
+   * Display) and layers each stage's declared `outputColorPrimaries` /
+   * `outputTransferFunction` on top of the input metadata. Returns the
+   * input image by reference when the cascade is a no-op (the common
+   * default case where no stage has declared an output color space), so
+   * this is allocation-free in the steady state.
+   *
+   * Pixel data is shared with the input image — only metadata is fresh.
+   */
+  private applyLUTMetadataCascade(
+    image: import('../../core/image/Image').IPImage,
+  ): import('../../core/image/Image').IPImage {
+    const pipeline = this.colorPipeline.lutPipeline;
+    const sourceId = pipeline.getActiveSourceId() ?? 'default';
+    return pipeline.applyToIPImage(sourceId, image);
   }
 
   /**

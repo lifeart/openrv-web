@@ -39,10 +39,8 @@ struct Uniforms {
   texelSize: vec2f,
 }
 
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
+// VSOut is provided by the prepended vertex shader source
+// (_viewer_vert.wgsl or _passthrough_vert.wgsl) at pipeline build time.
 
 @group(0) @binding(0) var samp: sampler;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -122,22 +120,15 @@ fn selectChannel(src: vec4f, idx: i32) -> f32 {
   }
 }
 
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x, y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
+// `@vertex fn vs(...)` is provided by the prepended vertex shader source.
 
 @fragment fn fs(in: VSOut) -> @location(0) vec4f {
-  // Out-of-bounds check: discard pixels outside [0,1] texture range
+  // Sample first (uniform control flow), then apply OOB mask. The previous
+  // form (early return) made later textureSample calls non-uniform.
+  var color = textureSample(tex, samp, in.uv);
   if (in.uv.x < 0.0 || in.uv.x > 1.0 || in.uv.y < 0.0 || in.uv.y > 1.0) {
     return vec4f(0.0, 0.0, 0.0, 0.0);
   }
-
-  var color = textureSample(tex, samp, in.uv);
 
   // 0a. Deinterlace (before EOTF, operates on raw texels)
   if (u.deinterlaceEnabled == 1 && u.deinterlaceMethod != 1) {
@@ -155,8 +146,10 @@ fn selectChannel(src: vec4f, idx: i32) -> f32 {
         interpolate = isEvenRow;
       }
       if (interpolate) {
-        let above = textureSample(tex, samp, in.uv - vec2f(0.0, u.texelSize.y));
-        let below = textureSample(tex, samp, in.uv + vec2f(0.0, u.texelSize.y));
+        // Use textureSampleLevel: textureSample requires uniform control flow,
+        // and `interpolate` is per-pixel here (depends on isEvenRow).
+        let above = textureSampleLevel(tex, samp, in.uv - vec2f(0.0, u.texelSize.y), 0.0);
+        let below = textureSampleLevel(tex, samp, in.uv + vec2f(0.0, u.texelSize.y), 0.0);
         color = (above + below) * 0.5;
       }
     } else if (u.deinterlaceMethod == 2) {
@@ -167,7 +160,8 @@ fn selectChannel(src: vec4f, idx: i32) -> f32 {
       } else {
         offset = -u.texelSize.y;
       }
-      let neighbor = textureSample(tex, samp, in.uv + vec2f(0.0, offset));
+      // textureSampleLevel: per-pixel offset means non-uniform control flow.
+      let neighbor = textureSampleLevel(tex, samp, in.uv + vec2f(0.0, offset), 0.0);
       color = (color + neighbor) * 0.5;
     }
   }
@@ -192,7 +186,8 @@ fn selectChannel(src: vec4f, idx: i32) -> f32 {
         // Out of bounds
         color = vec4f(0.0, 0.0, 0.0, 0.0);
       } else if (u.perspectiveQuality == 1) {
-        // Bicubic Catmull-Rom 4x4
+        // Bicubic Catmull-Rom 4x4 — uses textureSampleLevel because the
+        // sample coords are computed inside non-uniform control flow.
         let texSize = 1.0 / u.texelSize;
         let fCoord = srcUV * texSize - 0.5;
         let f = fract(fCoord);
@@ -208,21 +203,23 @@ fn selectChannel(src: vec4f, idx: i32) -> f32 {
               vec2f(0.0),
               vec2f(1.0)
             );
-            result += textureSample(tex, samp, sc) * wx * wy;
+            result += textureSampleLevel(tex, samp, sc, 0.0) * wx * wy;
           }
         }
         color = result;
       } else {
-        // Bilinear (hardware)
-        color = textureSample(tex, samp, srcUV);
+        // Bilinear (hardware) — non-uniform control flow path; use level 0.
+        color = textureSampleLevel(tex, samp, srcUV, 0.0);
       }
     }
   }
 
-  // 0a3. Spherical (equirectangular 360) projection
+  // 0a3. Spherical (equirectangular 360) projection — uses textureSampleLevel
+  // because the resampled coords are arbitrary screen-space remaps that
+  // would otherwise need explicit derivatives.
   if (u.sphericalEnabled == 1) {
     let eqUV = sphericalProject(in.uv);
-    color = textureSample(tex, samp, eqUV);
+    color = textureSampleLevel(tex, samp, eqUV, 0.0);
   }
 
   // 0b. Channel swizzle (RVChannelMap remapping, before any color processing)

@@ -5,6 +5,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OCIOControl } from './OCIOControl';
 import { OCIOProcessor } from '../../color/ColorProcessingFacade';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  dispatchOutsideEscape,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -31,12 +37,81 @@ describe('OCIOControl', () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+    resetOutsideClickRegistry();
   });
 
   afterEach(() => {
     if (control) {
       control.dispose();
     }
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('OCIO-OCR-001: opening panel registers exactly 1 entry; closing deregisters', () => {
+      control = new OCIOControl();
+      document.body.appendChild(control.render());
+
+      expectRegistrationCount(0);
+      control.show();
+      expectRegistrationCount(1);
+      control.hide();
+      expectRegistrationCount(0);
+    });
+
+    it('OCIO-OCR-002: outside click dismisses the panel', () => {
+      control = new OCIOControl();
+      document.body.appendChild(control.render());
+
+      control.show();
+      const panel = document.querySelector('[data-testid="ocio-panel"]') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+
+      dispatchOutsideClick();
+
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+    });
+
+    it('OCIO-OCR-NESTED-001: Escape dismisses inner DropdownMenu first, then the OCIO panel', () => {
+      // Validates "innermost-wins" Escape semantics across nested popovers:
+      // OCIOControl panel registers a top-level dismiss; opening one of its
+      // child DropdownMenu popovers registers a SECOND dismiss. The first
+      // Escape closes only the inner dropdown; a second Escape closes the
+      // panel.
+      control = new OCIOControl();
+      document.body.appendChild(control.render());
+
+      // Open the OCIO panel (registers dismiss #1).
+      control.show();
+      const panel = document.querySelector('[data-testid="ocio-panel"]') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+      expectRegistrationCount(1);
+
+      // Open one of the panel's child DropdownMenu popovers (the Config
+      // selector). This registers dismiss #2 — the innermost.
+      const configButton = panel.querySelector('[data-testid="ocio-config-select"]') as HTMLButtonElement;
+      expect(configButton).not.toBeNull();
+      configButton.click();
+      expectRegistrationCount(2);
+
+      // The DropdownMenu element is rendered inside the panel by default.
+      // Locate the visible (display !== 'none') menu role=listbox.
+      const dropdowns = Array.from(document.querySelectorAll<HTMLElement>('[role="listbox"]'));
+      const openDropdown = dropdowns.find((el) => el.style.display !== 'none');
+      expect(openDropdown).toBeDefined();
+
+      // First Escape: only the inner dropdown closes; panel stays open.
+      dispatchOutsideEscape();
+      expect(openDropdown!.style.display).toBe('none');
+      expect(panel.style.display).toBe('block');
+      expectRegistrationCount(1);
+
+      // Second Escape: panel closes.
+      dispatchOutsideEscape();
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+    });
   });
 
   describe('constructor', () => {
@@ -228,13 +303,12 @@ describe('OCIOControl', () => {
       spy.mockRestore();
     });
 
-    it('OCIO-C018: dispose removes outsideClickHandler from document', () => {
+    it('OCIO-C018: dispose deregisters from OutsideClickRegistry when open', () => {
       control = new OCIOControl();
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      // The constructor registers the outsideClickHandler on document
+      control.show();
+      expectRegistrationCount(1);
       control.dispose();
-      expect(removeSpy).toHaveBeenCalledWith('click', expect.any(Function));
-      removeSpy.mockRestore();
+      expectRegistrationCount(0);
     });
 
     it('OCIO-C019: dispose removes panel element from body', () => {

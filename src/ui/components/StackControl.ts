@@ -3,8 +3,13 @@ import { type BlendMode, BLEND_MODES, BLEND_MODE_LABELS } from '../../composite/
 import { getIconSvg } from './shared/Icons';
 import { OPACITY } from './shared/theme';
 import type { StencilBox } from '../../core/types/wipe';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { StencilBox };
+
+// 'topmost' is a stack-level mode; filtered from per-layer dropdown — surface
+// only via stack composite-type setter (StackGroupNode.setCompositeType).
+const PER_LAYER_BLEND_MODES: readonly BlendMode[] = BLEND_MODES.filter((m) => m !== 'topmost');
 
 export interface StackLayer {
   id: string;
@@ -40,7 +45,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   private layers: StackLayer[] = [];
   private activeLayerId: string | null = null;
   private nextLayerId = 1;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private availableSources: SourceInfo[] = [];
 
   constructor() {
@@ -113,13 +118,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     this.container.appendChild(this.stackButton);
     // Panel will be appended to body when shown
 
-    // Close panel on outside click (store reference for cleanup)
-    this.boundHandleOutsideClick = (e: MouseEvent) => {
-      if (!this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-        this.hidePanel();
-      }
-    };
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    // Outside-click + Escape dismiss now go through OutsideClickRegistry,
+    // registered in showPanel() and deregistered in hidePanel().
   }
 
   private createPanelContent(): void {
@@ -519,7 +519,15 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       font-size: 11px;
       cursor: pointer;
     `;
-    for (const mode of BLEND_MODES) {
+    // Session-compat: if a layer was persisted with the stack-level 'topmost'
+    // mode (e.g. loaded from an older session), coerce to 'normal' AND emit
+    // layerChanged so the data model converges with the UI rather than
+    // silently displaying the first option without persisting (STACK-U103).
+    if (layer.blendMode === 'topmost') {
+      layer.blendMode = 'normal';
+      this.emit('layerChanged', { ...layer });
+    }
+    for (const mode of PER_LAYER_BLEND_MODES) {
       const opt = document.createElement('option');
       opt.value = mode;
       opt.textContent = BLEND_MODE_LABELS[mode];
@@ -770,12 +778,24 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     this.panel.style.display = 'block';
     this.updateButtonState();
+    // Outside-click + Escape dismiss owned by OutsideClickRegistry. Internal
+    // panel buttons use bubble-phase stopPropagation to prevent the dismiss-
+    // by-toggling-trigger pattern; capture-phase registry already handled
+    // the event by the time those listeners run.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel],
+      onDismiss: () => this.hidePanel(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
   }
 
   hidePanel(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
     this.updateButtonState();
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
   }
 
   toggle(): void {
@@ -787,8 +807,9 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   }
 
   dispose(): void {
-    // Remove outside click listener
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    // Deregister from OutsideClickRegistry if currently open.
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
 
     // Remove panel from body if present
     if (document.body.contains(this.panel)) {

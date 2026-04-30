@@ -4560,3 +4560,1059 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 **Files changed**:
 - `src/core/session/SessionSerializer.ts`
 - `src/core/session/SessionSerializer.test.ts`
+
+## Issue: MED-09 — StackGroupNode wipe properties lack min/max
+
+**Root cause**: The `wipeX` and `wipeY` property definitions in `StackGroupNode.ts` had no `min`/`max` constraints and no sanitization. Out-of-range values (negative, >1, NaN, Infinity) could propagate unchecked into the wipe shader, producing undefined rendering behavior.
+
+**Fix**:
+- Added `min: 0, max: 1` to both `wipeX` and `wipeY` property definitions so values are clamped to the valid [0, 1] range
+- Added a `sanitizeWipe` transform that converts NaN to the default value of 0.5
+- Infinity and -Infinity are handled by the min/max clamping
+
+**Tests added**: 15 new tests covering property metadata validation, boundary values (0 and 1), over/under clamping, NaN handling, and Infinity handling for both wipeX and wipeY.
+
+**Files changed**:
+- `src/nodes/groups/StackGroupNode.ts`
+- `src/nodes/groups/StackGroupNode.test.ts`
+
+## Issue: MED-24 — Async file upload continues after component disposal
+
+**Root cause**: The logo upload handler in `AppControlRegistry.ts` (~lines 895-925) performed async work (file reading, image decoding) without checking whether the component had been disposed mid-flight. If the user navigated away or the registry was torn down while an upload was in progress, the continuation would run against stale/destroyed state.
+
+**Fix**:
+- Added a `_disposed` flag to `AppControlRegistry`
+- Inserted two guard checks in the async logo upload handler: one before the first `await` (pre-flight) and one after (post-await), both returning early if `_disposed` is true
+- The `_disposed` flag is set at the top of `dispose()` so it takes effect before any other teardown
+
+**Tests added**: 6 regression tests (ACR-030 through ACR-035) covering: normal upload succeeds, mid-flight disposal aborts upload, error during disposal is handled, empty file is rejected, pre-disposed registry rejects upload, and `_disposed` flag verification.
+
+**Files changed**:
+- `src/AppControlRegistry.ts`
+- `src/AppControlRegistry.test.ts`
+
+## Issue: MED-26 — EXR tile count overflow potential
+
+**Root cause**: In `EXRDecoder.ts` (~lines 1348-1350), tile counts computed from image dimensions and tile sizes were not validated before use. Extremely large, zero, or negative tile counts could cause memory allocation failures, infinite loops, or integer overflow when multiplied to compute total tile offsets.
+
+**Fix**:
+- Added a `MAX_TILES_PER_LEVEL = 16_777_216` (2^24) constant as an upper bound
+- Added a `validateTileCount()` helper that rejects zero, negative, and excessive tile counts with descriptive error messages
+- Applied the validation at 5 call sites: `computeTotalTileOffsets` (3 code paths), `decodeTiledImage`, and `decodeMultiPartTiledImage`
+
+**Tests added**: 8 regression tests (EXR-T030 through EXR-T037) covering normal tile counts, boundary values at the limit, overflow rejection for excessive counts, asymmetric dimensions, and error message verification.
+
+**Files changed**:
+- `src/formats/EXRDecoder.ts`
+- `src/formats/EXRDecoder.test.ts`
+
+## Issue: MED-27 — DPX negative dimension interpretation
+
+**Root cause**: In `DPXDecoder.ts` (~lines 92-94), `getDPXInfo()` read image width and height as unsigned 32-bit integers but performed no validation on the values. Zero dimensions, extremely large dimensions, or values that could cause pixel-count overflow would propagate downstream, leading to allocation failures or out-of-bounds access.
+
+**Fix**:
+- Added dimension validation in `getDPXInfo()` that rejects zero dimensions, dimensions exceeding a maximum of 65536, and total pixel counts exceeding 268 million
+- Uses shared `IMAGE_LIMITS` constants for consistent bounds across decoders
+- Dimensions were already read as unsigned via `getUint32`, so negative interpretation via sign bit is not possible
+
+**Tests added**: 13 regression tests covering zero width/height, oversized dimensions, uint32-max values, signed-bit values, normal dimensions, and boundary cases.
+
+**Files changed**:
+- `src/formats/DPXDecoder.ts`
+- `src/formats/DPXDecoder.test.ts`
+
+## Issue: MED-31 — TIFF IFD entry count unbounded
+
+**Root cause**: In `TIFFFloatDecoder.ts` (~lines 138, 141), `parseIFD()` read the IFD entry count from the file as a 16-bit unsigned integer but performed no validation on the value. A malformed or malicious TIFF file could specify up to 65,535 entries, causing excessive memory allocation and processing time as the decoder attempted to parse that many IFD entries.
+
+**Fix**:
+- Added a `MAX_IFD_ENTRIES = 1024` constant as an upper bound for IFD entry counts
+- Added validation in `parseIFD()` that throws a `DecoderError` when the entry count exceeds the limit
+- `getTIFFInfo()` catches the error and returns `null`; `isFloatTIFF()` returns `false` for files with excessive IFD entries
+
+**Tests added**: 7 regression tests covering normal entry counts, boundary values (1024 accepted, 1025 rejected), max uint16 value, big-endian files, and `getTIFFInfo`/`isFloatTIFF` behavior for excessive counts.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue: MED-32 — DPX scanline width overflow
+
+**Root cause**: In `DPXDecoder.ts` (~lines 169-170), `decodeDPX()` computed pixel data size from declared image dimensions and bit depth without validating the result against the actual file buffer size. A malformed or malicious DPX file could declare dimensions that imply more pixel data than the file contains, leading to out-of-bounds reads.
+
+**Fix**:
+- Added pixel data size vs file size validation in `decodeDPX()` that computes the expected data size for the declared dimensions and bit depth, rejecting the file if it exceeds the available buffer data
+- Moved bit depth validation before size computation so invalid bit depths are caught early
+- Handles all DPX bit depths: 8, 10 (packed), 12, and 16
+
+**Tests added**: 8 regression tests covering normal decoding, tampered dimensions for each bit depth, large width edge case, exact-fit files, and little-endian files.
+
+**Files changed**:
+- `src/formats/DPXDecoder.ts`
+- `src/formats/DPXDecoder.test.ts`
+
+## Issue: MED-44 — Worker Transferable validation missing
+
+**Root cause**: In `renderWorker.worker.ts` (~lines 42-49), the render worker accepted HDR image data and SDR bitmaps without validating them before processing. Detached ArrayBuffers, closed ImageBitmaps, wrong types, or invalid dimensions could cause silent failures or crashes during rendering.
+
+**Fix**:
+- Added `isArrayBufferDetached()` helper with `.detached` property check and `byteLength` fallback for broader browser support
+- Added `validateHDRImageData()` that checks type, detachment state, dimensions, and channel count
+- Added `validateSDRBitmap()` that checks type, closed state, and dimensions
+- Both render handlers (`renderHDR` and `renderSDR`) validate inputs before processing and return `renderError` on failure
+
+**Tests added**: 21 regression tests covering detached buffers, wrong types, closed bitmaps, invalid dimensions, channel validation, and integration through handleMessage.
+
+**Files changed**:
+- `src/workers/renderWorker.worker.ts`
+- `src/workers/renderWorker.worker.test.ts`
+
+## Issue: MED-45 — LUT cache key incomplete in effect processor
+
+**Root cause**: In `effectProcessor.worker.ts` (~lines 144-226), the vibrance 3D LUT cache key only included `vibrance` and `skinProtection`, but the LUT output also depends on `lutSize`, `skinHueCenter`, `skinHueRange`, and `skinProtectionMin`. Changing any of those four parameters returned a stale cached LUT instead of rebuilding it. The same issue existed in the main-thread implementation in `EffectProcessor.ts`.
+
+**Fix**:
+- Extended the vibrance 3D LUT cache key to include all six parameters that affect the output: `lutSize`, `skinHueCenter`, `skinHueRange`, `skinProtectionMin`, `vibrance`, and `skinProtection`
+- Applied the fix to both the worker (`effectProcessor.worker.ts`) and main-thread (`EffectProcessor.ts`) implementations
+
+**Tests added**: 5 new tests across two files verifying cache hit, cache miss on parameter change, and all 6 fields stored in the cache key.
+
+**Files changed**:
+- `src/workers/effectProcessor.worker.ts`
+- `src/utils/effects/EffectProcessor.ts`
+- `src/workers/effectProcessor.worker.test.ts`
+- `src/utils/effects/EffectProcessor.test.ts`
+
+## Issue: LOW-08 — EXR layer property not synced after setEXRLayer
+
+**Root cause**: In `FileSourceNode.ts` (~lines 1855-1885), calling `setEXRLayer()` updated the internal `currentExrLayer` field but did not sync the value back to the `exrLayer` node property. Conversely, setting the `exrLayer` property externally did not trigger `setEXRLayer()`, so the internal field and the property could diverge.
+
+**Fix**:
+- Added bidirectional sync between the `exrLayer` property and the internal `currentExrLayer` field
+- Added a `propertyChanged` listener that triggers `setEXRLayer()` when the property is set externally
+- Added a `_syncingExrLayer` re-entrancy guard to prevent infinite loops when `loadEXRFromBuffer` sets the property
+
+**Tests added**: 3 regression tests covering method-to-property sync, property-to-field sync, and serialization round-trip.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue: LOW-16 — Transform history spurious entries from float precision
+
+**Root cause**: In `AppTransformWiring.ts` (~lines 53-66), transform property changes were compared using strict equality (`!==`). Floating-point arithmetic produces tiny rounding errors (e.g. `0.1 + 0.2 !== 0.3`), so even no-op transforms could register as changed and push spurious entries into the undo history.
+
+**Fix**:
+- Added `TRANSFORM_EPSILON = 1e-6` constant and a `hasSignificantChange()` helper that returns `true` only when the absolute difference exceeds the epsilon
+- Replaced strict equality with epsilon comparison for all numeric transform properties (rotation, scale.x/y, translate.x/y)
+- Boolean comparisons (flipH, flipV) remain unchanged since they are not affected by float precision
+
+**Tests added**: 11 new tests — 6 integration tests (sub-epsilon rejection, above-epsilon acceptance) and 5 unit tests for `hasSignificantChange` (boundary values, negative values, epsilon reasonableness).
+
+**Files changed**:
+- `src/AppTransformWiring.ts`
+- `src/AppTransformWiring.test.ts`
+
+## Issue #350: MED-33 — TIFF LZW chain corruption
+
+**Root cause**: Three issues in `decompressLZW()`:
+1. **bitBuffer integer overflow**: Signed right shift (`>>`) corrupted extracted codes when `bitBuffer` exceeded 31 bits. Fixed by using unsigned right shift (`>>>`) and trimming `bitBuffer` after each read.
+2. **No validation of out-of-range codes**: `code > nextCode` was handled identically to `code === nextCode` (the valid KwKwK special case), silently producing garbage from uninitialized table entries. Fixed by splitting into explicit `code === nextCode` and `code > nextCode` (throws `DecoderError`).
+3. **No chain cycle detection**: Circular prefix chains in corrupted data could infinite-loop `outputString()` and `firstChar()`. Fixed with `MAX_CHAIN_DEPTH` (4096) guard. Also added validation that the first code after CLEAR must be a literal (0-255).
+
+**Tests added**: 8 regression tests in `TIFFFloatDecoder.test.ts` — valid round-trips, corruption detection (`code > nextCode`, non-literal after CLEAR), KwKwK special case, code size transitions, large data, table-full boundary (4096 entries).
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #351: MED-34 — JPEG Gainmap MPF offset+size overflow
+
+**Root cause**: MPF offset and size values read from binary data were not validated against buffer bounds before use. In `parseGainmapJPEG()`, `offset + size` could exceed `buffer.byteLength`, leading to truncated/incorrect XMP extraction. In `decodeGainmapToFloat32()`, out-of-bounds `buffer.slice()` produced empty or truncated blobs with unhelpful errors.
+
+**Fix**: Added bounds validation in both `parseGainmapJPEG()` (gainmap entry) and `decodeGainmapToFloat32()` (both gainmap and base image slices). Throws descriptive `DecoderError` with offset, size, sum, and buffer length. Added JS integer safety comment documenting that `Uint32 + Uint32 < Number.MAX_SAFE_INTEGER`.
+
+**Tests added**: 10 new tests — 7 for `parseGainmapJPEG` (overflow, boundary, exact-fit, large offset/size, zero-size, valid parse, MPF fix-up overflow) and 3 for `decodeGainmapToFloat32` (gainmap slice overflow, base image slice overflow).
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+## Issue #352: LOW-17 — TIFF LZW string length overflow in Uint16Array
+
+**Root cause**: `tableLength` in `decompressLZW()` used `Uint16Array` (max 65535). Analysis showed max string length under valid LZW with 12-bit codes is ~3838, so overflow was theoretically impossible. However, corrupted data could potentially exploit this.
+
+**Fix**: Upgraded `tableLength` from `Uint16Array` to `Uint32Array` as defense-in-depth (16KB vs 8KB, negligible cost). Added detailed comment documenting the safety analysis.
+
+**Tests added**: 2 regression tests — CHAIN009 (deep chains via KwKwK special case, 200 entries, pixel-exact verification) and CHAIN010 (CLEAR resets with three table rebuilds, verifies no length accumulation across boundaries, pixel-exact verification).
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #353: LOW-18 — TIFF unknown tag type returns 1 silently
+
+**Root cause**: `getTypeSize()` only handled TIFF types 1-5 and returned 1 for all others. This caused incorrect IFD entry size calculations for types 6-12 (silently misparsed) and would misinterpret any unknown/extended types.
+
+**Fix**: 
+- Added all TIFF 6.0 standard types 6-12 (SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE) with correct byte sizes
+- Unknown types now return 0 (per TIFF 6.0 Section 7: "skip over fields containing an unexpected field type")
+- `parseIFD()` skips IFD entries with typeSize=0 instead of misinterpreting them
+- Real-world TIFFs with extended types (13/IFD, 16/LONG8) now parse correctly instead of being rejected
+
+**Tests added**: 9 tests — type 0/13/16/42/99 skip gracefully, unknown tag among valid tags still decodes with pixel verification, all types 1-12 size verification, LE/BE regression tests, required-tag-with-unknown-type handling.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #354: LOW-19 — TIFF bits-per-sample not validated for float format
+
+**Root cause**: `readFloatSample()` had a catch-all `else` branch that silently treated ANY `bytesPerSample` value (including invalid ones like 1, 3, etc.) as 16-bit half-float. While `decodeTIFFFloat` had BPS validation, the internal function lacked defense-in-depth.
+
+**Fix**:
+- Made `readFloatSample` explicit: `if (===4)` → `else if (===8)` → `else if (===2)` → `else throw DecoderError`
+- Removed redundant `console.warn` before throws in both BPS and compression rejection paths
+- Added `isFloatTIFF` guard for invalid BPS values (returns false for non-16/32/64)
+
+**Tests added**: 7 tests — BPS=24/8/1/4/12 rejection, valid 32/64/16-bit round-trips with pixel verification, `isFloatTIFF` returns false for float-with-invalid-BPS.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #355: MED-10 — FileSourceNode properties inconsistent with defineNodeProperty
+
+**Root cause**: `url`, `originalUrl`, and `exrLayer` properties were defined via raw `properties.add()` with manual field management, requiring duplicate writes (`this.url = x; this.properties.setValue('url', x)`) at every call site. This was error-prone and could lead to state divergence (field vs property container out of sync).
+
+**Fix**:
+- Converted `url`, `originalUrl`, `exrLayer` to `defineNodeProperty` — eliminates dual state, getters/setters auto-sync with property container
+- Removed all 16+ duplicate `properties.setValue()` calls
+- Added `propertyChanged` listener for `exrLayer` to sync `currentExrLayer` and trigger re-decode when set externally (e.g., deserialization)
+- Made `_syncingExrLayer` guard exception-safe with try/finally
+- Kept `width`, `height`, `isHDR` as `properties.add()` (getter/method conflicts)
+
+**Tests added**: 16 tests (FSN-200–FSN-215) — property registration, getter/setter wiring, change notifications, default values, serialization round-trip, fromJSON listener trigger, cold-sync path, no duplicate state/notifications.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #356: LOW-12 — Canvas dirty flag not reset after load failures
+
+**Root cause**: `canvasDirty` was only set to `true` at the end of successful loads. When a load failed (threw), the flag stayed `false`, causing `getCanvas()` to return a stale cached canvas from a previous successful load.
+
+**Fix**: Added `this.canvasDirty = true` at the START of all 4 public load entry points (`load()`, `loadFromEXR()`, `setEXRLayer()`, `loadFile()`), before any async work. This ensures that even on failure, the stale canvas cache is invalidated.
+
+**Tests added**: 6 tests (FSN-044 through FSN-049) — dirty flag cleared after success, dirty flag set on `loadFile` failure, `load()` failure, `loadFromEXR()` failure, `setEXRLayer()` failure, and correct behavior across sequential loads.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #357: LOW-20 — Frame accumulator overflow on speed changes
+
+**Root cause**: `accumulateFrames` and `accumulateDelta` in `PlaybackTimingController` had no upper bounds on delta time or frames-per-tick. Large timing gaps (tab backgrounding, GC pauses) produced unbounded frame bursts and visual glitches.
+
+**Fix**:
+- Added `MAX_FRAME_DELTA_MS = 500` — clamps raw delta to prevent multi-second bursts
+- Added `MAX_FRAMES_PER_TICK = 4` — caps frame advances in realtime mode
+- Negative deltas (clock regression) clamped to 0
+- Accumulator reset after overflow cap to prevent continued overflow
+- Same clamping applied to `accumulateDelta` (mediabunny path)
+
+**Tests added**: 13 tests (PTC-LOW20-001 through PTC-LOW20-013) — large delta clamping, pre-loaded accumulator cap, accumulator reset, negative deltas, rapid speed changes, normal playback unaffected, playAllFrames mode overflow, boundary at MAX_FRAMES_PER_TICK, high-speed 60fps/8x natural cap.
+
+**Files changed**:
+- `src/core/session/PlaybackTimingController.ts`
+- `src/core/session/PlaybackTimingController.test.ts`
+
+## Issue #358: LOW-21 — Dropped frame counter never reset
+
+**Root cause**: `droppedFrameCount` only reset when `play()` was called. It accumulated indefinitely across pause/seek/range-change cycles with no way to reset.
+
+**Fix**: 
+- Added `resetDroppedFrames()` public method through `PlaybackEngine` → `SessionPlayback` → `Session`
+- Counter auto-resets ONLY on `play()` (via existing `resetFpsTracking()`) — matching `HTMLVideoElement.getVideoPlaybackQuality()` pattern
+- Counter is PRESERVED on `pause()`, `goToFrame()`, `setInOutRange()` so consumers can read post-playback metrics
+- Manual `resetDroppedFrames()` available for explicit reset
+
+**Design rationale**: Domain expert review identified that resetting on `pause()` destroys the metric at the exact moment consumers need it. Standard video engines keep counters across pause/resume; only new playback segments start fresh.
+
+**Tests added**: 8 tests (PE-168 through PE-169g) — counter preserved after pause, seek, range change; manual reset; post-reset increment; play-pause-play cycle; play() as sole auto-reset; readability between pause and play.
+
+**Files changed**:
+- `src/core/session/PlaybackEngine.ts`
+- `src/core/session/SessionPlayback.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/PlaybackEngine.test.ts`
+
+## Issue #359: MED-39 — AudioCoordinator dispose doesn't stop playback first
+
+**Root cause**: `AudioCoordinator.dispose()` called `_manager.dispose()` without first stopping playback at the coordinator level. The `_isPlaying` flag was never reset, and the host was never notified via `onAudioPathChanged()`. This left `isWebAudioActive` returning true after dispose and could leave HTMLVideoElement permanently muted.
+
+**Fix**: `dispose()` now checks `_isPlaying` and, if true, stops playback (`_isPlaying = false`, `_manager.pause()`) and notifies the host via `onAudioPathChanged()` BEFORE tearing down resources. When nothing is playing, dispose proceeds as before.
+
+**Tests added**: 7 tests (AC-073 through AC-079) — active playback dispose with ordering verification (callback fires before manager.dispose()), no-op dispose, double dispose, resource release verification, isWebAudioActive state verification, dispose during in-flight loadFromVideo, video-fallback mode dispose.
+
+**Files changed**:
+- `src/audio/AudioCoordinator.ts`
+- `src/audio/AudioCoordinator.test.ts`
+- `src/core/session/SessionPlayback.ts`
+- `src/core/session/Session.ts`
+
+## Issue #360: MED-18 — WebSocketClient malformed message flood not rate-limited
+
+**Root cause**: `WebSocketClient.emitMalformedMessageWarning()` had a basic rate limit that silently stopped emitting warnings after 5 per window, with no indication to the caller that messages were being suppressed. A flood of malformed messages could exhaust the warning budget silently.
+
+**Fix**: Enhanced the rate limiter with proper notification:
+- When threshold (5 per 10s window) is exceeded, a single `MALFORMED_RATE_LIMITED` warning event is emitted once per window
+- When a new window starts after suppression, a summary warning reports the exact suppressed count from the previous window
+- All counters (`_malformedSuppressedCount`, `_rateLimitNotified`) properly reset on connection open, cleanup, and window reset
+- Valid messages are never affected by the rate limiter
+
+**Tests added**: 8 tests (WSC-031 through WSC-037 plus WSC-034a, WSC-034b, WSC-035a-d) — malformed message detection, diagnostic info, preview truncation, rate limiting at threshold, boundary behavior at exactly threshold, rate-limit notification uniqueness, window reset with suppressed count summary, multi-window accumulation verification, no false summaries, valid messages unaffected during flood, reconnect counter reset.
+
+**Files changed**:
+- `src/network/WebSocketClient.ts`
+- `src/network/WebSocketClient.test.ts`
+
+## Issue #361: MED-49 — Brightness unclamped in SDR path before contrast
+
+**Root cause**: In the color grading pipeline, brightness is applied as an additive offset. When brightness pushes values negative (e.g., brightness=-0.8 on a dark pixel at 0.1), the subsequent contrast multiplication around pivot 0.5 amplifies these negative values, producing visual artifacts.
+
+**Fix**: Added `max(color, 0.0)` clamp after brightness and before contrast in all three backends:
+- GLSL: `viewer.frag.glsl` line 1094 — `color.rgb = max(color.rgb, vec3(0.0))`
+- WGSL: `primary_grade.wgsl` line 138 — `color = vec4f(max(color.rgb, vec3f(0.0)), color.a)`
+- CPU/LUT: `CacheLUTNode.ts` lines 146-148 — `Math.max(r/g/b, 0)`
+The lower-only clamp is safe for both SDR and HDR (negative light is physically meaningless; values > 1.0 are preserved for HDR headroom).
+
+**Tests added**: 5 CPU regression tests (ACT-013 through ACT-017) + 1 GPU integration test in `primary-grade.gpu-test.ts` — negative brightness with contrast, maximum darkness, positive brightness unaffected, contrast amplification prevention, brightness=0 identity, and GPU shader clamp verification.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/primary_grade.wgsl`
+- `src/nodes/CacheLUTNode.ts`
+- `src/nodes/CacheLUTNode.test.ts`
+- `src/render/__gpu__/primary-grade.gpu-test.ts`
+
+## Issue #362: MED-50 — HLG OOTF gain extremely high for near-black
+
+**Root cause**: The HLG OOTF (BT.2100) used `pow(max(ys, 1e-6), 0.2)` for computing scene luminance gain. For near-black pixels (`ys` → 0), the power function produces disproportionately high gain (e.g., `ys=0.001` → gain 0.251, a 251× amplification of shadow noise). The `max(ys, 1e-6)` guard also created a plateau where sub-epsilon pixels all got identical non-zero gain, brightening pure black.
+
+**Fix**: Replaced the bare power function with a **linear ramp below threshold** (`OOTF_THRESH = 0.01`):
+- Below threshold: `ootfGain = ys * OOTF_SLOPE` (where `OOTF_SLOPE = 39.810717 = THRESH^(-0.8)`)
+- Above threshold: `ootfGain = pow(ys, 0.2)` (standard BT.2100)
+- C0-continuous at boundary: both expressions evaluate to `THRESH^0.2` at `ys = THRESH`
+- Black (`ys=0`) produces exactly zero gain (not epsilon)
+- Applied consistently across all 4 backends: GLSL, WGSL, TS reference, GPU test reference
+
+**Tests added**: 6 CPU regression tests (XE-082 through XE-087) + 2 GPU integration tests — near-black gain bounds, extreme near-black, gain bounded for small luminance, C0-continuity at threshold, normal values unaffected, monotonicity, GPU near-black shader verification.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/__tests__/shaderMathReference.ts`
+- `src/render/__tests__/shaderMathCrossEcosystem.test.ts`
+- `src/render/__gpu__/linearize.gpu-test.ts`
+
+## Issue #363: MED-23 — DisplayProfileControl slider range not validated on load
+
+**Root cause**: `DisplayProfileControl` did not validate slider values when loading from localStorage or when receiving external state via `setState()`. Out-of-range, NaN, or non-finite values could be stored and used, causing undefined behavior in the display gamma/brightness pipeline.
+
+**Fix**: Added a `SLIDER_RANGES` constant defining min/max/default for each slider property (`displayGamma: [0.1, 4.0]`, `displayBrightness: [0.0, 2.0]`, `customGamma: [0.1, 10.0]`) and a `clampSliderValue()` helper that:
+- Returns the default for NaN, undefined, or non-finite inputs (with console.warn)
+- Clamps out-of-range values to [min, max] (with console.warn)
+- Passes through valid in-range values silently
+Applied in both the constructor (localStorage load path) and `setState()` (external state path).
+
+**Tests added**: 20 tests (DPC-120 through DPC-139) — valid pass-through, above-max/below-min clamping for all 3 sliders, NaN/Infinity/-Infinity fallback to defaults, UI slider sync after clamp, constructor localStorage validation, event emission with clamped values, boundary min/max acceptance, duplicate setState deduplication, non-number fallback.
+
+**Files changed**:
+- `src/ui/components/DisplayProfileControl.ts`
+- `src/ui/components/DisplayProfileControl.test.ts`
+
+## Issue #364: LOW-09 — Stereo input format not serializable
+
+**Root cause**: `FileSourceNode.stereoInputFormat` property was not included in session serialization. When a user set a stereo input format (side-by-side, over-under, separate) and saved/loaded a session, the stereo format was lost.
+
+**Fix**:
+- Added `stereoInputFormat?: StereoInputFormat` to the `MediaReference` interface in `SessionState.ts`
+- Added serialization in `SessionSerializer.serializeMedia()` — reads from source or fileSourceNode
+- Added deserialization in `SessionSerializer.fromJSON()` — validates against valid format values before applying to both source and fileSourceNode
+- Added a validated setter on `FileSourceNode` that rejects invalid format values
+- Updated `FileSourceNode.toJSON()` to include stereoInputFormat when set
+- Backwards compatible: old sessions without the field load normally
+
+**Tests added**: 11 serializer tests (LOW09-001 through LOW09-011) + 7 node tests (FSN-221 through FSN-227) — serialization from source/fileSourceNode, omission when absent, deserialization with validation, invalid value rejection, backwards compatibility, null source safety, round-trip for all 3 valid formats.
+
+**Files changed**:
+- `src/core/session/SessionState.ts`
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.stereoFormat.test.ts` (new)
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #365: LOW-10 — BaseSourceNode.connectInput warns instead of throwing
+
+**Root cause**: `BaseSourceNode.connectInput()` logged a `console.warn` when called, but source nodes by definition cannot accept inputs. A warning allowed callers to silently build incorrect graph topologies without detecting the programming error.
+
+**Fix**: Changed `console.warn('Source nodes cannot have inputs')` to `throw new Error(...)` with a descriptive message including the node name and type (e.g., `Source node "my-source" (type: FileSource) cannot accept inputs`). No production code calls `connectInput` on source nodes, so this is a safe invariant enforcement.
+
+**Tests added**: 10 tests in `BaseSourceNode.test.ts` — throws Error, message contains "cannot accept inputs"/node name/type, no side effects after throw, getMetadata defaults and defensive copy, constructor correctness.
+
+**Files changed**:
+- `src/nodes/sources/BaseSourceNode.ts`
+- `src/nodes/sources/BaseSourceNode.test.ts` (new)
+
+## Issue #366: LOW-11 — StackGroupNode chosenAudioInput not range-validated
+
+**Root cause**: `StackGroupNode.chosenAudioInput` property accepted any value without validation. Out-of-range values (negative, NaN, beyond inputs count) were stored and could cause undefined behavior when used to select audio sources.
+
+**Fix**: Two-layer validation approach:
+- **Write-time transform**: Sanitizes input (NaN/Infinity → 0, negative → 0, fractional → truncated integer) but stores the raw sanitized value without clamping to `inputs.length`
+- **Read-time getter** `getChosenAudioInput()`: Returns `Math.min(stored, Math.max(0, inputs.length - 1))`, ensuring consumers always get a valid index even after inputs are disconnected
+
+This design solves both the validation problem AND two subtle issues found in review:
+1. Stale values after input disconnection (read-time clamping handles it automatically)
+2. Serialization order dependency (stored value preserved even when deserialized before inputs reconnected)
+
+**Tests added**: 10 tests — valid values, above-max clamping (stored vs effective), negative, NaN, Infinity, fractional truncation, getter auto-clamps after disconnect, multi-disconnect, serialization round-trip with late input reconnection.
+
+**Files changed**:
+- `src/nodes/groups/StackGroupNode.ts`
+- `src/nodes/groups/StackGroupNode.test.ts`
+
+## Issue #367: LOW-14 — Stereo eye offset not bounds-validated
+
+**Root cause**: `StereoRenderer` passed raw `state.offset` to `applyHorizontalOffset()` without validation. NaN, Infinity, or extreme values would cause incorrect pixel shifts or unexpected rendering behavior.
+
+**Fix**: Added exported `validateStereoOffset()` function that:
+- Returns 0 for NaN or non-number values (with warning)
+- Clamps to [-50, 50] range (matching the documented percentage-of-width range)
+- Clamps Infinity/-Infinity to 50/-50 (with warning)
+- Passes valid values unchanged
+Applied at both entry points: `applyStereoMode()` and `applyStereoModeWithEyeTransforms()`.
+
+**Tests added**: 16 tests — valid values, boundary values, above/below range clamping, NaN, Infinity/-Infinity, -0 behavior, non-number input, default state validity, and 3 integration tests exercising full rendering path with invalid offsets.
+
+**Files changed**:
+- `src/stereo/StereoRenderer.ts`
+- `src/stereo/StereoRenderer.test.ts`
+
+## Issue #368: LOW-15 — Stereo side-by-side odd width asymmetry
+
+**Root cause**: In `extractStereoEyes()`, both left and right eye images were allocated with `Math.floor(width/2)` for side-by-side mode (and `Math.floor(height/2)` for over-under). For odd dimensions, this dropped the middle pixel/row — e.g., a 1921px wide image extracted two 960px eyes, losing 1 column of source data.
+
+**Fix**:
+- Side-by-side: left eye gets `Math.floor(width/2)`, right eye gets `width - Math.floor(width/2)` (extra pixel to right)
+- Over-under: top eye gets `Math.floor(height/2)`, bottom eye gets `height - Math.floor(height/2)` (extra row to bottom)
+- Invariant: `leftWidth + rightWidth === width` and `topHeight + bottomHeight === height` always hold
+- Same fix applied consistently in extraction, rendering (renderSideBySide, renderOverUnder, renderMirror)
+
+**Tests added**: 15 tests — even/odd width extraction, even/odd height extraction, edge cases (width=2,3,1921; height=2,3), pixel-level data verification, dimension sum assertions, integration rendering tests with odd dimensions verifying no uninitialized pixels.
+
+**Files changed**:
+- `src/stereo/StereoRenderer.ts`
+- `src/stereo/StereoRenderer.test.ts`
+
+## Issue #369: LOW-22 — ImageBitmap close error handling incomplete
+
+**Root cause**: In `renderWorker.worker.ts`, `ImageBitmap.close()` calls were partially unprotected. On the success path, `msg.bitmap.close()` was called without a try-catch. If the bitmap had already been transferred or closed (e.g., due to a race condition), this would throw an unhandled DOMException in the worker.
+
+**Fix**: Added `safeCloseBitmap()` helper that:
+- Pre-checks `width === 0 && height === 0` to detect already-closed/transferred bitmaps (skips close, logs debug)
+- Wraps `bitmap.close()` in try-catch, logging failures at debug level (not warn/error — double-close is expected in some race conditions)
+- Replaces all raw `bitmap.close()` calls in the renderSDR handler (both success and error paths)
+
+**Tests added**: 7 tests (RW-SCB-001 through RW-SCB-007) — normal close, already-closed bitmap, close throws (transferred), multiple sequential closes, zero-dimension skip, partial-zero-dimension boundary, and integration test for error-path bitmap cleanup.
+
+**Files changed**:
+- `src/workers/renderWorker.worker.ts`
+- `src/workers/renderWorker.worker.test.ts`
+
+## Issue #590: MED-51 — Color primaries metadata lost through LUT stages
+
+**Root cause**: The four-stage GPU LUT pipeline (Pre-Cache → File → Look → Display) accepted user-declared output color spaces but never threaded that metadata onto the IPImage handed to the renderer. Downstream consumers (scopes, HDR shader path selection, observability) saw stale source metadata even after a Display LUT did PQ→sRGB.
+
+Subsequent reviews uncovered:
+- B1: `applyToIPImage` had no production caller (dead code).
+- B2: File/Look/Display stages dropped metadata silently in `GPULUTChain`.
+- B3: Lossy uint8 conversion silently corrupted float HDR data while the metadata "lied" about it.
+- NEW-B4: Cascade clone path used `IPImage.clone()` which drops `videoFrame`. For HDR-video IPImages (4-byte placeholder `data`, real pixels in VideoFrame), the renderer would read 4 bytes as the full pixel buffer → heap-out-of-bounds / garbage / crash.
+
+**Fix**:
+- Added `outputColorPrimaries` / `outputTransferFunction` to `LUTStageState` (preserve-on-null, override-on-value).
+- Added `LUTPipeline.computeOutputMetadata()` (pure cascade walker over Pre-Cache → File → Look → Display, skipping bypassed stages) and `LUTPipeline.applyToIPImage()` (materializer).
+- Wired the cascade into all three Viewer HDR render branches via `applyLUTMetadataCascade`.
+- Added `IPImage.cloneMetadataOnly()` — non-owning shallow clone that shares `data`, `managedVideoFrame`, `imageBitmap` and sets `_nonOwning` so `close()` skips releasing shared GPU resources. `LUTPipeline.applyToIPImage` uses this instead of `clone()`, fixing NEW-B4.
+- `PreCacheLUTStage.applyToIPImage` throws descriptive errors on float32/uint16 inputs and on incompatible bitDepth — preserves precision instead of lossy downcast.
+- Sanitization on deserialize against an enum allow-list (bt709/bt2020/p3 for primaries; srgb/hlg/pq/smpte240m for transfer).
+- Stage-state read accessors added on `LUTPipeline` for UI/observability use.
+
+**Tests added**: 50+ regression tests including:
+- `MLUT-CASCADE-001..021` in `LUTPipeline.test.ts` covering cascade math, applyToIPImage seam, NEW-B4 HDR-video VideoFrame preservation.
+- `cloneMetadataOnly` describe block in `Image.test.ts` (shared data, independent metadata, shared VideoFrame ref, non-owning lifecycle).
+- `VWR-MED51-001..004` in `Viewer.test.ts` (no-op path, cascade-with-changes, fallback sourceId, end-to-end HDR PQ video VideoFrame preservation).
+- `LSTG-U019..025`, `MLUT-CS-001..011`, `PCLT-IPM-001..017` for stage-level coverage and float guards.
+
+**Files changed**:
+- `src/core/image/Image.ts`
+- `src/core/image/Image.test.ts`
+- `src/color/pipeline/LUTPipeline.ts`
+- `src/color/pipeline/LUTPipeline.test.ts`
+- `src/color/pipeline/LUTPipelineState.ts`
+- `src/color/pipeline/LUTStage.ts`
+- `src/color/pipeline/LUTStage.test.ts`
+- `src/color/pipeline/PreCacheLUTStage.ts`
+- `src/color/pipeline/PreCacheLUTStage.test.ts`
+- `src/ui/components/Viewer.ts`
+- `src/ui/components/Viewer.test.ts`
+
+**Known follow-ups (non-blocking, separate issues)**:
+- Renderer SDR fallback path at `Renderer.ts:1023-1026` mutates `managedVideoFrame` directly; should respect non-owning clone contract.
+- Stereo right-eye IPImage doesn't currently get cascaded (left as TODO comment in Viewer.ts).
+- `'linear'` and additional ACES/Log transfer enum values would benefit color-space-converting LUTs (would touch decoders + worker round-trip table — out of scope here).
+
+---
+
+## Issue #591: MED-52 — Tone mapping headroom inconsistent across operators
+
+**Root cause**: Two incompatible HDR-headroom conventions were mixed across the eight tone mapping operators in `viewer.frag.glsl`, `webgpu/shaders/common.wgsl`, and `webgpu/shaders/scene_analysis.wgsl`:
+
+- **Reinhard / Filmic**: scaled the curve white-point by `hdrHeadroom` (`wp = WP * hdrHeadroom`). This stretched the curve so HDR headroom was compressed into the SDR `[0, 1]` output range. Output range was approximately `[0, 1]` regardless of headroom — display-side HDR headroom was destroyed.
+- **ACES / AgX / PBR Neutral / GT / ACES Hill**: pre-divided input by `hdrHeadroom`, applied a `[0, 1] → [0, 1]` curve, then re-multiplied output by `hdrHeadroom`. Output range was `[0, hdrHeadroom]` — display-side HDR headroom was preserved.
+- **Drago**: physically parameterized via `Lwa` and `Lmax`; folded headroom into `Lmax`.
+
+In HDR output mode (`u_outputMode == 1`, `u_hdrHeadroom > 1`), Reinhard/Filmic produced output in `[0, 1]` while ACES/AgX/PBR/GT/ACES-Hill produced output up to `hdrHeadroom`. The user's stated A/B comparison workflow ("toggle between operators on the same scene") was broken because the output dynamic range differed across operators by a factor of `hdrHeadroom`. The CPU implementations in `effectProcessing.shared.ts` ignored headroom entirely (implicit headroom=1.0, so the SDR CPU paths were correct but unable to express HDR).
+
+**Fix** — adopt a single uniform headroom convention across every non-Drago operator and every backend (GLSL / WGSL / CPU):
+
+```
+scaled = color / hdrHeadroom         // normalize so peak white = 1.0
+mapped = <operator-specific curve>(scaled)
+result = mapped * hdrHeadroom         // re-scale output peak to headroom
+```
+
+Properties of the new convention:
+
+1. **At hdrHeadroom = 1.0** (SDR output mode, which is forced by the renderer when `outputMode == 'sdr'` — see `Renderer.ts:613`) every operator reduces to its canonical SDR curve. SDR rendering is bit-for-bit unchanged.
+2. **At hdrHeadroom > 1.0** (HDR output mode) every operator produces output in `[0, hdrHeadroom]` and preserves display-side headroom uniformly.
+3. **Peak-white invariance** holds for every operator: `f(H * x, H) = H * f(x, 1)`. This is the formal statement of "A/B comparable across headroom".
+4. **Operator artistic identity is preserved**: the curve coefficients, white-point, exposure-bias, AgX matrix transforms, and clamp-to-`[0,1]` semantics are unchanged. Only the input/output scaling around the curve changes for Reinhard/Filmic.
+5. **Drago is excluded by design** and explicitly documented — it is physically parameterized (`Lwa`, `Lmax`) and folds headroom into `Lmax`, with `dragoBrightness` playing the role of the post-multiplier. Its existing behavior is preserved.
+
+**Backend parity**:
+
+- GLSL `viewer.frag.glsl` (WebGL2 fragment shader)
+- WGSL `webgpu/shaders/common.wgsl` (shared functions for primary/secondary/diagnostics passes)
+- WGSL `webgpu/shaders/scene_analysis.wgsl` (multi-pass scene analysis stage)
+- CPU `utils/effects/effectProcessing.shared.ts` (worker + main-thread fallback path, formula-identical to the shaders)
+
+All four implementations now use the same `scaled = color/headroom; mapped = curve(scaled); return mapped * headroom` pattern. CPU function signatures gained an optional `hdrHeadroom = 1.0` argument so existing call sites continue to work and HDR CPU paths can opt in. `ToneMappingParams.hdrHeadroom` was added to thread the value through `applyToneMappingToChannel` / `applyToneMappingToRGB`. Invalid headroom values (NaN, ±Infinity, `≤ 0`) sanitize to 1.0 to match the renderer's `[1, 100]` clamp at the boundary.
+
+**Drago CPU/GPU parity (Round 2)**: the GLSL/WGSL shaders all multiply `Lmax` by `hdrHeadroom` (`Lmax = max(u_tmDragoLmax, 1e-6) * u_hdrHeadroom`) so display headroom is folded into the operator's physical peak. The CPU `tonemapDragoChannel` previously dropped headroom entirely; it now accepts a fifth `hdrHeadroom = 1.0` argument and applies the same `Lmax * hdrHeadroom` scaling. Both dispatchers (`applyToneMappingToChannel` / `applyToneMappingToRGB`) thread `params.hdrHeadroom` into the Drago path. Bit-for-bit equivalence with the shader is verified by `XE-TM-MED52-Drago-001..006` at H ∈ {1, 2, 5, 10}.
+
+**JS-side NaN sanitization (Round 2)**: `Math.min(100, Math.max(1, NaN))` evaluates to `NaN` because `Math.min/max` propagate NaN — the previous `Renderer.setHDRHeadroom` accepted such input and would have uploaded NaN to the GPU uniform, poisoning every tone mapping division. `Renderer.setHDRHeadroom` now early-returns 1.0 for any non-finite input, then clamps to `[1, 100]`. `WebGPUShaderPipeline.setGlobalHDRHeadroom` previously had zero clamping; it now mirrors the Renderer contract (sanitize non-finite to 1.0, clamp to `[1, 100]`).
+
+**Shader-side defense-in-depth (Round 2)**: every non-Drago tone mapping operator in `viewer.frag.glsl`, `webgpu/shaders/common.wgsl`, and `webgpu/shaders/scene_analysis.wgsl` now defines a local `headroom = max(<uniform>, 1e-6)` at the top of the function and uses it for the `color / headroom` and `result * headroom` operations. This prevents division-by-zero and (because `1e-6` is small) leaves all peak-white invariance behavior intact when the JS-side guards are working. Drago paths already have their own `max(L, 1e-6)` clamps.
+
+**Tests added**:
+
+- `XE-TM-MED52-001..007` in `src/render/__tests__/shaderMathToneMapping.test.ts` (cross-operator headroom consistency: identity at headroom=1, output is non-negative at black, peak-white invariance across multiple `(H, x)` operating points, mid-gray ballpark, peak-output bound, NaN safety).
+- `HDRTM-MED52-001..014` in `src/utils/effects/toneMappingOperators.test.ts` (per-operator: default headroom=1.0 matches bare call, peak-white invariance for each operator including the cross-channel ones, NaN/Infinity/0/negative headroom safety, monotonicity at non-trivial headroom).
+- `XE-TM-MED52-Drago-001..006` (Round 2) in `src/utils/effects/toneMappingOperators.test.ts` — CPU/GPU Drago equivalence: per-channel formula match against a shader-mirror reference at H ∈ {1, 2, 5, 10}, dispatcher parity, RGB path parity, H=1.0 backward-compatibility, NaN/Infinity/0/negative safety, headroom monotonicity (larger H → lower output for same scene-referred input).
+- `XE-TM-MED52-LH-001..007` (Round 2) — large-headroom numerical stability at H=1000 across every operator (Reinhard, Filmic, ACES, GT, AgX, PBRNeutral, ACESHill, Drago, and the dispatcher).
+- `REN-EXT-008-NAN`, `REN-EXT-008-CLAMP` (Round 2) in `src/render/Renderer.test.ts` — `Renderer.setHDRHeadroom(NaN/Infinity/-Infinity)` falls back to 1.0 (Math.min/max NaN propagation regression); ceiling clamp to 100.
+- `WGPU-SP-081`, `WGPU-SP-082` (Round 2) in `src/render/webgpu/WebGPUShaderPipeline.test.ts` — `setGlobalHDRHeadroom` mirrors the Renderer contract: NaN/Infinity sanitized to 1.0 and clamp to `[1, 100]`.
+- Existing `XE-TM-091` updated to assert the new shared convention rather than document the previous divergence.
+
+**Files changed**:
+
+- `src/render/shaders/viewer.frag.glsl` — Reinhard, Filmic now use the uniform convention; added a top-of-section comment block documenting the convention; updated per-operator comments for ACES, AgX, PBR Neutral, GT, ACES Hill, and Drago. Round 2: every non-Drago operator now defines a local `headroom = max(u_hdrHeadroom, 1e-6)` for defense-in-depth.
+- `src/render/webgpu/shaders/common.wgsl` — same fix in the shared WGSL functions; added section comment block. Round 2: shader-side defensive `headroom = max(hdrHeadroom, 1e-6)` local.
+- `src/render/webgpu/shaders/scene_analysis.wgsl` — same fix in the scene-analysis WGSL pass; added section comment block. Round 2: shader-side defensive `headroom = max(u.hdrHeadroom, 1e-6)` local.
+- `src/utils/effects/effectProcessing.shared.ts` — every non-Drago operator gained an optional `hdrHeadroom = 1.0` parameter with sanitization; `ToneMappingParams` extended; `applyToneMappingToChannel` / `applyToneMappingToRGB` thread headroom through. Round 2: `tonemapDragoChannel` accepts `hdrHeadroom` (defaults 1.0) and folds it into Lmax to match the GPU shader; both dispatchers thread headroom into the Drago branch.
+- `src/render/Renderer.ts` — Round 2: `setHDRHeadroom` early-returns 1.0 for non-finite input before clamping (Math.min/max propagate NaN, which would otherwise reach the GPU uniform).
+- `src/render/webgpu/WebGPUShaderPipeline.ts` — Round 2: `setGlobalHDRHeadroom` now sanitizes non-finite to 1.0 and clamps to `[1, 100]` to mirror the WebGL2 Renderer contract.
+- `src/render/__tests__/shaderMathToneMapping.test.ts` — added `XE-TM-MED52-*` describe block; updated `XE-TM-091` to document the new convention.
+- `src/utils/effects/toneMappingOperators.test.ts` — added `HDR Headroom Convention (MED-52)` describe block; Round 2: `XE-TM-MED52-Drago-*` (CPU/GPU equivalence) and `XE-TM-MED52-LH-*` (H=1000 stability) added.
+- `src/render/Renderer.test.ts` — Round 2: `REN-EXT-008-NAN`, `REN-EXT-008-CLAMP`.
+- `src/render/webgpu/WebGPUShaderPipeline.test.ts` — Round 2: `WGPU-SP-081`, `WGPU-SP-082`.
+- `ISSUES.md` — moved MED-52 to fixed.
+
+**Test results**: 1746 render tests passing, 405 effects tests passing, 200 UI tone mapping tests passing, 0 regressions, `tsc --noEmit` clean.
+
+**Known follow-ups (non-blocking)**:
+
+- The CPU `applyToneMappingToData` byte-array path is still SDR-only (`Uint8ClampedArray` clips above 1.0 by definition); the headroom plumbing is in place but no caller sets a non-default value yet. This is consistent with the current architecture (HDR CPU path uses Float32 buffers separately).
+- The `Renderer.setHDRHeadroom` NaN-propagation edge case noted in Round 1 is now fixed (Round 2): both the WebGL2 and WebGPU JS-side entry points sanitize non-finite headroom to 1.0 before clamping, and every shader operator additionally floors the divisor to `1e-6` defensively.
+
+## Issue #592: MED-55 — WebGPU extended tone mapping not verified at runtime
+
+**Root cause**: Phase 4 acceptance for "WebGPU extended tone mapping" relied on shader-compile checks alone. No test exercised real GPU pixels through any of the 8 operators with `hdrHeadroom > 1`, so a regression between WGSL and the CPU/GLSL reference would not be caught.
+
+Round 1 review surfaced five additional concerns: an implicit "common.wgsl is prepended" contract that the production `WebGPUShaderPipeline` did not honor (would break stage compilation when Phase 4 wires up); missing SDR-identity coverage for 6/8 operators; runtime tests that fail instead of skip in zero-readback environments; an unused TOL constant; a stale CPU docstring.
+
+**Fix**:
+- `WebGPUShaderPipeline.renderSingleStage` prepends `common.wgsl` when compiling stage shaders, enforcing the contract at runtime. Comment explains the single-point-of-contract pattern.
+- New per-operator runtime parity test under `src/render/__gpu__/tonemap-webgpu.gpu-test.ts` covers all 8 operators at `hdrHeadroom=1` (SDR identity) and `hdrHeadroom=3` (extended HDR), comparing real GPU output against the CPU reference within tolerance ~1/256.
+- One-shot GPU-readback canary (`ensureReadbackCanary` + `withReadback`) gracefully skips runtime pixel tests in environments with broken readback while leaving compile-only tests running.
+- Tolerance enforced via explicit `expectClose(actual, expected)` helper using `<= 1/256`; meta-test guards semantics.
+- Stage WGSL files deduplicated (LUMA, applyTemperature, applyLUT3DGeneric, all 8 tone-mapping operators); `common.wgsl` is the single source of truth.
+- `input_decode.wgsl` uniformity violation fixed (textureSample → textureSampleLevel with explicit LOD).
+- `XE-GAMUT-005` rewritten to assert CPU `softClipChannel` matches the unified tanh formula across the active range (replacing the previous "deliberate divergence" pin).
+- CPU `tonemapDragoChannel` docstring updated to reference `common.wgsl`; dead `applyLUT3DGeneric` helper removed.
+
+**Tests added**:
+- `src/render/__gpu__/tonemap-webgpu.gpu-test.ts`: 22 tests — 8 SDR-identity, 8 HDR-headroom, passthrough, dispatcher dispatch-table coverage, canary, tolerance meta.
+- `WGPU-SP-090` in `src/render/webgpu/WebGPUShaderPipeline.test.ts` verifying the common.wgsl prepend contract.
+- `AC-P4-4.3a/b/c` in `src/hdr-acceptance-criteria.test.ts`.
+
+**Files changed**:
+- `src/render/webgpu/WebGPUShaderPipeline.ts`
+- `src/render/webgpu/WebGPUShaderPipeline.test.ts`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/webgpu/shaders/scene_analysis.wgsl`
+- `src/render/webgpu/shaders/color_pipeline.wgsl`
+- `src/render/webgpu/shaders/diagnostics.wgsl`
+- `src/render/webgpu/shaders/display_output.wgsl`
+- `src/render/webgpu/shaders/input_decode.wgsl`
+- `src/render/webgpu/shaders/primary_grade.wgsl`
+- `src/render/webgpu/shaders/secondary_grade.wgsl`
+- `src/render/__gpu__/tonemap-webgpu.gpu-test.ts` (new)
+- `src/render/__tests__/shaderMathColorPipeline.test.ts`
+- `src/utils/effects/effectProcessing.shared.ts`
+- `src/hdr-acceptance-criteria.test.ts`
+
+**Known follow-up (non-blocking)**: When Phase 4 wiring registers stage WGSL into `WebGPUShaderPipeline`, the orchestrator must strip the per-stage `@vertex fn vs` declaration to avoid duplicate-symbol errors (the prepend pattern combines vertex + common + stage source). Track in a separate issue.
+
+## Issue #593: MED-25 — Multiple global document click listeners without delegation
+
+**Root cause**: Many UI components (popovers, settings menus, dropdowns, overlays) each registered their own `document.addEventListener('mousedown'|'click', ...)` handler for outside-click dismiss. With dozens of dismissable surfaces, each open instance added a fresh global listener; missed cleanup leaked listeners holding references to disposed components. Semantics for nested popovers, Escape, re-entrancy, and LIFO dismiss order varied per component.
+
+**Fix**: Introduced `OutsideClickRegistry` (`src/utils/ui/OutsideClickRegistry.ts`) — a singleton that owns ONE capture-phase listener per event type (`mousedown`, `click`, `keydown`) and dispatches dismiss to registered consumers. Components call `register({ elements, onDismiss, dismissOn?, dismissOnEscape? })` and receive an idempotent deregister function.
+
+Semantics:
+- **LIFO walk**: clicking inside an inner popover protects it AND its outer ancestors. Clicking outside both dismisses innermost-first.
+- **Capture-phase listeners**: deliberate change vs prior bubble-phase handlers; consumers cannot rely on `stopPropagation` to suppress dismiss.
+- **Strict deregister-during-dispatch**: if a peer's deregister fires inside another callback, the peer's onDismiss is skipped (intuitive contract: "if I deregister, my onDismiss won't run").
+- **Re-entrant register() during dispatch**: lands in the registry but is NOT considered for the in-flight event.
+- **Auto-detach** of global listeners when the last entry is removed.
+- **Escape**: dismisses only the innermost opted-in registration.
+- **Callback throws** are caught and logged via `console.error` so a buggy consumer can't break peers.
+
+Migrated 14 components to the new registry: BugOverlaySettingsMenu, ClippingOverlaySettingsMenu, EXRWindowOverlaySettingsMenu, FPSIndicatorSettingsMenu, FrameburnSettingsMenu, InfoPanelSettingsMenu, InfoStripSettingsMenu, MatteOverlaySettingsMenu, ReferenceComparisonSettingsMenu, SpotlightOverlaySettingsMenu, TimecodeOverlaySettingsMenu, ShortcutCheatSheet, GotoFrameOverlay, plus minor cleanup of InfoStripSettingsMenu duplicate `menuEl` assignment. Net -208 LOC across migrated components.
+
+**Tests added** (`src/utils/ui/OutsideClickRegistry.test.ts`, 27 tests):
+- Basic register/dismiss with multi-element safe zones.
+- Deregister idempotency, listener teardown invariant.
+- LIFO peer registrations, nested popover protection.
+- Escape (innermost only, opt-out, key filtering).
+- Robustness: throwing callback, null/undefined elements, re-entrant register/deregister during dispatch.
+- Detached DOM elements, listener detach after dismiss path.
+- Plus 8 integration tests in `OutsideClickRegistry.integration.test.ts` proving real components dismiss correctly and listener-count stays at 1 per event type regardless of open popover count.
+
+**Files changed**:
+- `src/utils/ui/OutsideClickRegistry.ts` (new)
+- `src/utils/ui/OutsideClickRegistry.test.ts` (new)
+- `src/ui/components/OutsideClickRegistry.integration.test.ts` (new)
+- `src/ui/components/BugOverlaySettingsMenu.ts`
+- `src/ui/components/ClippingOverlaySettingsMenu.ts`
+- `src/ui/components/EXRWindowOverlaySettingsMenu.ts`
+- `src/ui/components/FPSIndicatorSettingsMenu.ts`
+- `src/ui/components/FrameburnSettingsMenu.ts`
+- `src/ui/components/InfoPanelSettingsMenu.ts`
+- `src/ui/components/InfoStripSettingsMenu.ts`
+- `src/ui/components/MatteOverlaySettingsMenu.ts`
+- `src/ui/components/ReferenceComparisonSettingsMenu.ts`
+- `src/ui/components/SpotlightOverlaySettingsMenu.ts`
+- `src/ui/components/TimecodeOverlaySettingsMenu.ts`
+- `src/ui/components/ShortcutCheatSheet.ts`
+- `src/ui/components/GotoFrameOverlay.ts`
+
+**Verification**:
+- Targeted: 191 files, 8860 tests passing.
+- Full suite: 639 files, 26018 tests passing.
+- `npx tsc --noEmit` clean.
+
+**Known follow-up (non-blocking)**: ~30 other controls (ZebraControl, CompareControl, StereoControl, ScopesControl, ToneMappingControl, OCIOControl, LUTPipelinePanel, etc.) still have hand-rolled outside-click dismiss patterns. Each migration requires updating the associated test (replace `expect(document.addEventListener).toHaveBeenCalledWith(...)` style assertions with `expect(outsideClickRegistry.getRegistrationCount()).toBe(...)`). Tracked as a follow-up batch.
+
+---
+
+## Issue #594: HIGH-31 — MPF offset arithmetic partially unchecked
+
+**Root cause**: `parseMPFEntries` and `parseGainmapJPEG` in `src/formats/JPEGGainmapDecoder.ts` performed offset+size arithmetic on uint32 values read from untrusted JPEG content with several unchecked paths. ArrayBuffer.slice silently clamps OOB offsets, producing opaque downstream errors (e.g., a decoder fails on a 0-byte blob with no context). The IFD entry array, MPEntry table, individual MPEntry slices, and base-image slice were all subject to silent truncation rather than explicit error.
+
+**Fix**: Added `ensureMPFRange(start, size, bufferLength, context)` helper that validates non-finite/negative/OOB ranges and throws `DecoderError` with descriptive context including offset, size, and buffer length in hex. Applied at every structural boundary:
+- `parseGainmapJPEG`: base image slice + gainmap slice
+- `parseMPFEntries`: IFD entry-count read, full IFD entry array, MPEntry table for tag 0xB002 (using `count` byte length per CIPA DC-007 spec when available, else `mpEntryCount * 16`), full MPEntry array
+- `decodeGainmapToFloat32`: unified to use `ensureMPFRange` for consistent error UX
+- Sanity cap `mpEntryCount > 65535` at the `0xB001` NumberOfImages tag to short-circuit malicious huge values
+- `parseGainmapJPEG` returns `null` for buffers < 4 bytes instead of throwing `RangeError` from getUint16
+
+Lenient/strict boundary preserved: returns `null` for "this isn't MPF" signals (size < 8, wrong BOM, missing TIFF magic) and throws for post-header bounds violations (corruption that should be surfaced).
+
+**Tests added** (`src/formats/JPEGGainmapDecoder.test.ts`):
+- `HIGH-31: explicit MPF bounds-check errors` describe block: 8 integration tests covering IFD offset OOB, MPEntry tag valueOffset OOB, MPEntry table truncation, base image size OOB, JPEG truncated inside MPF segment, boundary case (entries end exactly at buffer length), boundary case (gainmap offset == buffer length with size 0), empty buffer.
+- `ensureMPFRange (internal helper)` describe block: 9 direct unit tests for in-range, exact-fit, NaN/Infinity branches, negative branches, OOB, hex-format assertion, context passthrough.
+- `mpEntryCount sanity cap (round-2 polish)` describe block: 3 tests for cap at 65535, accepts boundary exactly 65535.
+- `decodeGainmapToFloat32 bounds checks`: 2 existing tests updated to assert unified message format.
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+**Verification**:
+- 47 JPEGGainmapDecoder tests passing.
+- 1128 format tests passing across 23 files.
+- `npx tsc --noEmit` clean.
+
+**Known follow-up**: MED-30 (MPF IFD entry count unbounded for the `count / 16` derivation when 0xB002 precedes 0xB001) is tracked as a separate issue.
+
+## Issue #595: MED-28 — JPEG marker segment length partially unchecked
+
+**Root cause**: Per JPEG spec ITU-T T.81 §B.1.1.4, marker segment length is a 2-byte big-endian field that includes itself; minimum valid value is 2 (empty payload). Four segment-iterating loops in `src/formats/JPEGGainmapDecoder.ts` (`extractJPEGOrientation`, `findMPFMarkerOffset`, `extractHeadroomFromXMP`, `extractXMPFromJPEG`) read `segmentLength` from untrusted file bytes without validating the minimum. While the existing implementation does not infinite-loop on `segLen < 2` alone (each iteration advances `offset` by at least 2 bytes), spec-violating values can cause re-traversal of misaligned bytes, producing phantom markers and confused parsing on adversarial inputs.
+
+**Fix**: Added `if (segLen < 2) break/return null` to all four loops (matching the pre-existing pattern at `DecoderRegistry.ts:236`). Recovery is lenient throughout because:
+- `findMPFMarkerOffset` is shared between the gainmap detector (must not throw) and the parser
+- `extractJPEGOrientation` falls back to default orientation 1 on parse failure
+- XMP sub-parsers already return null and have caller-side fallbacks
+
+Code comments at each site cite the spec and explain the defense-in-depth rationale. The XMP sub-parsers are now exposed via `_internal` namespace (matching the pattern HIGH-31 introduced for `ensureMPFRange`) so the lenient bail branches can be tested directly.
+
+**Tests added** (`src/formats/JPEGGainmapDecoder.test.ts`):
+- `JPEG segment length spec compliance (ITU-T T.81 §B.1.1.4)` describe block:
+  - `isGainmapJPEG bails on spec-violating segmentLength=0/1`
+  - `isGainmapJPEG accepts segmentLength=2 (empty payload, valid)` and `segmentLength=3 (1 byte payload)`
+  - `parseGainmapJPEG returns null when MPF scan hits segmentLength=0`
+  - `extractJPEGOrientation returns default (1) on segmentLength=0/1`
+  - `extractJPEGOrientation accepts segmentLength=2 and segmentLength=3`
+  - Adversarial-buffer tests for `isGainmapJPEG` and `extractJPEGOrientation` with 0xFFE0/0xFFE1-shaped padding to verify bounded behavior on hostile inputs.
+- Direct `_internal` coverage:
+  - `extractHeadroomFromXMP returns null when APP marker has segmentLength=0/1`
+  - `extractXMPFromJPEG returns null when APP marker has segmentLength=0/1`
+  - `extractHeadroomFromXMP/extractXMPFromJPEG accept segmentLength=2 and return null cleanly`
+  - `extractHeadroomFromXMP/extractXMPFromJPEG bail on adversarial buffer with 0xFFxx-shaped padding`
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+**Verification**:
+- 66 JPEGGainmapDecoder tests passing.
+- 1147 format tests passing (1 pre-existing skip).
+- `npx tsc --noEmit` clean.
+- Stash-revert with new tests against pre-fix source: 8 _internal tests fail (proving they would catch a regression in either direction).
+
+**Known follow-up**: A defensive `segLen < 2` audit of `src/formats/JP2Decoder.ts:430-454` (JPEG 2000 marker walker) is a tracked improvement; not infinite-loopable, but `<2` could mis-align reads. Out of MED-28 scope.
+
+## Issue #596: MED-30 — MPF IFD entry count unbounded
+
+**Root cause**: `parseMPFEntries` in `src/formats/JPEGGainmapDecoder.ts` read a uint16 IFD entry count directly from the file and looped over it without any practical cap. Although HIGH-31's `ensureMPFRange` prevented out-of-bounds reads when the entry array didn't fit, a hostile file just large enough to satisfy the bounds check (~786 KB) could still force up to 65535 iterations, each performing 3 DataView reads — uncapped CPU work derived from attacker-controlled bytes. Two related uncapped paths existed:
+- The 0xB001 NumberOfImages tag (previously capped at 65535 — the uint16 ceiling, not a practical cap)
+- The 0xB002 `count / 16` derivation (when 0xB002 precedes 0xB001 or 0xB001 is absent)
+
+**Fix**: Added `MAX_MPF_IFD_ENTRIES = 256` constant with inline rationale (CIPA DC-007 / ISO 21496-1 don't formally cap; real MPF gainmap JPEGs use 2–4 entries; 256 is two orders of magnitude above any practical file). Applied the cap to all three paths:
+1. **IFD entry count** at IFD start, validated BEFORE the entry loop runs (prevents CPU work)
+2. **0xB001 NumberOfImages**, tightened from the previous 65535 sanity cap
+3. **0xB002 count/16 derivation** with a clearer error message ("MPEntry table implies N entries, exceeds practical cap 256") than the downstream buffer-overflow message
+
+Each error is descriptive — names the actual count and the cap.
+
+**Tests added** (`src/formats/JPEGGainmapDecoder.test.ts`):
+- `MED-30: IFD entry count cap` describe block: 5 tests — entryCount=65535 (uint16 max), entryCount=257 (boundary), entryCount=256 (cap accepted), entryCount=4 (typical), error-message format check.
+- `MED-30 round 2: 0xB002 count/16 derivation cap` describe block: 3 tests — count=4112 (implies 257), count=0xFFFFFFF0 (uint32-max-ish), count=4096 (implies exactly 256, cap error must not fire).
+- Updated 4 existing 0xB001 tests for the new 256 cap (was 65535).
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+**Verification**:
+- 75 JPEGGainmapDecoder tests passing (8 new for MED-30).
+- 1156 format tests passing across 23 files (1 pre-existing skip).
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms new tests would fail on master code.
+
+**Behavior change**: The 0xB001 NumberOfImages cap was tightened from the uint16 ceiling (65535) to the practical cap (256). No real MPF file ships with 257+ sub-images, so this should not affect production decoding.
+
+## Issue #597: MED-42 — Detected FPS calculation flawed for edge case
+
+**Root cause**: `MediabunnyFrameExtractor.buildFrameIndex` guarded only against `lastTimestamp <= 0`. A single-frame video with non-zero PTS (typical for still-image "videos") fell through and applied the formula `N / (lastTimestamp + lastTimestamp/(N-1))`, which collapses to `1/(2*lastTimestamp)` for N=1 — a meaningless number (e.g. 1.0 FPS for a single frame at t=0.5s). FPS is mathematically indeterminate from a single frame.
+
+**Fix**: Extracted pure helper `computeDetectedFps(N, lastTimestamp): number | null` that returns `null` for `N < 2` or `lastTimestamp <= 0`, and `(N-1) / lastTimestamp` (with snap-to-common-FPS) for `N >= 2`. The `(N-1)` denominator now correctly counts frame intervals. Consumers (`SessionMedia`, `VideoRepresentationLoader`, `VideoSourceNode`) already null-check `detectedFps` and fall back to defaults.
+
+**Tests added** (`src/utils/media/MediabunnyFrameExtractor.test.ts`):
+- 11 new pure-function tests in a new `computeDetectedFps (MED-42)` describe block: 0 frames, 1 frame at t=0, 1 frame at t>0 (the regression), N=2 with t=0, negative timestamp, 2 frames @ 30fps, 24 frames @ 24fps, 60 frames @ 60fps, snap to 23.976/29.97, uncommon (100) FPS pass-through.
+- Existing single-frame integration test tightened from "either null or number" to strictly `null`.
+
+**Files changed**:
+- `src/utils/media/MediabunnyFrameExtractor.ts`
+- `src/utils/media/MediabunnyFrameExtractor.test.ts`
+
+**Verification**:
+- 69 MediabunnyFrameExtractor tests passing.
+- 4122 tests across utils/media + core/session + nodes/sources passing.
+- Full suite: 26077 passing.
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 10 of 11 new tests fail on pre-fix code (the 11th is a tightened existing test that was always lenient enough to pass either way).
+
+**Known follow-ups** (separate tickets, not blockers):
+- Snap-to-common-FPS at `MediabunnyFrameExtractor.ts:111-117` aliases 24→23.976, 30→29.97, 60→59.94 due to wide tolerance (0.5) + first-match-wins ordering. New MED-42 tests codify the current behavior; a fix should change to nearest-match.
+- For trimmed videos where first PTS is t0>0, the `(N-1)/lastTimestamp` formula understates FPS. Pre-existing assumption ("first frame at t=0") documented in JSDoc.
+
+## Issue #598: LOW-24 — Midtone mask integer rounding precision
+
+**Root cause**: The clarity effect's midtone weighting used a 256-entry uint8-indexed LUT looked up via `Math.round(luminance)`. Any two luminances in the same uint8 bin (e.g. 60.2 and 60.4) got the same mask weight, producing visible plateaus / banding in smooth gradients — particularly for HDR / float pipelines where the input precision exceeds 8 bits. Three call sites had the same defect: the worker (full-res + half-res clarity loops), `EffectProcessor` (sync, half-res, async-chunked), and `ViewerEffects.applyClarity` (consumed by `ClarityNode`).
+
+**Fix**: Extracted a shared `computeMidtoneMaskValue(normalizedLum: number): number` helper in `src/utils/effects/effectProcessing.shared.ts` computing the smooth formula `1 - (|n - 0.5| * 2)^2` in float precision (mathematically identical to the LUT's shape but without quantization). All three call sites updated to use the shared helper. Worker and EffectProcessor inline the formula in tight per-pixel loops for performance; ViewerEffects calls the helper per pixel (less hot path). Plateau count on a 1024-sample sweep drops from 769 to 1 (the mathematical peak). Removed dead code: `EffectProcessor.midtoneMask` static cache + `getMidtoneMask()` method. Worker `getMidtoneMask` LUT retained for back-compat with tests.
+
+**Tests added**:
+- `src/workers/effectProcessor.worker.buffers.test.ts`: 6 LOW24-NNN tests covering edge cases, clamping, LUT-vs-formula consistency, plateau-free monotonic sweep, sub-pixel divergence from legacy lookup, 1024-step ramp.
+- `src/utils/effects/EffectProcessor.test.ts`: EP-051 rewritten as behavioral midtone-peak test; EP-052 added as end-to-end precision test that builds a checkerboard near uint8 bin centers and asserts `applyEffects` output diverges from a legacy `LUT[Math.round(luma)]` reference.
+
+**Files changed**:
+- `src/utils/effects/effectProcessing.shared.ts` (new shared helper)
+- `src/workers/effectProcessor.worker.ts`
+- `src/utils/effects/EffectProcessor.ts`
+- `src/ui/components/ViewerEffects.ts`
+- `src/workers/effectProcessor.worker.buffers.test.ts`
+- `src/utils/effects/EffectProcessor.test.ts`
+
+**Verification**:
+- 9486 tests across workers + utils/effects + ui/components + nodes/effects passing.
+- 26083 tests passing in full suite.
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 6 LOW24 tests fail on pre-fix code.
+
+## Issue #599: LOW-23 — Effect processor error stack unavailable in production
+
+**Root cause**: `Error.name`, `Error.message`, and `Error.stack` are non-enumerable on V8/SpiderMonkey, so the structured-clone algorithm used by `Worker.postMessage` silently drops them when posting Error instances across worker boundaries. The main thread previously received bare `Error: <message>` with no source context, making production debugging hard.
+
+**Fix**:
+- `src/workers/effectProcessor.worker.ts`: explicitly capture `error.name`, `error.message`, `error.stack` as plain string fields in the catch block; protocol documented in header comment.
+- `src/utils/WorkerPool.ts`: `handleWorkerMessage` rehydrates `Error.name` from the serialized payload alongside the already-rehydrated `stack`.
+- `src/utils/effects/PrerenderBufferManager.ts`: `WorkerResultMessage` interface extended with optional `name`/`stack` fields; failure logging surfaces the rehydrated stack.
+
+**Tests added (5)**:
+- `src/workers/effectProcessor.worker.errors.test.ts` (new file, 4 tests):
+  - EPW-ERR-001: error response includes message, name (`'TypeError'`), and stack as plain strings.
+  - EPW-ERR-002: error response is structured-clone-safe (round-trips through JSON).
+  - EPW-ERR-003: name field is always populated.
+  - EPW-ERR-004: successful processing does not populate error fields.
+- `src/utils/WorkerPool.test.ts`: WP-015b — consumer rehydrates `Error.name` and `Error.stack` from worker error payload.
+
+**Files changed**:
+- `src/workers/effectProcessor.worker.ts`
+- `src/utils/WorkerPool.ts`
+- `src/utils/effects/PrerenderBufferManager.ts`
+- `src/workers/effectProcessor.worker.errors.test.ts` (new)
+- `src/utils/WorkerPool.test.ts`
+
+**Verification**:
+- 588 tests across workers + utils/effects passing.
+- 26089 tests passing in full suite.
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 3 of 5 new tests would fail on pre-fix code (EPW-ERR-001, EPW-ERR-003, WP-015b); 2 are sanity checks that pass either way.
+
+**Known follow-up (separate ticket)**: `src/render/renderWorker.worker.ts` uses a different `renderError` protocol but has the same Error.stack-lost defect at lines ~258, 308, 336. Out of LOW-23 scope.
+
+## Issue #600: MED-54 — Gamut mapping matrix working space undocumented
+
+**Root cause**: Color matrices in `viewer.frag.glsl`, `common.wgsl`, `scene_analysis.wgsl`, `effectProcessing.shared.ts`, and `ShaderConstants.ts` had no inline documentation of source/destination color spaces, derivation references, or storage conventions. A future reader could not tell whether a matrix mapped Rec.709→AP1, AP1→Rec.709, Rec.2020→sRGB, etc. without re-deriving from constants. The `COLOR_PRIMARIES_MATRICES` JSDoc additionally claimed the matrices were derived "via the Bradford chromatic adaptation transform" — misleading because all entries share the D65 white point, so no CAT is involved.
+
+**Fix**: Documented ~10 matrices with source space, destination space, derivation reference (BT.2020-2 + BT.709-6, SMPTE EG 432-1, BakingLab/ACES.hlsl, MJP AgX 0.13.5), GLSL/WGSL column-major storage convention, and cross-links between mirrored implementations. Annotated AgX inset/outset matrices and ACES Hill input/output matrices as NOT pure primary conversions (they are gamut-compression pairs and ODT-tuned composites respectively), so future readers don't treat them as interchangeable with canonical Rec.709→AP1 matrices. Corrected the misleading "Bradford CAT" JSDoc to clarify CAT is only required when source and destination white points differ. NO matrix values were changed.
+
+**Tests added** (`src/render/__tests__/shaderMathColorPipeline.test.ts`):
+11 new tests (`MED-54-001..011`) pinning matrix values against documented intent:
+- Out-of-gamut signature for widening conversions (Rec.2020→sRGB red `r > 1`, P3→sRGB red mildly OOB)
+- In-gamut signature for narrowing conversions (sRGB→P3, sRGB→Rec.2020)
+- D65 white preservation across REC2020↔sRGB, P3↔sRGB
+- `gamutMapRGB` clip behavior and identity (sRGB→sRGB falls through)
+- AgX inset/outset preserves neutral axis (BT.709 working space)
+- ACES Hill input/output preserves neutral on neutral input (BT.709→AP1 round-trip)
+- Column-major mat3 storage convention pinned
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/webgpu/shaders/scene_analysis.wgsl`
+- `src/utils/effects/effectProcessing.shared.ts`
+- `src/render/ShaderConstants.ts`
+- `src/render/__tests__/shaderMathColorPipeline.test.ts`
+
+**Verification**:
+- 53 shaderMathColorPipeline tests passing.
+- 2195 tests passing across src/render + src/utils/effects.
+- `npx tsc --noEmit` clean.
+- Reviewer numerically verified: REC2020→sRGB applied to (1,0,0) ≈ (1.66, -0.12, -0.02) — out-of-gamut signature confirmed; D65 preservation confirmed; SRGB→P3 narrowing confirmed.
+
+**Known cosmetic follow-up**: 4th-decimal precision discrepancy between `ShaderConstants.ts` REC2020_TO_SRGB[3] (-0.5877) and GLSL/CPU mirrors (-0.5876). Pre-existing, no functional impact.
+
+## Issue #601: CRIT-01 — HDR VideoFrame lifecycle unmanaged at call sites
+
+**Root cause**: `getFrameHDR()` in `MediabunnyFrameExtractor` transfers VideoFrame ownership to the caller, but call sites had partial cleanup:
+- `VideoSourceNode.fetchHDRFrame` closed the sample on the success path and in a `catch` block, but a dispose race (frameExtractor nulled while awaiting `getFrameHDR` or between `hdrSampleToIPImage` and `cache.set`) left the sample or IPImage leaking. Errors thrown by `cache.set` would also skip close().
+- The HDR probe path closed `probeSample` outside the try/finally for `probeFrame.close()` — would be skipped if `toVideoFrame()` or `probeFrame.close()` threw.
+
+VideoFrame is a GPU resource; missed close() leaks until process termination.
+
+**Fix**:
+- `VideoSourceNode.fetchHDRFrame` (`src/nodes/sources/VideoSourceNode.ts:1058-1113`): wrapped body in try/catch/finally so the VideoSample (always) and IPImage (when not yet transferred to cache) are released on every exit, including dispose-during-await races.
+- HDR probe path (`src/utils/media/MediabunnyFrameExtractor.ts:311-396`): extracted `_probeInternals.closeProbePair(probeFrame, probeSample)` helper that guarantees both close() calls run regardless of which (if any) throws. Each per-call error is swallowed so a failure on one cleanup doesn't skip the other.
+- JSDoc on `getFrameHDR` (`MediabunnyFrameExtractor.ts:782-810`) explicitly documents the ownership transfer with a recommended call pattern.
+
+**Tests added** (8 total, all pass on the fix and 4 fail on master without it):
+- `src/nodes/sources/VideoSourceNode.test.ts`:
+  - `CRIT-01-VSN-001`: N=5 samples extracted → N closes (success path)
+  - `CRIT-01-VSN-002` (sanity): sample closed when `hdrSampleToIPImage` throws
+  - `CRIT-01-VSN-003` (regression): sample closed when `getFrameHDR` resolves AFTER `frameExtractor` nulled (dispose race during await) — fails on master
+  - `CRIT-01-VSN-004` (sanity): graceful handling of `getFrameHDR` rejection
+  - `CRIT-01-VSN-005` (regression): IPImage and sample both closed when dispose nulls `frameExtractor` between `hdrSampleToIPImage` and `cache.set`
+  - `CRIT-01-VSN-006` (regression): sample closed when `frameExtractor` nulled while awaiting `getFrameHDR` — fails on master
+- `src/utils/media/MediabunnyFrameExtractor.test.ts`:
+  - `CRIT-01-MFE-001`: `closeProbePair` closes probeSample when `probeFrame.close()` throws — fails on master without try/finally
+  - `CRIT-01-MFE-002`: `closeProbePair` closes probeSample when probeFrame is null (`toVideoFrame()` failure path)
+  - `CRIT-01-MFE-003`: `closeProbePair` handles both close() failures without throwing — fails on master
+  - `CRIT-01-MFE-004`: `closeProbePair` is a no-op when both arguments are null
+
+**Files changed**:
+- `src/nodes/sources/VideoSourceNode.ts`
+- `src/utils/media/MediabunnyFrameExtractor.ts`
+- `src/nodes/sources/VideoSourceNode.test.ts`
+- `src/utils/media/MediabunnyFrameExtractor.test.ts`
+
+**Verification**:
+- `npx tsc --noEmit` clean.
+- `src/utils/media + src/nodes/sources + src/ui/components`: 9860 tests passing (Round 1 baseline) + 4 helper-direct MFE tests (Round 2).
+- Stash-revert confirms the fix is required: VSN-003, VSN-006, MFE-001, MFE-003 fail on pre-fix code.
+
+**Note**: `ManagedVideoFrame.creationStack` and `enableLeakDetection` (FinalizationRegistry) already exist for runtime leak observability — no additional instrumentation needed beyond the call-site fix.
+
+## Issue #602: MED-19 — HotReloadManager state capture not deep-cloned
+
+**Root cause**: `HotReloadManager.reload()` captured plugin state via `plugin.getState()` and held the returned value across the dispose / re-import / re-activate window before passing it to the new plugin's `restoreState()`. The plugin contract states `getState()` should return a copy, but a misbehaving plugin returning a live reference would let:
+1. Mutations during dispose/re-import leak into the snapshot.
+2. The new plugin's `restoreState()` mutate the snapshot back into the old plugin's live state.
+3. Async work in dispose hooks race with the captured reference.
+
+**Fix**: Added `deepCloneState(state, pluginId)` helper that wraps the captured state in `structuredClone` before storing. Short-circuits `null`/`undefined`/primitives. On clone failure (functions, DOM nodes, classes — DataCloneError or other host errors), logs a `[hot-reload:${pluginId}]` warning with cause and falls back to the raw reference (preserves prior behavior, never silently swallows). Handles Maps, Sets, ArrayBuffers, typed arrays, and cycles natively via `structuredClone`. The snapshot is single-use: passed once to `restoreState()` then discarded, so post-restore mutation by the new plugin cannot leak back.
+
+**Tests added** (`src/plugin/dev/HotReloadManager.test.ts`):
+- `PHOT-022`: capture is independent of post-capture live mutations.
+- `PHOT-023`: snapshot mutations by new plugin's `restoreState` do not leak to old live state.
+- `PHOT-024`: `Map`, `Set`, `ArrayBuffer` survive the clone with new identities and equal contents.
+- `PHOT-025`: non-cloneable state (function) → console.warn + falls back to raw reference.
+- `PHOT-026`: `null` state passes through and is forwarded to `restoreState(null)`.
+- `PHOT-027`: `undefined` state preserves "no state" sentinel — `restoreState` is not called.
+- `PHOT-028`: primitives (number) pass through.
+
+**Files changed**:
+- `src/plugin/dev/HotReloadManager.ts`
+- `src/plugin/dev/HotReloadManager.test.ts`
+
+**Verification**:
+- 214 plugin tests passing across 8 files (including 24 in HotReloadManager.test.ts).
+- `npx tsc --noEmit` clean.
+- Stash-revert confirms 4 of 7 new tests fail on pre-fix code (PHOT-022/023/024/025); 3 are contract documentation that pass either way (null/undefined/primitive short-circuit paths).
+
+## Issue #603: MED-35 — AudioContext resume gap before isPlaying set
+
+**Root cause**: `AudioPlaybackManager.play()` (and `playWithVideoFallback()`) awaited `audioContext.resume()` (or `videoElement.play()`) BEFORE setting `_isPlaying = true`. On the first user gesture, `audioContext.resume()` can take 10–30ms to settle, leaving any consumer reading `manager.isPlaying` during that window with stale `false` even though playback was already requested. AudioCoordinator papered over this with its own `_isPlaying` flag, but direct readers of `manager.isPlaying` got the wrong answer briefly.
+
+**Fix** (Option A — optimistic synchronous flag):
+- Set `_isPlaying = true`, `_startOffset`, `_startTime`, and emit `stateChanged('playing')` SYNCHRONOUSLY before awaiting `resume()` / `videoElement.play()`. Setting the time anchors keeps the `currentTime` getter consistent during the resume window.
+- Introduced a `_playEpoch` monotonic counter incremented by `play()`, `pause()`, and (transitively via pause) `dispose()`. The in-flight `play()` snapshots its epoch and aborts cleanly post-await if it has been superseded — preventing a leaked source node when `pause()` runs during the resume gap.
+- After `resume()` resolves, re-anchor `_startTime` to the current AudioContext time so elapsed-time math accounts for any time spent waiting on resume.
+- On error: revert `_isPlaying` to false (only if the epoch hasn't been superseded) and let `handleError()` transition state to `'error'`.
+- Updated AudioCoordinator's `isWebAudioActive` doc-comment: the coordinator's `_isPlaying` is kept (still needed for late-load and loop-wrap gap bridging — see AC-092 / AC-095) but is no longer documented as a workaround for the manager-side resume gap.
+
+**Tests added** (`src/audio/AudioPlaybackManager.test.ts`):
+- `APM-MED35-001`: `isPlaying` is set true SYNCHRONOUSLY before `resume()` resolves.
+- `APM-MED35-002`: `stateChanged` event fires synchronously with `state='playing'` during a hung resume.
+- `APM-MED35-003`: `resume()` rejection reverts `isPlaying` to false and emits an error event.
+- `APM-MED35-004`: `pause()` called during the resume window leaves final state paused, no source node started.
+- `APM-MED35-005`: sequential `play()` / `pause()` / `play()` — final state matches the last call; the second play starts a source node at the requested offset.
+- `APM-MED35-006`: `resume()` rejection on a suspended context does not start a source node.
+- `APM-MED35-007`: happy path (already-running context) — `resume()` is not called, no regression.
+
+Existing AudioCoordinator tests `AC-090` and `AC-094` updated to reflect the new (correct) behavior: `manager.isPlaying` is now `true` synchronously rather than `false` during the resume window.
+
+**Files changed**:
+- `src/audio/AudioPlaybackManager.ts`
+- `src/audio/AudioCoordinator.ts` (doc-comment only)
+- `src/audio/AudioPlaybackManager.test.ts`
+- `src/audio/AudioCoordinator.test.ts`
+
+**Verification**:
+- `npx vitest run src/audio src/core/session`: 3212 tests passing across 78 files.
+- `npx vitest run src/audio/AudioPlaybackManager.test.ts`: 80 tests passing (73 existing + 7 new MED-35).
+- `npx tsc --noEmit` clean.
+
+## Issue #604: HIGH-25 — Topmost blend mode checks only first layer
+
+**Root cause**: `compositeMultipleLayers` in `src/composite/BlendModes.ts` decided whether to take the "topmost" branch by reading `layers[0].blendMode` only. The check is correct under the documented stack-level uniformity invariant (`StackGroupNode` sets the composite mode at stack level via `getCompositeType()`, never per-layer divergently). However, a future bug that set `blendMode = 'topmost'` per-layer divergently would silently produce surprising rendering with no diagnostic.
+
+**Fix**: Documented the stack-level uniformity invariant inline. Added a dev-mode-only invariant check (gated behind `import.meta.env?.DEV` so production build tree-shakes it away) that emits `console.warn` if either:
+- `layers[0].blendMode === 'topmost'` but not every layer agrees, or
+- A non-first layer carries `'topmost'` while `layers[0]` does not.
+Each warning includes the offending mode list for debuggability. Production hot path is unchanged — `layers[0]` remains authoritative for the topmost branch.
+
+**Tests added** (`src/composite/BlendModes.test.ts`, `BLD-TOPMOST-INV-001..005`):
+- `001`: uniform `topmost` across all layers triggers no warning.
+- `002`: `layers[0]='topmost'` with mixed modes warns in dev mode (and reports the offending mode list).
+- `003`: a non-first layer `'topmost'` while `layers[0]` is something else also warns.
+- `004`: rendering still uses `layers[0]` decision when the invariant holds (last visible layer wins).
+- `005`: rendering still takes the topmost branch when `layers[0]='topmost'` even with divergent peers — production behavior unaffected by the warning.
+
+**Files changed**:
+- `src/composite/BlendModes.ts`
+- `src/composite/BlendModes.test.ts`
+
+**Verification**:
+- 333 tests passing in `src/composite` + `src/nodes/groups`.
+- `npx tsc --noEmit` clean.
+- Reviewer confirmed test integrity: removing the invariant code causes BLD-TOPMOST-INV-002 and BLD-TOPMOST-INV-003 to fail; other three are contract pins that hold either way.
+- StackGroupNode (`src/nodes/groups/StackGroupNode.ts:285-294`) short-circuits topmost via `getCompositeType()`, structurally guaranteeing the invariant for in-tree callers.
+
+### Lap-2 follow-up (commit `d60b8f1`)
+
+A subsequent review preferred structural enforcement over a runtime warning, on the grounds that the dev-only `console.warn` only fires when an invalid mix already exists, while the underlying problem is that `'topmost'` should never be selectable per-layer in the first place. The follow-up:
+
+- Reverted the dev-mode `console.warn` invariant check in `compositeMultipleLayers` — production hot path is now identical to the original first-layer fast path with no warning code.
+- Marked `compositeMultipleLayers` `@internal` in `src/composite/BlendModes.ts` to signal it is reserved for tests / future consolidation work and not the production stack-rendering path.
+- Filtered `'topmost'` out of the per-layer blend-mode dropdown in `StackControl.ts` so the UI cannot produce a mixed-mode stack. `'topmost'` is now only ever produced by the stack-level setter `StackGroupNode.getCompositeType()`, which propagates uniformly.
+- Deleted the five dev-warn invariant tests `BLD-TOPMOST-INV-001..005` (which pinned the runtime check that no longer exists). One scenario was migrated to `BLD-TOPMOST-006` to keep the "rendering still takes the topmost branch when the first layer is `'topmost'`" contract pinned without referencing the dev warning. New tests `STACK-U101/102/103` were added in `StackControl.test.ts` to assert the dropdown filter (no `'topmost'` option exposed, stack-level setter still produces uniform `'topmost'`, switching away from `'topmost'` propagates to all layers).
+- The structural guarantees that remain are: (a) `StackGroupNode.compositeLayers` short-circuits via `getCompositeType()` so `compositeMultipleLayers` is never reached for `'topmost'` in the node-tree path, and (b) the per-layer dropdown can no longer surface `'topmost'`.
+
+**Files updated in Lap-2**:
+- `src/composite/BlendModes.ts`
+- `src/ui/components/StackControl.ts`
+- `src/composite/BlendModes.test.ts`
+- `src/ui/components/StackControl.test.ts`
+
+## Issue #605: LOW-07 — Clarity/sharpen sample raw texture (known trade-off)
+
+**Root cause (documentation gap, not a code defect)**: The clarity (5x5 Gaussian) and sharpen (4-tap Laplacian) effects in the GLSL single-pass renderer intentionally sample `u_texture` (the raw input) rather than the post-color-pipeline value. True post-pipeline neighbour sampling would require an extra FBO + second render pass that the single-pass design deliberately avoids. The trade-off was undocumented in shader source — a future reader might "fix" it and silently change rendering quality.
+
+**Fix (documentation-only, no rendering behavior change)**: Added inline rationale at every relevant call site explaining the trade-off, the FBO/extra-pass cost being avoided, quality implications (input encoding vs display-referred), and a "do not 'fix' this" warning:
+- `src/render/shaders/viewer.frag.glsl` — clarity (~line 1297) and sharpen (~line 1514) — single-pass: samples raw input texture
+- `src/render/webgpu/shaders/spatial_effects.wgsl` — clarity (multi-pass: samples its stage's input, which is pre-color-pipeline by stage ordering)
+- `src/render/webgpu/shaders/spatial_effects_post.wgsl` — sharpen (multi-pass: samples post-color-pipeline due to `colorPipeline → sceneAnalysis → spatialEffectsPost → displayOutput` order; explicitly contrasted with GLSL behavior)
+- `src/utils/effects/EffectProcessor.ts` — clarity (~line 1143) and sharpen (~line 1337) — CPU: operates on display-referred snapshot at function entry
+
+**Tests added** (`src/render/shaders/claritySharpenDocs.test.ts`):
+6 tests pinning the documentation phrases via `?raw` source imports. Each test loads the relevant source file as text and asserts specific phrases (`LOW-07`, `TRADE-OFF`, `raw input texture`, `color-pipeline`, `fbo`, `render pass`, `input encoding`/`display-referred`) within a 2500-char window before each anchor. If a future refactor strips the comments, the tests fail.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/spatial_effects.wgsl`
+- `src/render/webgpu/shaders/spatial_effects_post.wgsl`
+- `src/utils/effects/EffectProcessor.ts`
+- `src/render/shaders/claritySharpenDocs.test.ts` (new)
+
+**Verification**:
+- 6 documentation-pinning tests passing.
+- 139 tests passing in `src/render/shaders` + `src/utils/effects/EffectProcessor.test.ts`.
+- `npx tsc --noEmit` clean.

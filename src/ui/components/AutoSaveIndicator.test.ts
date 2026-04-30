@@ -1,15 +1,66 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AutoSaveIndicator } from './AutoSaveIndicator';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideMouseDown,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('AutoSaveIndicator', () => {
   let indicator: AutoSaveIndicator;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     indicator = new AutoSaveIndicator();
   });
 
   afterEach(() => {
     indicator.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    function createMinimalManager() {
+      const config = { enabled: true, interval: 5, maxVersions: 10 };
+      return {
+        on: vi.fn(),
+        off: vi.fn(),
+        getConfig: vi.fn().mockReturnValue(config),
+        setConfig: vi.fn(),
+        getLastSaveTime: vi.fn().mockReturnValue(null),
+        hasUnsavedChanges: vi.fn().mockReturnValue(false),
+      };
+    }
+
+    it('AUTOSAVE-OCR-001: opening popover registers exactly 1 entry; closing deregisters', () => {
+      const manager = createMinimalManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+      document.body.appendChild(element);
+
+      expectRegistrationCount(0);
+      element.click();
+      expectRegistrationCount(1);
+      dispatchOutsideMouseDown();
+      expectRegistrationCount(0);
+      element.remove();
+    });
+
+    it('AUTOSAVE-OCR-002: outside mousedown dismisses the popover', () => {
+      const manager = createMinimalManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+      document.body.appendChild(element);
+
+      element.click();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
+
+      dispatchOutsideMouseDown();
+
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+      expectRegistrationCount(0);
+      element.remove();
+    });
   });
 
   describe('initialization', () => {

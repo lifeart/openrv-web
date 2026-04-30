@@ -1,6 +1,9 @@
 // Stage 10: Diagnostics — channel isolation, false color, contour visualization,
 // dither/quantize, and zebra stripes.
 // Ports diagnostic/visualization logic from viewer.frag.glsl (steps 10-12c).
+//
+// NOTE: This shader expects common.wgsl to be prepended, which provides:
+//   LUMA
 
 struct Uniforms {
   channelModeCode: i32,       // 0=rgb, 1=red, 2=green, 3=blue, 4=alpha, 5=luminance
@@ -25,10 +28,8 @@ struct Uniforms {
   texelSize: vec2f,           // 1.0 / textureResolution (for contour neighbor fetch)
 }
 
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
+// VSOut is provided by the prepended vertex shader source
+// (_viewer_vert.wgsl or _passthrough_vert.wgsl) at pipeline build time.
 
 @group(0) @binding(0) var samp: sampler;
 @group(0) @binding(1) var tex: texture_2d<f32>;
@@ -37,8 +38,7 @@ struct VSOut {
 
 @group(1) @binding(0) var<uniform> u: Uniforms;
 
-// Luminance coefficients (Rec. 709)
-const LUMA = vec3f(0.2126, 0.7152, 0.0722);
+// LUMA is provided by common.wgsl (prepended).
 
 // --- Bayer 8x8 dither matrix (normalized to [0,1] range) ---
 fn bayerDither8x8(pos: vec2i) -> f32 {
@@ -59,14 +59,7 @@ fn bayerDither8x8(pos: vec2i) -> f32 {
   return (f32(bayer[y * 8 + x]) + 0.5) / 64.0;
 }
 
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x, y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
+// `@vertex fn vs(...)` is provided by the prepended vertex shader source.
 
 @fragment fn fs(in: VSOut) -> @location(0) vec4f {
   var color = textureSample(tex, samp, in.uv);

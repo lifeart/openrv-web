@@ -1128,5 +1128,37 @@ describe('BlendModes', () => {
       expect(result.data[0]).toBe(20);
       expect(result.data[1]).toBe(20);
     });
+
+    it('BLD-TOPMOST-006: divergent modes still take the topmost branch when layers[0]=topmost', () => {
+      // Contract pin: the fast-path layers[0] check decides the topmost branch.
+      // Even if a non-uniform mode set sneaks in (which the production stack
+      // dispatch in StackGroupNode.compositeLayers prevents structurally), the
+      // documented behavior is that layers[0]='topmost' selects the topmost
+      // branch and returns the last visible layer.
+      const layer1Data = new ImageData(2, 2);
+      const layer2Data = new ImageData(2, 2);
+      const layer3Data = new ImageData(2, 2);
+      for (let i = 0; i < layer1Data.data.length; i += 4) {
+        layer1Data.data[i] = 10;
+        layer1Data.data[i + 1] = 10;
+        layer1Data.data[i + 2] = 10;
+        layer1Data.data[i + 3] = 255;
+        layer2Data.data[i] = 20;
+        layer2Data.data[i + 1] = 20;
+        layer2Data.data[i + 2] = 20;
+        layer2Data.data[i + 3] = 255;
+        layer3Data.data[i] = 30;
+        layer3Data.data[i + 1] = 30;
+        layer3Data.data[i + 2] = 30;
+        layer3Data.data[i + 3] = 255;
+      }
+      const layers: CompositeLayer[] = [
+        { imageData: layer1Data, blendMode: 'topmost', opacity: 1, visible: true },
+        { imageData: layer2Data, blendMode: 'normal', opacity: 1, visible: true }, // divergent
+        { imageData: layer3Data, blendMode: 'topmost', opacity: 1, visible: true },
+      ];
+      const result = compositeMultipleLayers(layers, 2, 2);
+      expect(result.data[0]).toBe(30); // last visible layer wins (topmost branch)
+    });
   });
 });

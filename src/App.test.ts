@@ -83,7 +83,13 @@ class MockBroadcastChannel {
   close = vi.fn();
 }
 
-describe('App', () => {
+// Each `new App()` constructs the full composition root (Viewer, ColorPipelineManager,
+// PaintEngine, ~60 controls). Locally each test takes ~500-1000ms; under CI coverage
+// instrumentation (v8 provider) and with workers competing for CPU, individual tests
+// can exceed the default 5s vitest timeout. APP-001 and APP-005 have been observed
+// timing out on CI commit 44d4172 specifically — bump describe-level timeout to give
+// the constructor headroom. See seam-verifier flag-up.
+describe('App', { timeout: 15000 }, () => {
   let app: App;
 
   beforeEach(() => {

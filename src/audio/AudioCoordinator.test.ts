@@ -578,6 +578,113 @@ describe('AudioCoordinator', () => {
       expect(() => coordinator.onPreservesPitchChanged(false)).not.toThrow();
     });
 
+    it('AC-073: dispose stops active playback and notifies callbacks before cleanup', async () => {
+      await loadWebAudio();
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      vi.clearAllMocks();
+
+      // Capture manager state at the moment onAudioPathChanged fires.
+      // The callback must fire BEFORE manager.dispose() puts it into 'idle'.
+      let managerStateInCallback: string | undefined;
+      coordinator.setCallbacks({
+        onAudioPathChanged: () => {
+          managerStateInCallback = coordinator.manager.state;
+        },
+      });
+
+      coordinator.dispose();
+
+      // The callback must have fired
+      expect(managerStateInCallback).toBeDefined();
+      // Manager should NOT yet be 'idle' when the callback fires — it goes
+      // idle only after manager.dispose() which runs after the notification.
+      expect(managerStateInCallback).not.toBe('idle');
+      // After dispose completes, manager should be fully disposed (idle state)
+      expect(coordinator.manager.state).toBe('idle');
+    });
+
+    it('AC-074: dispose when nothing is playing does not notify callbacks', () => {
+      // No audio loaded, no playback — dispose should be a clean no-op
+      vi.clearAllMocks();
+
+      coordinator.dispose();
+
+      // onAudioPathChanged should NOT be called since nothing was playing
+      expect(callbacks.onAudioPathChanged).not.toHaveBeenCalled();
+    });
+
+    it('AC-075: double dispose does not throw', async () => {
+      await loadWebAudio();
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+
+      coordinator.dispose();
+
+      // Second dispose should not throw
+      expect(() => coordinator.dispose()).not.toThrow();
+    });
+
+    it('AC-076: dispose releases audio resources (manager reaches idle)', async () => {
+      await loadWebAudio();
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.manager.isPlaying).toBe(true);
+
+      coordinator.dispose();
+
+      // After dispose, manager should be in idle state with no active playback
+      expect(coordinator.manager.isPlaying).toBe(false);
+      expect(coordinator.manager.state).toBe('idle');
+    });
+
+    it('AC-077: isWebAudioActive is false after dispose during active playback', async () => {
+      await loadWebAudio();
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      coordinator.dispose();
+
+      // After dispose, isWebAudioActive must be false so the host knows
+      // to un-mute the video element
+      expect(coordinator.isWebAudioActive).toBe(false);
+    });
+
+    it('AC-078: dispose during loadFromVideo does not throw', async () => {
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      // Start loading — the internal promise chain is in-flight
+      coordinator.loadFromVideo(video, 0.7, false);
+
+      // Dispose immediately before the promise resolves
+      expect(() => coordinator.dispose()).not.toThrow();
+
+      // Let any pending microtasks settle — no unhandled rejections expected
+      await vi.waitFor(() => {
+        // Manager should be idle after dispose regardless of the in-flight load
+        expect(coordinator.manager.state).toBe('idle');
+      });
+    });
+
+    it('AC-079: dispose during video-fallback playback fires callback', async () => {
+      await loadVideoFallback();
+
+      // Start playback — since Web Audio extraction failed, this uses the
+      // video-fallback path (isUsingWebAudio is false)
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(false);
+
+      vi.clearAllMocks();
+
+      coordinator.dispose();
+
+      // Even in video-fallback mode, dispose must notify the host so it can
+      // react (e.g. un-mute the video element)
+      expect(callbacks.onAudioPathChanged).toHaveBeenCalledTimes(1);
+      expect(coordinator.manager.state).toBe('idle');
+    });
+
     it('AC-072: callbacks are nulled after dispose', async () => {
       await loadWebAudio();
 
@@ -761,7 +868,10 @@ describe('AudioCoordinator', () => {
   // ======================================================================
 
   describe('double audio prevention', () => {
-    it('AC-090: isWebAudioActive is true synchronously after onPlaybackStarted even when AudioContext is suspended', async () => {
+    it('AC-090: isWebAudioActive AND manager.isPlaying are both true synchronously after onPlaybackStarted even when AudioContext is suspended', async () => {
+      // After MED-35, AudioPlaybackManager.play() sets isPlaying SYNCHRONOUSLY
+      // before awaiting audioContext.resume(). Both flags must converge true
+      // immediately so consumers reading either get the right answer.
       await loadWebAudio();
 
       // After loading, simulate AudioContext becoming suspended (browser policy)
@@ -776,15 +886,16 @@ describe('AudioCoordinator', () => {
 
       coordinator.onPlaybackStarted(1, 24, 1, 1);
 
-      // manager.play() is awaiting audioContext.resume(), so manager.isPlaying is still false
-      expect(coordinator.manager.isPlaying).toBe(false);
-      // But isWebAudioActive must be true to prevent double audio
+      // After MED-35, manager.isPlaying is set synchronously (optimistic).
+      expect(coordinator.manager.isPlaying).toBe(true);
+      // And isWebAudioActive is also true to prevent double audio
       expect(coordinator.isWebAudioActive).toBe(true);
 
       // Clean up — resolve the pending resume
       mockAudioContext.state = 'running';
       resolveResume();
       await vi.waitFor(() => {
+        // After resume completes, the source node has been started
         expect(coordinator.manager.isPlaying).toBe(true);
       });
     });
@@ -891,8 +1002,9 @@ describe('AudioCoordinator', () => {
 
       coordinator.onPlaybackStarted(10, 24, 1, 1);
 
-      // manager hasn't finished resuming, but coordinator must report active
-      expect(coordinator.manager.isPlaying).toBe(false);
+      // After MED-35, manager.isPlaying is set synchronously (optimistic)
+      // even while resume() is still in flight. Both flags converge true.
+      expect(coordinator.manager.isPlaying).toBe(true);
       expect(coordinator.isWebAudioActive).toBe(true);
 
       // After resume completes, still active

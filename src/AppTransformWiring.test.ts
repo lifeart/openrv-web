@@ -3,7 +3,7 @@ import { EventEmitter } from './utils/EventEmitter';
 import type { TransformControlEvents } from './ui/components/TransformControl';
 import type { AppWiringContext } from './AppWiringContext';
 import { DEFAULT_TRANSFORM, type Transform2D } from './core/types/transform';
-import { wireTransformControls } from './AppTransformWiring';
+import { wireTransformControls, TRANSFORM_EPSILON, hasSignificantChange } from './AppTransformWiring';
 import { getGlobalHistoryManager, type HistoryEntry } from './utils/HistoryManager';
 
 function createMockContext() {
@@ -169,6 +169,127 @@ describe('wireTransformControls', () => {
       expect.any(Function),
       expect.any(Function),
     );
+  });
+
+  describe('float precision — no spurious history entries', () => {
+    it('TW-FP-001: scale change below epsilon does NOT record history', () => {
+      const { ctx, transformControl } = createMockContext();
+      wireTransformControls(ctx);
+
+      // Emit a transform where scale differs by less than TRANSFORM_EPSILON
+      const transform = {
+        ...DEFAULT_TRANSFORM,
+        scale: { x: 1 + TRANSFORM_EPSILON * 0.1, y: 1 - TRANSFORM_EPSILON * 0.5 },
+        translate: { ...DEFAULT_TRANSFORM.translate },
+      };
+      transformControl.emit('transformChanged', transform);
+
+      expect(recordActionSpy).not.toHaveBeenCalled();
+    });
+
+    it('TW-FP-002: translate change below epsilon does NOT record history', () => {
+      const { ctx, transformControl } = createMockContext();
+      wireTransformControls(ctx);
+
+      const transform = {
+        ...DEFAULT_TRANSFORM,
+        scale: { ...DEFAULT_TRANSFORM.scale },
+        translate: { x: TRANSFORM_EPSILON * 0.1, y: -TRANSFORM_EPSILON * 0.5 },
+      };
+      transformControl.emit('transformChanged', transform);
+
+      expect(recordActionSpy).not.toHaveBeenCalled();
+    });
+
+    it('TW-FP-003: rotation change below epsilon does NOT record history', () => {
+      const { ctx, transformControl } = createMockContext();
+      wireTransformControls(ctx);
+
+      const transform = {
+        ...DEFAULT_TRANSFORM,
+        rotation: (0 + TRANSFORM_EPSILON * 0.1) as 0,
+      };
+      transformControl.emit('transformChanged', transform);
+
+      expect(recordActionSpy).not.toHaveBeenCalled();
+    });
+
+    it('TW-FP-004: scale change above epsilon DOES record history', () => {
+      const { ctx, transformControl } = createMockContext();
+      wireTransformControls(ctx);
+
+      const transform = {
+        ...DEFAULT_TRANSFORM,
+        scale: { x: 1 + TRANSFORM_EPSILON * 10, y: 1 },
+        translate: { ...DEFAULT_TRANSFORM.translate },
+      };
+      transformControl.emit('transformChanged', transform);
+
+      expect(recordActionSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('TW-FP-005: translate change above epsilon DOES record history', () => {
+      const { ctx, transformControl } = createMockContext();
+      wireTransformControls(ctx);
+
+      const transform = {
+        ...DEFAULT_TRANSFORM,
+        scale: { ...DEFAULT_TRANSFORM.scale },
+        translate: { x: TRANSFORM_EPSILON * 10, y: 0 },
+      };
+      transformControl.emit('transformChanged', transform);
+
+      expect(recordActionSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('TW-FP-006: meaningful changes still record correctly after sub-epsilon event', () => {
+      const { ctx, transformControl } = createMockContext();
+      wireTransformControls(ctx);
+
+      // First: sub-epsilon change — no history
+      const subEpsilon = {
+        ...DEFAULT_TRANSFORM,
+        scale: { x: 1 + TRANSFORM_EPSILON * 0.01, y: 1 },
+        translate: { ...DEFAULT_TRANSFORM.translate },
+      };
+      transformControl.emit('transformChanged', subEpsilon);
+      expect(recordActionSpy).not.toHaveBeenCalled();
+
+      // Second: real change — should record
+      const realChange = {
+        ...DEFAULT_TRANSFORM,
+        scale: { x: 2, y: 2 },
+        translate: { ...DEFAULT_TRANSFORM.translate },
+      };
+      transformControl.emit('transformChanged', realChange);
+      expect(recordActionSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('hasSignificantChange', () => {
+    it('TW-HSC-001: returns false for identical values', () => {
+      expect(hasSignificantChange(1.0, 1.0)).toBe(false);
+    });
+
+    it('TW-HSC-002: returns false for difference at epsilon boundary', () => {
+      expect(hasSignificantChange(1.0, 1.0 + TRANSFORM_EPSILON)).toBe(false);
+    });
+
+    it('TW-HSC-003: returns true for difference above epsilon', () => {
+      expect(hasSignificantChange(1.0, 1.0 + TRANSFORM_EPSILON * 2)).toBe(true);
+    });
+
+    it('TW-HSC-004: handles negative differences', () => {
+      expect(hasSignificantChange(0, -TRANSFORM_EPSILON * 0.5)).toBe(false);
+      expect(hasSignificantChange(0, -TRANSFORM_EPSILON * 2)).toBe(true);
+    });
+
+    it('TW-HSC-005: epsilon is reasonable (1e-6)', () => {
+      // Not too large: 0.001 pixel difference should be significant
+      expect(TRANSFORM_EPSILON).toBeLessThan(0.001);
+      // Not too small: smaller than typical float noise
+      expect(TRANSFORM_EPSILON).toBeGreaterThan(1e-15);
+    });
   });
 
   describe('disposal', () => {

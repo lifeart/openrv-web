@@ -85,12 +85,19 @@ export interface WorkerTaskMessage {
 
 /**
  * Worker result message type (received from worker)
+ *
+ * LOW-23: For 'error' messages, the worker explicitly serializes
+ * name/message/stack as plain string fields because Error.stack is
+ * non-enumerable on V8/SpiderMonkey and would be dropped by structured-clone
+ * if Error instances were posted directly.
  */
 interface WorkerResultMessage {
   type: 'result' | 'error' | 'ready';
   id: number;
   imageData?: Uint8ClampedArray;
   error?: string;
+  name?: string;
+  stack?: string;
 }
 
 /**
@@ -686,7 +693,11 @@ export class PrerenderBufferManager {
           }
         }
       } catch (error) {
-        console.warn(`Worker prerender failed for frame ${request.frame}:`, error);
+        // LOW-23: WorkerPool rehydrates errors with the worker's serialized
+        // stack, so logging the Error directly surfaces the full source
+        // context (worker filename + line) instead of a bare message.
+        const stack = error instanceof Error ? error.stack : undefined;
+        console.warn(`Worker prerender failed for frame ${request.frame}:`, error, stack ? `\nStack: ${stack}` : '');
         // Fall back to main thread
         this.prerenderOnMainThreadSync(request);
       }

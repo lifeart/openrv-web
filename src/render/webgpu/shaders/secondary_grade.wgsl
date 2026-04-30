@@ -1,5 +1,8 @@
 // Stage 4: Secondary Grade — highlights/shadows, vibrance, hue rotation.
 // Ports the highlights/shadows, vibrance, and hue rotation logic from viewer.frag.glsl.
+//
+// NOTE: This shader expects common.wgsl to be prepended, which provides:
+//   LUMA
 
 struct Uniforms {
   highlights: f32,             // -1.0 to +1.0
@@ -13,18 +16,15 @@ struct Uniforms {
   hueRotationMatrix: mat3x3f,  // luminance-preserving 3x3 matrix
 }
 
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
+// VSOut is provided by the prepended vertex shader source
+// (_viewer_vert.wgsl or _passthrough_vert.wgsl) at pipeline build time.
 
 @group(0) @binding(0) var samp: sampler;
 @group(0) @binding(1) var tex: texture_2d<f32>;
 
 @group(1) @binding(0) var<uniform> u: Uniforms;
 
-// Luminance coefficients (Rec. 709)
-const LUMA = vec3f(0.2126, 0.7152, 0.0722);
+// LUMA is provided by common.wgsl (prepended).
 
 // --- RGB to HSL conversion ---
 // Returns vec3(h: 0-360, s: 0-1, l: 0-1)
@@ -93,14 +93,7 @@ fn hslToRgb(h: f32, s: f32, l: f32) -> vec3f {
   );
 }
 
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x, y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
+// `@vertex fn vs(...)` is provided by the prepended vertex shader source.
 
 @fragment fn fs(in: VSOut) -> @location(0) vec4f {
   var color = textureSample(tex, samp, in.uv);

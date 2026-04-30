@@ -3,6 +3,7 @@ import { type LUT, parseLUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
 export { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
@@ -38,7 +39,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   // Throttle state for slider input events
   private _inputThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   private _pendingAdjustments: ColorAdjustments | null = null;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   /**
    * When true, external systems (e.g., VirtualSliderController) are managing
@@ -113,25 +114,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     this.createSliders();
     // Panel will be appended to body when shown
-
-    // Close on outside click
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isExpanded) {
-        this.hide();
-      }
-    };
-  }
-
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hide();
-    }
+    // Outside-click + Escape dismiss are handled by OutsideClickRegistry,
+    // registered in show() and deregistered in hide().
   }
 
   private createSliders(): void {
@@ -688,7 +672,12 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
     this.toggleButton.style.borderColor = 'var(--accent-primary)';
     this.toggleButton.style.color = 'var(--accent-primary)';
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel],
+      onDismiss: () => this.hide(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
     this.emit('visibilityChanged', true);
   }
 
@@ -700,7 +689,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.toggleButton.style.background = 'transparent';
     this.toggleButton.style.borderColor = 'transparent';
     this.toggleButton.style.color = 'var(--text-muted)';
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     this.emit('visibilityChanged', false);
   }
 
@@ -791,8 +781,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     if (this._inputThrottleTimer !== null) {
       clearTimeout(this._inputThrottleTimer);
       this._inputThrottleTimer = null;

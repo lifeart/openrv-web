@@ -7,16 +7,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DeinterlaceControl } from './DeinterlaceControl';
 import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('DeinterlaceControl', () => {
   let control: DeinterlaceControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new DeinterlaceControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -356,25 +363,28 @@ describe('DeinterlaceControl', () => {
 
       expect(control.isOpen).toBe(false);
     });
+  });
 
-    it('DC-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+  describe('OutsideClickRegistry integration', () => {
+    it('DC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
       control.show();
+      expectRegistrationCount(1);
       control.hide();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      expectRegistrationCount(0);
     });
 
-    it('DC-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+    it('DC-OCR-002: outside-click after open dismisses the panel', () => {
       control.show();
-      control.dispose();
+      expect(control.isOpen).toBe(true);
 
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+
+      expect(control.isOpen).toBe(false);
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 

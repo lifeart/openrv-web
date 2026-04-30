@@ -29,6 +29,7 @@ import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 import { ShotStatusBadge } from '../ShotStatusBadge';
 import { RepresentationSelector } from '../RepresentationSelector';
 import type { VersionGroup } from '../../../core/session/VersionManager';
+import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -753,10 +754,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         items[ci > 0 ? ci - 1 : items.length - 1]?.focus();
-      } else if (e.key === 'Escape' || e.key === 'Tab') {
+      } else if (e.key === 'Tab') {
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase). The registry detaches the menu before this
+        // bubble-phase handler can run, so the inner Escape branch was dead
+        // code in the dominant path. anchor.focus() is now restored inside
+        // removeMenu() so registry-driven dismiss also restores focus.
         e.preventDefault();
         removeMenu();
-        anchor.focus();
       }
     });
 
@@ -766,15 +771,29 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     document.body.appendChild(menu);
     (activeItem || (menu.querySelector('[role="menuitemradio"]') as HTMLElement))?.focus();
 
+    // Outside-click dismiss via the central registry. The trigger anchor
+    // MUST be in `elements` to prevent the trigger's own click from
+    // dismissing the menu it just opened (registry footgun docs at
+    // OutsideClickRegistry.ts:96-105). Per the register-during-dispatch
+    // contract (OutsideClickRegistry.ts:188-191), this synchronous register
+    // is invisible to the in-flight click that opened the menu — no
+    // setTimeout shim is needed.
+    let deregister: (() => void) | null = null;
     const removeMenu = () => {
+      deregister?.();
+      deregister = null;
       menu.remove();
-      document.removeEventListener('click', closeMenu);
       this._activeVersionMenuCleanup = null;
+      // Restore focus to the trigger anchor so keyboard users do not get
+      // dropped on document.body when the registry dismisses via Escape
+      // (capture phase) — matches showSpeedMenu/Help/Layout.
+      anchor.focus();
     };
-    const closeMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) removeMenu();
-    };
-    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    deregister = outsideClickRegistry.register({
+      elements: [menu, anchor],
+      onDismiss: removeMenu,
+      dismissOn: 'click',
+    });
     this._activeVersionMenuCleanup = removeMenu;
   }
 
@@ -1098,16 +1117,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           items[prevIndex]?.focus();
           break;
         }
-        case 'Escape': {
-          e.preventDefault();
-          removeMenu();
-          anchor.focus();
-          break;
-        }
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase) — see registry contract notes below. The registry
+        // detaches the menu before this bubble-phase handler runs, so the
+        // inner Escape branch was dead code. anchor.focus() inside
+        // removeMenu() handles focus restore for the registry path too.
         case 'Tab': {
           e.preventDefault();
           removeMenu();
-          anchor.focus();
           break;
         }
       }
@@ -1126,21 +1143,28 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       focusTarget.focus();
     }
 
-    // Cleanup function to remove menu and listener
+    // Cleanup function to remove menu and deregister outside-click handler.
+    // Per the OutsideClickRegistry register-during-dispatch contract
+    // (OutsideClickRegistry.ts:188-191), the synchronous register below is
+    // invisible to the in-flight click that opened the menu — no setTimeout
+    // shim is needed.
+    let deregister: (() => void) | null = null;
     const removeMenu = () => {
+      deregister?.();
+      deregister = null;
       menu.remove();
-      document.removeEventListener('click', closeMenu);
       this._activeSpeedMenuCleanup = null;
       anchor.focus();
     };
 
-    // Close menu when clicking outside
-    const closeMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        removeMenu();
-      }
-    };
-    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    // Register outside-click dismiss. The anchor MUST be in `elements` to
+    // prevent the trigger's own click from dismissing the menu it just
+    // opened (registry footgun docs at OutsideClickRegistry.ts:96-105).
+    deregister = outsideClickRegistry.register({
+      elements: [menu, anchor],
+      onDismiss: removeMenu,
+      dismissOn: 'click',
+    });
 
     // Track the active menu cleanup for disposal
     this._activeSpeedMenuCleanup = removeMenu;
@@ -1239,11 +1263,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           menuItems[prevIndex]?.focus();
           break;
         }
-        case 'Escape':
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase). The registry detaches the menu before this
+        // bubble-phase handler runs, so the inner Escape branch was dead
+        // code; anchor.focus() inside removeMenu() handles focus restore.
         case 'Tab': {
           e.preventDefault();
           removeMenu();
-          anchor.focus();
           break;
         }
       }
@@ -1263,19 +1289,28 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const firstItem = getMenuItems()[0];
     if (firstItem) firstItem.focus();
 
+    // Cleanup function to remove menu and deregister outside-click handler.
+    // Per the OutsideClickRegistry register-during-dispatch contract
+    // (OutsideClickRegistry.ts:188-191), the synchronous register below is
+    // invisible to the in-flight click that opened the menu — no setTimeout
+    // shim is needed.
+    let deregister: (() => void) | null = null;
     const removeMenu = () => {
+      deregister?.();
+      deregister = null;
       menu.remove();
-      document.removeEventListener('click', closeMenu);
       this._activeHelpMenuCleanup = null;
       anchor.focus();
     };
 
-    const closeMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        removeMenu();
-      }
-    };
-    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    // Register outside-click dismiss. The anchor MUST be in `elements` to
+    // prevent the trigger's own click from dismissing the menu it just
+    // opened (registry footgun docs at OutsideClickRegistry.ts:96-105).
+    deregister = outsideClickRegistry.register({
+      elements: [menu, anchor],
+      onDismiss: removeMenu,
+      dismissOn: 'click',
+    });
 
     this._activeHelpMenuCleanup = removeMenu;
   }
@@ -1382,11 +1417,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           items[prevIndex]?.focus();
           break;
         }
-        case 'Escape':
+        // Escape is owned by OutsideClickRegistry (dismissOnEscape: true,
+        // capture phase). The registry detaches the menu before this
+        // bubble-phase handler runs, so the inner Escape branch was dead
+        // code; anchor.focus() inside removeMenu() handles focus restore.
         case 'Tab': {
           e.preventDefault();
           removeMenu();
-          anchor.focus();
           break;
         }
       }
@@ -1403,20 +1440,29 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     focusTarget?.focus();
     this.layoutButton.setAttribute('aria-expanded', 'true');
 
+    // Cleanup function to remove menu and deregister outside-click handler.
+    // Per the OutsideClickRegistry register-during-dispatch contract
+    // (OutsideClickRegistry.ts:188-191), the synchronous register below is
+    // invisible to the in-flight click that opened the menu — no setTimeout
+    // shim is needed.
+    let deregister: (() => void) | null = null;
     const removeMenu = () => {
+      deregister?.();
+      deregister = null;
       menu.remove();
-      document.removeEventListener('click', closeMenu);
       this.layoutButton.setAttribute('aria-expanded', 'false');
       this._activeLayoutMenuCleanup = null;
       anchor.focus();
     };
 
-    const closeMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        removeMenu();
-      }
-    };
-    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    // Register outside-click dismiss. The anchor MUST be in `elements` to
+    // prevent the trigger's own click from dismissing the menu it just
+    // opened (registry footgun docs at OutsideClickRegistry.ts:96-105).
+    deregister = outsideClickRegistry.register({
+      elements: [menu, anchor],
+      onDismiss: removeMenu,
+      dismissOn: 'click',
+    });
 
     this._activeLayoutMenuCleanup = removeMenu;
   }
@@ -1714,16 +1760,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   dispose(): void {
-    // Remove any open menus from document.body
-    if (this._activeSpeedMenuCleanup) {
-      this._activeSpeedMenuCleanup();
-    }
-    if (this._activeHelpMenuCleanup) {
-      this._activeHelpMenuCleanup();
-    }
-    if (this._activeLayoutMenuCleanup) {
-      this._activeLayoutMenuCleanup();
-    }
+    // Remove any open menus from document.body. closeAllHeaderMenus() invokes
+    // each `_active*MenuCleanup` closure which deregisters from
+    // outsideClickRegistry and removes the menu DOM, transparently replacing
+    // the previous setTimeout-based cleanup.
+    this.closeAllHeaderMenus();
 
     // Remove procedural sources dropdown
     if (this._sourcesMenu) {

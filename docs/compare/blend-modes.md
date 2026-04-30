@@ -47,7 +47,11 @@ This mutual exclusivity prevents conflicting visualizations. The Compare dropdow
 
 ## Layer Stack Blend Modes
 
-In addition to the three comparison blend modes above, the multi-layer stack system (see [Advanced Compare](advanced-compare.md)) supports eight compositing blend modes for combining multiple sources:
+In addition to the three comparison blend modes above, the multi-layer stack system (see [Advanced Compare](advanced-compare.md)) supports the following compositing blend modes for combining multiple sources:
+
+### Per-Layer Modes
+
+These modes are selectable independently on each layer and describe how that layer is combined with the layers beneath it.
 
 | Mode | Description |
 |------|-------------|
@@ -59,6 +63,25 @@ In addition to the three comparison blend modes above, the multi-layer stack sys
 | Overlay | Overlay -- combines multiply and screen based on luminance |
 | Difference | Absolute difference between layers |
 | Exclusion | Similar to difference but lower contrast |
+| Dissolve | Per-pixel noise selection between layers (matches OpenRV `InlineDissolve2.glsl`) |
+
+### Stack-Level Modes
+
+Some compositing modes describe a property of the **entire stack** rather than a single layer. They must be set uniformly on every layer of the stack.
+
+| Mode | Description |
+|------|-------------|
+| Topmost | Display only the top-most visible layer; all layers underneath are ignored (matches OpenRV `IPImage::Replace` with `topmostOnly = true`) |
+
+**Uniformity contract for `Topmost`.** When the stack composite type is `topmost`, every layer in the stack carries `blendMode = 'topmost'` -- the value is propagated from the stack-level setter (`StackGroupNode.getCompositeType()`), never selected per layer. Mixing `topmost` with other modes on individual layers is not a supported configuration.
+
+The contract is enforced structurally rather than by a runtime check:
+
+- The per-layer blend-mode dropdown (`StackControl`) filters `'topmost'` out of the user-visible options, so `'topmost'` cannot be selected for an individual layer through the UI. It is only ever produced by the stack-level setter `StackGroupNode.getCompositeType()`, which propagates the same value to every layer.
+- The compositor takes its fast path based on the stack's composite type via `StackGroupNode.compositeLayers`, which short-circuits to a single-layer (top) draw when `getCompositeType() === 'topmost'`. This makes `compositeMultipleLayers` unreachable for the `'topmost'` case in the node-tree path.
+- `compositeMultipleLayers` (in `src/composite/BlendModes.ts`) is marked `@internal` and is reserved for tests / consolidation work; production stack rendering does not call it for `'topmost'`.
+
+### Alpha Compositing
 
 Both straight alpha and premultiplied alpha compositing are supported. Premultiplied alpha matches OpenRV's desktop compositing pipeline and is used automatically when loading RV session files.
 

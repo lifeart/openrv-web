@@ -192,6 +192,10 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     return this._playbackEngine.droppedFrameCount;
   }
 
+  resetDroppedFrames(): void {
+    this._playbackEngine.resetDroppedFrames();
+  }
+
   get interpolationEnabled(): boolean {
     return this._playbackEngine.interpolationEnabled;
   }

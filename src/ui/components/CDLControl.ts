@@ -10,6 +10,7 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface CDLControlEvents extends EventMap {
   cdlChanged: CDLValues;
@@ -25,7 +26,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   // Slider references for updates
   private sliders: Map<string, HTMLInputElement> = new Map();
   private valueLabels: Map<string, HTMLSpanElement> = new Map();
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -95,25 +96,8 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
 
     this.container.appendChild(this.cdlButton);
     // Panel will be appended to body when shown
-
-    // Close panel on outside click
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isPanelOpen) {
-        this.hidePanel();
-      }
-    };
-  }
-
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hidePanel();
-    }
+    // Outside-click + Escape dismiss are handled by OutsideClickRegistry,
+    // registered in showPanel() and deregistered in hidePanel().
   }
 
   private createPanelContent(): void {
@@ -407,14 +391,20 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
     this.updateButtonState();
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel],
+      onDismiss: () => this.hidePanel(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
   }
 
   hidePanel(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
     this.updateButtonState();
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
   }
 
   reset(): void {
@@ -527,8 +517,8 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     // Remove body-mounted panel if present
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

@@ -902,6 +902,12 @@ export class App {
       colorControls: this.controls.colorControls,
       cdlControl: this.controls.cdlControl,
       curvesControl: this.controls.curvesControl,
+      // Wire the Viewer as both the simple LUTProvider and the multi-stage
+      // LUTPipelineProvider. The Viewer satisfies both interfaces structurally.
+      // (Without lutProvider here, the documented public LUT methods at
+      // docs/color/lut.md were unreachable — fix-along-the-way for MED-51.)
+      lutProvider: this.viewer,
+      lutPipelineProvider: this.viewer,
       persistenceManager: this.persistenceManager,
       pixelProbeProvider: this.viewer.getPixelProbe(),
     };

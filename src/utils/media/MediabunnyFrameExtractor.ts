@@ -53,6 +53,53 @@ async function detectCreateImageBitmapResize(): Promise<boolean> {
   return createImageBitmapResizeSupported;
 }
 
+/**
+ * Internal helpers exposed for unit testing.
+ *
+ * These are not part of the public API. They are exported as a single
+ * namespace object so test files can exercise lifecycle/close logic
+ * without going through the full mediabunny load() path (which is
+ * gated by isSupported() and unavailable in jsdom).
+ */
+export const _probeInternals = {
+  /**
+   * CRIT-01: Closes the probeFrame and probeSample pair with guaranteed
+   * cleanup of BOTH, even if one close attempt throws.
+   *
+   * Used by the HDR probe path (`load()` in MediabunnyFrameExtractor).
+   * The probe creates a transient VideoSample + VideoFrame pair to read
+   * codec-bitstream colorSpace metadata; both must be released regardless
+   * of which one (if any) fails to close.
+   *
+   * Errors from individual close() calls are swallowed (they typically
+   * mean "already closed"). The function never throws.
+   *
+   * @param probeFrame  VideoFrame produced by probeSample.toVideoFrame(),
+   *                    or null if toVideoFrame() was never called / failed.
+   * @param probeSample VideoSample returned by probeSink.getSample(0),
+   *                    or null if getSample resolved with no sample.
+   */
+  closeProbePair(probeFrame: { close(): void } | null, probeSample: { close(): void } | null): void {
+    try {
+      if (probeFrame) {
+        try {
+          probeFrame.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    } finally {
+      if (probeSample) {
+        try {
+          probeSample.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    }
+  },
+};
+
 export interface VideoMetadata {
   width: number;
   height: number;
@@ -76,6 +123,46 @@ export interface VideoMetadata {
   hdrDowngraded: boolean;
   /** VideoColorSpaceInit from the video track (primaries, transfer, matrix, fullRange) */
   colorSpace: VideoColorSpaceInit | null;
+}
+
+/**
+ * Common cinematic / broadcast FPS values that detected FPS will snap to
+ * when within a small tolerance.
+ */
+const COMMON_FPS_VALUES = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60] as const;
+
+/**
+ * Compute detected FPS from a sorted list of frame presentation timestamps
+ * (seconds, first frame at t=0). Returns null when FPS is indeterminate:
+ *   - 0 frames     → no data
+ *   - 1 frame      → no frame interval to measure (still-image videos may
+ *                    have a single frame at any timestamp; the formula
+ *                    "N / lastTimestamp" is meaningless here)
+ *   - N>=2 with lastTimestamp <= 0 → malformed timestamps
+ *
+ * For N >= 2 frames evenly spaced with first at t=0, the average frame
+ * interval is lastTimestamp / (N-1), so FPS = (N - 1) / lastTimestamp.
+ * The result is snapped to a common FPS value (24, 25, 29.97, etc.) when
+ * within 0.5 of one.
+ *
+ * Exported for unit testing the pure calculation without requiring the
+ * full WebCodecs / mediabunny pipeline.
+ */
+export function computeDetectedFps(actualFrameCount: number, lastTimestamp: number): number | null {
+  if (actualFrameCount < 2 || lastTimestamp <= 0) {
+    return null;
+  }
+
+  let detected = (actualFrameCount - 1) / lastTimestamp;
+
+  for (const common of COMMON_FPS_VALUES) {
+    if (Math.abs(detected - common) < 0.5) {
+      detected = common;
+      break;
+    }
+  }
+
+  return detected;
 }
 
 /**
@@ -271,8 +358,11 @@ export class MediabunnyFrameExtractor {
           const probeSink = new VideoSampleSink(this.videoTrack);
           const probeSample = await probeSink.getSample(0);
           if (probeSample) {
-            const probeFrame = probeSample.toVideoFrame();
+            // CRIT-01: closeProbePair() guarantees probeSample.close() runs even if
+            // probeSample.toVideoFrame() throws or probeFrame.close() throws.
+            let probeFrame: VideoFrame | null = null;
             try {
+              probeFrame = probeSample.toVideoFrame();
               const cs = probeFrame.colorSpace;
               if (cs) {
                 const transfer = cs.transfer ?? undefined;
@@ -300,9 +390,8 @@ export class MediabunnyFrameExtractor {
                 }
               }
             } finally {
-              probeFrame.close();
+              _probeInternals.closeProbePair(probeFrame, probeSample);
             }
-            probeSample.close();
           }
         } catch (e) {
           log.warn('VideoFrame HDR probe failed:', e);
@@ -431,21 +520,10 @@ export class MediabunnyFrameExtractor {
       const actualFrameCount = frameTimestamps.length;
       const lastTimestamp = frameTimestamps[frameTimestamps.length - 1] ?? 0;
 
-      // Calculate detected FPS from actual frame count and duration
-      if (actualFrameCount > 0 && lastTimestamp > 0) {
-        // FPS = (frameCount - 1) / lastTimestamp (since first frame is at t=0)
-        // For safety, use frameCount / (lastTimestamp + avgFrameDuration)
-        this.detectedFps = actualFrameCount / (lastTimestamp + lastTimestamp / Math.max(1, actualFrameCount - 1));
-
-        // Round to common FPS values if close
-        const commonFps = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
-        for (const common of commonFps) {
-          if (Math.abs(this.detectedFps - common) < 0.5) {
-            this.detectedFps = common;
-            break;
-          }
-        }
-      }
+      // Calculate detected FPS from actual frame count and duration.
+      // See computeDetectedFps() above for edge case handling (0 or 1 frame
+      // returns null since FPS is indeterminate without a measurable interval).
+      this.detectedFps = computeDetectedFps(actualFrameCount, lastTimestamp);
 
       // Update metadata with actual frame count and detected FPS
       if (this.metadata) {
@@ -733,8 +811,31 @@ export class MediabunnyFrameExtractor {
 
   /**
    * Extract a single HDR frame by frame number (1-based) using VideoSampleSink.
-   * Returns a VideoSample that can produce a VideoFrame for direct GPU upload.
-   * Falls back to null if VideoSampleSink is not available.
+   *
+   * **Ownership transfer:** The returned `VideoSample` is owned by the caller.
+   * The caller MUST call `.close()` on the sample when done to release the
+   * underlying GPU resource. Failing to close leaks GPU memory.
+   *
+   * **Recommended call pattern:**
+   * ```ts
+   * const sample = await extractor.getFrameHDR(frame);
+   * if (!sample) return null;
+   * try {
+   *   // use sample.toVideoFrame() — ownership of returned VideoFrame is the caller's
+   * } finally {
+   *   sample.close();
+   * }
+   * ```
+   *
+   * Note: `sample.toVideoFrame()` produces a `VideoFrame` whose lifecycle is
+   * also the caller's responsibility (close it OR transfer ownership to
+   * an `IPImage` whose `close()` will release it).
+   *
+   * Returns `null` when:
+   * - The video is not HDR (no `VideoSampleSink` available)
+   * - The abort signal is already aborted (or aborts during await)
+   * - The decoder fails to produce a sample for the requested timestamp
+   *
    * Uses CFR-based timestamp estimation when frame index is not yet built.
    */
   async getFrameHDR(frame: number, signal?: AbortSignal): Promise<VideoSample | null> {

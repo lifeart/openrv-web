@@ -232,6 +232,11 @@ export class Renderer implements RendererBackend {
   private _userFlipH = false;
   private _userFlipV = false;
 
+  // Last `u_inputTransfer` code bound during a render call (test-only).
+  // Tracked so MED-51 cascade behavior can be verified end-to-end without
+  // having to mock-and-spy on individual uniform calls.
+  private _lastInputTransferCode: number = INPUT_TRANSFER_SRGB;
+
   /** Expose the underlying WebGL2 context for direct readback (e.g. scope canvas capture). */
   getGL(): WebGL2RenderingContext | null {
     return this.gl;
@@ -620,8 +625,13 @@ export class Renderer implements RendererBackend {
       inputTransferCode = INPUT_TRANSFER_PQ;
     } else if (image.metadata.transferFunction === 'smpte240m') {
       inputTransferCode = INPUT_TRANSFER_SMPTE240M;
+    } else if (image.metadata.transferFunction === 'linear') {
+      // Linear-light data — no EOTF curve. Maps to INPUT_TRANSFER_SRGB
+      // (which the shader treats as identity per RenderConfig comment).
+      inputTransferCode = INPUT_TRANSFER_SRGB;
     }
     this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
+    this._lastInputTransferCode = inputTransferCode;
 
     // Debug: log shader uniforms for HDR pipeline diagnosis (once per texture update)
     if (image.textureNeedsUpdate === false) {
@@ -1440,8 +1450,15 @@ export class Renderer implements RendererBackend {
    * Used by tone mapping to preserve highlights up to display peak brightness.
    */
   setHDRHeadroom(headroom: number): void {
-    // Clamp to [1.0, 100.0] — values beyond 100x SDR white are unreasonable
-    // and could cause NaN/Inf in shader tone mapping math.
+    // Sanitize non-finite (NaN, ±Infinity) to default 1.0 first — Math.min/max
+    // propagate NaN, so a NaN input would otherwise reach the GPU uniform and
+    // poison every tone mapping division. Then clamp to [1.0, 100.0]: values
+    // beyond 100x SDR white are unreasonable and could cause numerical issues
+    // in shader math.
+    if (!Number.isFinite(headroom)) {
+      this.hdrHeadroom = 1.0;
+      return;
+    }
     this.hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
   }
 
@@ -1451,6 +1468,19 @@ export class Renderer implements RendererBackend {
    */
   getHDRHeadroom(): number {
     return this.hdrHeadroom;
+  }
+
+  /**
+   * Returns the last `u_inputTransfer` code that was bound during a render
+   * call. Used by E2E and unit tests to verify the MED-51 LUT output color
+   * space cascade resolves to the expected EOTF code at the renderer boundary.
+   *
+   * Codes follow the `INPUT_TRANSFER_*` constants in `ShaderConstants.ts`.
+   *
+   * @internal Test-only. Not part of the public API.
+   */
+  getLastInputTransferCodeForTest(): number {
+    return this._lastInputTransferCode;
   }
 
   /**
@@ -2599,6 +2629,7 @@ export class Renderer implements RendererBackend {
     // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
+    this._lastInputTransferCode = INPUT_TRANSFER_SRGB;
     // Apply user rotation/flip (SDR has no video rotation metadata)
     const sdrRotMatrix = getRotationMatrix2x2(normalizeAngle(this._userRotation));
     this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', sdrRotMatrix);

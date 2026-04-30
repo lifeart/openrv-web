@@ -8,6 +8,7 @@
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
 import type { InfoPanel, InfoPanelPosition, InfoPanelFields } from './InfoPanel';
+import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
 /** Margin from viewport edges for clamping */
 const VIEWPORT_MARGIN = 8;
@@ -32,7 +33,7 @@ const FIELD_LABELS: Record<keyof InfoPanelFields, string> = {
 
 export class InfoPanelSettingsMenu {
   private menuEl: HTMLDivElement | null = null;
-  private dismissHandlers: (() => void)[] = [];
+  private deregisterDismiss: (() => void) | null = null;
   private _isVisible = false;
   private infoPanel: InfoPanel;
 
@@ -129,7 +130,11 @@ export class InfoPanelSettingsMenu {
 
     this._isVisible = true;
 
-    this.setupDismissHandlers(menu);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [menu],
+
+      onDismiss: () => this.hide(),
+    });
   }
 
   /**
@@ -141,7 +146,10 @@ export class InfoPanelSettingsMenu {
       this.menuEl = null;
     }
     this._isVisible = false;
-    this.cleanupDismissHandlers();
+    if (this.deregisterDismiss) {
+      this.deregisterDismiss();
+      this.deregisterDismiss = null;
+    }
   }
 
   /**
@@ -246,32 +254,5 @@ export class InfoPanelSettingsMenu {
       opacity: 0.5;
     `;
     return sep;
-  }
-
-  private setupDismissHandlers(menu: HTMLDivElement): void {
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node) || !menu.contains(target)) {
-        this.hide();
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        this.hide();
-      }
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    this.dismissHandlers.push(() => document.removeEventListener('mousedown', onPointerDown));
-    this.dismissHandlers.push(() => document.removeEventListener('keydown', onKeyDown));
-  }
-
-  private cleanupDismissHandlers(): void {
-    for (const cleanup of this.dismissHandlers) {
-      cleanup();
-    }
-    this.dismissHandlers = [];
   }
 }

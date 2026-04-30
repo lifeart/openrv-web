@@ -8,6 +8,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import type {
   ConnectionState,
   SyncUser,
@@ -106,9 +107,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private roleIndicator!: HTMLElement;
   private viewOnlyBanner!: HTMLElement;
 
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -132,13 +132,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       reconnectExhausted: false,
     };
 
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionPanel();
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isOpen) {
-        this.closePanel();
-      }
-    };
 
     // Container
     this.container = document.createElement('div');
@@ -1017,13 +1011,18 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.panel.style.display = 'flex';
     this.button.setAttribute('aria-expanded', 'true');
 
-    // Add listeners
-    requestAnimationFrame(() => {
-      document.addEventListener('click', this.boundHandleOutsideClick);
-      document.addEventListener('keydown', this.boundHandleKeyDown);
-      window.addEventListener('scroll', this.boundHandleReposition, true);
-      window.addEventListener('resize', this.boundHandleReposition);
+    // Outside-click + Escape dismiss are owned by OutsideClickRegistry.
+    // dismissOn: 'click' (Pattern B) — the trigger button toggles via click,
+    // so listening for click avoids racing with the toggle handler.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.button, this.panel],
+      onDismiss: () => this.closePanel(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
     });
+    // Reposition listeners are NOT migrated — registry only handles dismissal.
+    window.addEventListener('scroll', this.boundHandleReposition, true);
+    window.addEventListener('resize', this.boundHandleReposition);
 
     this.emit('panelToggled', true);
   }
@@ -1035,9 +1034,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.panel.style.display = 'none';
     this.button.setAttribute('aria-expanded', 'false');
 
-    // Remove listeners
-    document.removeEventListener('click', this.boundHandleOutsideClick);
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    // Deregister BEFORE the rest of teardown so a re-entrant onDismiss is a no-op.
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
 
@@ -1055,13 +1054,6 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     const panelWidth = 280;
     const left = Math.max(8, rect.right - panelWidth);
     this.panel.style.left = `${left}px`;
-  }
-
-  private handleOutsideClick(e: MouseEvent): void {
-    const target = e.target as Node;
-    if (!this.panel.contains(target) && !this.button.contains(target)) {
-      this.closePanel();
-    }
   }
 
   private handleJoinRoom(): void {

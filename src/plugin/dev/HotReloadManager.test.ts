@@ -149,7 +149,8 @@ describe('HotReloadManager', () => {
       });
 
       manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
-      await expect(manager.reload('test.plugin')).resolves.toBeUndefined();
+      // reload() now returns the new plugin id (PR-2 / MED-19) instead of void.
+      await expect(manager.reload('test.plugin')).resolves.toBe('reloaded.plugin');
     });
 
     it('PHOT-017: warns and continues when getState throws', async () => {
@@ -219,6 +220,56 @@ describe('HotReloadManager', () => {
       expect(manager.isTracked('test.plugin')).toBe(true);
     });
 
+    it('PHOT-019b: rolls back newly-loaded plugin when dispose() of old plugin throws', async () => {
+      // Simulate a buggy old plugin whose deactivate() / dispose() throws.
+      // Without rollback, the next reload would call loadFromURL again and
+      // register() would throw "Plugin already registered" for newId.
+      (registry.dispose as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('dispose boom'));
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await expect(manager.reload('test.plugin')).rejects.toThrow('dispose boom');
+
+      // We loaded the new plugin, then dispose threw on the old one, then
+      // we rolled back by disposing+unregistering the new one.
+      expect(registry.loadFromURL).toHaveBeenCalledTimes(1);
+      // dispose called for old (threw) AND for newId (rollback) => 2 calls.
+      expect((registry.dispose as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+      // unregister only called as part of rollback (for newId), since the
+      // failure aborted before the old-plugin unregister step.
+      expect(registry.unregister).toHaveBeenCalledWith('reloaded.plugin');
+      // Old tracked URL preserved so developer can retry after fixing.
+      expect(manager.isTracked('test.plugin')).toBe(true);
+      expect(manager.isTracked('reloaded.plugin')).toBe(false);
+    });
+
+    it('PHOT-019c: rolls back newly-loaded plugin when activate() of new plugin throws', async () => {
+      (registry.activate as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('activate boom'));
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await expect(manager.reload('test.plugin')).rejects.toThrow('activate boom');
+
+      expect(registry.loadFromURL).toHaveBeenCalledTimes(1);
+      // The old plugin reached unregister cleanly; rollback then disposed
+      // and unregistered the new plugin.
+      expect(registry.unregister).toHaveBeenCalledWith('test.plugin');
+      expect(registry.unregister).toHaveBeenCalledWith('reloaded.plugin');
+    });
+
+    it('PHOT-019d: subsequent reload after rollback is not blocked by stale registration', async () => {
+      // First call: dispose throws, rollback runs.
+      (registry.dispose as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('dispose boom'));
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await expect(manager.reload('test.plugin')).rejects.toThrow('dispose boom');
+
+      // Second call: clean run. The rollback should have left the registry
+      // in a coherent state, so the second reload succeeds.
+      await manager.reload('test.plugin');
+
+      expect(registry.activate).toHaveBeenCalledWith('reloaded.plugin');
+      expect(manager.isTracked('reloaded.plugin')).toBe(true);
+    });
+
     it('PHOT-021: retry succeeds after transient reload failure', async () => {
       (registry.loadFromURL as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network error'));
 
@@ -237,14 +288,23 @@ describe('HotReloadManager', () => {
       expect(manager.isTracked('reloaded.plugin')).toBe(true);
     });
 
-    it('PHOT-020: rejects concurrent reload of same plugin', async () => {
+    it('PHOT-020: concurrent reload calls join the in-flight reload', async () => {
       manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
 
       // Start first reload but don't await
       const reload1 = manager.reload('test.plugin');
-      // Second reload should throw immediately
-      await expect(manager.reload('test.plugin')).rejects.toThrow('already being reloaded');
-      await reload1;
+      // Second concurrent call should NOT throw — instead it joins the same
+      // in-flight reload and resolves to the same new plugin id. The bridge
+      // layer adds a coalesce-with-trailing-replay policy on top of this.
+      const reload2 = manager.reload('test.plugin');
+      expect(reload2).toBe(reload1);
+
+      const [id1, id2] = await Promise.all([reload1, reload2]);
+      expect(id1).toBe('reloaded.plugin');
+      expect(id2).toBe('reloaded.plugin');
+
+      // loadFromURL should have run only once for the in-flight pair.
+      expect((registry.loadFromURL as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
     });
 
     it('PHOT-003: isTracked returns false for untracked plugin', () => {
@@ -263,6 +323,246 @@ describe('HotReloadManager', () => {
 
       await manager.reload('test.plugin');
       expect(registry.loadFromURL).toHaveBeenCalledWith(expect.stringContaining('http://new.com/p.js'));
+    });
+
+    // -----------------------------------------------------------------------
+    // MED-19: Defensive deep-clone of captured state
+    // -----------------------------------------------------------------------
+
+    it('PHOT-022: captured state is deep-cloned so live mutations after capture do not corrupt snapshot', async () => {
+      // Bad-citizen plugin: getState returns a *reference* to live state.
+      const liveState = { counter: 42, nested: { items: [1, 2, 3] } };
+      const mockPlugin: Plugin = {
+        manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        getState: vi.fn(() => liveState),
+      };
+
+      let restoredState: unknown;
+      const reloadedPlugin: Plugin = {
+        manifest: { id: 'reloaded.plugin', name: 'Reloaded', version: '2.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        restoreState: vi.fn((s) => {
+          restoredState = s;
+        }),
+      };
+
+      (registry.getPlugin as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'test.plugin') return mockPlugin;
+        if (id === 'reloaded.plugin') return reloadedPlugin;
+        return undefined;
+      });
+
+      // Mutate live state mid-reload by hooking dispose.
+      (registry.dispose as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        liveState.counter = 999;
+        liveState.nested.items.push(4);
+      });
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await manager.reload('test.plugin');
+
+      // The snapshot passed to restoreState must reflect state at capture time,
+      // not the post-mutation live state.
+      expect(restoredState).toEqual({ counter: 42, nested: { items: [1, 2, 3] } });
+    });
+
+    it("PHOT-023: snapshot is independent of new plugin's mutations during restoreState", async () => {
+      const liveState = { counter: 5 };
+      const mockPlugin: Plugin = {
+        manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        getState: vi.fn(() => liveState),
+      };
+
+      const reloadedPlugin: Plugin = {
+        manifest: { id: 'reloaded.plugin', name: 'Reloaded', version: '2.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        restoreState: vi.fn((s: { counter: number }) => {
+          // New plugin mutates the snapshot in place.
+          s.counter = 100;
+        }),
+      };
+
+      (registry.getPlugin as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'test.plugin') return mockPlugin;
+        if (id === 'reloaded.plugin') return reloadedPlugin;
+        return undefined;
+      });
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await manager.reload('test.plugin');
+
+      // Original live state object is untouched because we cloned before restore.
+      expect(liveState.counter).toBe(5);
+    });
+
+    it('PHOT-024: structurally complex state (Map, Set, ArrayBuffer) is preserved by structuredClone', async () => {
+      const buf = new ArrayBuffer(8);
+      new Uint8Array(buf).set([1, 2, 3, 4, 5, 6, 7, 8]);
+      const liveState = {
+        map: new Map<string, number>([['a', 1]]),
+        set: new Set<number>([1, 2, 3]),
+        buffer: buf,
+      };
+
+      const mockPlugin: Plugin = {
+        manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        getState: vi.fn(() => liveState),
+      };
+
+      let restoredState: typeof liveState | undefined;
+      const reloadedPlugin: Plugin = {
+        manifest: { id: 'reloaded.plugin', name: 'Reloaded', version: '2.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        restoreState: vi.fn((s) => {
+          restoredState = s as typeof liveState;
+        }),
+      };
+
+      (registry.getPlugin as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'test.plugin') return mockPlugin;
+        if (id === 'reloaded.plugin') return reloadedPlugin;
+        return undefined;
+      });
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await manager.reload('test.plugin');
+
+      expect(restoredState).toBeDefined();
+      expect(restoredState!.map).toBeInstanceOf(Map);
+      expect(restoredState!.map.get('a')).toBe(1);
+      expect(restoredState!.set).toBeInstanceOf(Set);
+      expect(restoredState!.set.has(2)).toBe(true);
+      expect(new Uint8Array(restoredState!.buffer)[0]).toBe(1);
+      // Reference identity: cloned, not the original.
+      expect(restoredState!.map).not.toBe(liveState.map);
+      expect(restoredState!.set).not.toBe(liveState.set);
+      expect(restoredState!.buffer).not.toBe(liveState.buffer);
+    });
+
+    it('PHOT-025: non-cloneable state (function) falls back to raw reference with warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Functions are not structured-cloneable -> DataCloneError.
+      const liveState = { onTick: () => 'hello', counter: 7 };
+      const mockPlugin: Plugin = {
+        manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        getState: vi.fn(() => liveState),
+      };
+
+      let restoredState: unknown;
+      const reloadedPlugin: Plugin = {
+        manifest: { id: 'reloaded.plugin', name: 'Reloaded', version: '2.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        restoreState: vi.fn((s) => {
+          restoredState = s;
+        }),
+      };
+
+      (registry.getPlugin as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'test.plugin') return mockPlugin;
+        if (id === 'reloaded.plugin') return reloadedPlugin;
+        return undefined;
+      });
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await manager.reload('test.plugin');
+
+      // Warned about the failed clone.
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('structuredClone failed'), expect.anything());
+      // Fell back to raw reference (preserves prior behavior).
+      expect(restoredState).toBe(liveState);
+      warnSpy.mockRestore();
+    });
+
+    it('PHOT-026: null state passes through unchanged', async () => {
+      const mockPlugin: Plugin = {
+        manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        getState: vi.fn(() => null),
+      };
+
+      let restoredCalled = false;
+      let restoredState: unknown = 'sentinel';
+      const reloadedPlugin: Plugin = {
+        manifest: { id: 'reloaded.plugin', name: 'Reloaded', version: '2.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        restoreState: vi.fn((s) => {
+          restoredCalled = true;
+          restoredState = s;
+        }),
+      };
+
+      (registry.getPlugin as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'test.plugin') return mockPlugin;
+        if (id === 'reloaded.plugin') return reloadedPlugin;
+        return undefined;
+      });
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await manager.reload('test.plugin');
+
+      // null is a valid serializable state and should be passed to restoreState.
+      expect(restoredCalled).toBe(true);
+      expect(restoredState).toBeNull();
+    });
+
+    it('PHOT-027: undefined state skips restoreState call (matches existing contract)', async () => {
+      const mockPlugin: Plugin = {
+        manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        getState: vi.fn(() => undefined),
+      };
+
+      const restoreStateFn = vi.fn();
+      const reloadedPlugin: Plugin = {
+        manifest: { id: 'reloaded.plugin', name: 'Reloaded', version: '2.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        restoreState: restoreStateFn,
+      };
+
+      (registry.getPlugin as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'test.plugin') return mockPlugin;
+        if (id === 'reloaded.plugin') return reloadedPlugin;
+        return undefined;
+      });
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await manager.reload('test.plugin');
+
+      // Existing flow: undefined sentinel means "no state captured".
+      expect(restoreStateFn).not.toHaveBeenCalled();
+    });
+
+    it('PHOT-028: primitive state (number, string) passes through unchanged', async () => {
+      const mockPlugin: Plugin = {
+        manifest: { id: 'test.plugin', name: 'Test', version: '1.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        getState: vi.fn(() => 42),
+      };
+
+      let restoredState: unknown;
+      const reloadedPlugin: Plugin = {
+        manifest: { id: 'reloaded.plugin', name: 'Reloaded', version: '2.0.0', contributes: ['decoder'] },
+        activate: vi.fn(),
+        restoreState: vi.fn((s) => {
+          restoredState = s;
+        }),
+      };
+
+      (registry.getPlugin as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === 'test.plugin') return mockPlugin;
+        if (id === 'reloaded.plugin') return reloadedPlugin;
+        return undefined;
+      });
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+      await manager.reload('test.plugin');
+
+      expect(restoredState).toBe(42);
     });
   });
 });

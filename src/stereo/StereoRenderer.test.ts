@@ -6,9 +6,11 @@
  * mathematically correct.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   applyStereoMode,
+  validateStereoOffset,
+  extractStereoEyes,
   type StereoState,
   DEFAULT_STEREO_STATE,
   isDefaultStereoState,
@@ -349,6 +351,338 @@ describe('StereoRenderer', () => {
       expect(getStereoModeLabel('side-by-side')).toBe('Side-by-Side');
       expect(getStereoModeLabel('anaglyph')).toBe('Anaglyph');
       expect(getStereoModeLabel('anaglyph-luminance')).toBe('Anaglyph (Luma)');
+    });
+  });
+
+  describe('validateStereoOffset', () => {
+    it('returns valid offset values unchanged', () => {
+      expect(validateStereoOffset(0)).toBe(0);
+      expect(validateStereoOffset(10)).toBe(10);
+      expect(validateStereoOffset(-10)).toBe(-10);
+      expect(validateStereoOffset(25.5)).toBe(25.5);
+      expect(validateStereoOffset(-50)).toBe(-50);
+      expect(validateStereoOffset(50)).toBe(50);
+    });
+
+    it('clamps values exceeding the maximum', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(validateStereoOffset(100)).toBe(50);
+      expect(validateStereoOffset(51)).toBe(50);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      warnSpy.mockRestore();
+    });
+
+    it('clamps values below the minimum', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(validateStereoOffset(-100)).toBe(-50);
+      expect(validateStereoOffset(-51)).toBe(-50);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      warnSpy.mockRestore();
+    });
+
+    it('returns 0 for NaN', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(validateStereoOffset(NaN)).toBe(0);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]![0]).toContain('NaN');
+      warnSpy.mockRestore();
+    });
+
+    it('clamps positive Infinity to max', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(validateStereoOffset(Infinity)).toBe(50);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]![0]).toContain('Infinity');
+      warnSpy.mockRestore();
+    });
+
+    it('clamps negative Infinity to min', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(validateStereoOffset(-Infinity)).toBe(-50);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
+
+    it('boundary values -50 and 50 are accepted without warning', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(validateStereoOffset(-50)).toBe(-50);
+      expect(validateStereoOffset(50)).toBe(50);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('returns -0 as-is (negative zero is within valid range)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = validateStereoOffset(-0);
+      // -0 is a valid number in range; the function returns it unchanged
+      expect(Object.is(result, -0)).toBe(true);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('returns 0 with warning for non-number input (typeof guard)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = validateStereoOffset(undefined as unknown as number);
+      expect(result).toBe(0);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]![0]).toContain('non-number');
+      warnSpy.mockRestore();
+    });
+
+    it('default stereo state offset is valid', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(validateStereoOffset(DEFAULT_STEREO_STATE.offset)).toBe(0);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('offset validation in applyStereoMode', () => {
+    it('NaN offset is treated as 0 (no shift applied)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Left half RED, right half BLUE
+      const source = createTestImageData(100, 10, (x) => {
+        if (x < 50) return [255, 0, 0, 255];
+        return [0, 0, 255, 255];
+      });
+
+      const stateNaN: StereoState = { mode: 'anaglyph', eyeSwap: false, offset: NaN };
+      const stateZero: StereoState = { mode: 'anaglyph', eyeSwap: false, offset: 0 };
+
+      const resultNaN = applyStereoMode(source, stateNaN);
+      const resultZero = applyStereoMode(source, stateZero);
+
+      // NaN should be treated as 0, producing identical results
+      const pNaN = getPixel(resultNaN, 25, 5);
+      const pZero = getPixel(resultZero, 25, 5);
+      expect(pNaN).toEqual(pZero);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('excessively large offset is clamped and rendering still works', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const source = createTestImageData(100, 10, (x) => {
+        if (x < 50) return [255, 0, 0, 255];
+        return [0, 0, 255, 255];
+      });
+
+      const state: StereoState = { mode: 'anaglyph', eyeSwap: false, offset: 999 };
+      const result = applyStereoMode(source, state);
+
+      // Should not throw and should produce valid output
+      expect(result.width).toBe(50);
+      expect(result.height).toBe(10);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('Infinity offset is clamped and rendering still works', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const source = createTestImageData(100, 10, (x) => {
+        if (x < 50) return [255, 0, 0, 255];
+        return [0, 0, 255, 255];
+      });
+
+      const state: StereoState = { mode: 'side-by-side', eyeSwap: false, offset: Infinity };
+      const result = applyStereoMode(source, state);
+
+      expect(result.width).toBe(100);
+      expect(result.height).toBe(10);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('odd width/height splitting (LOW-15)', () => {
+    describe('side-by-side extraction with odd width', () => {
+      it('even width: both eyes get equal width', () => {
+        const source = createTestImageData(100, 10, (x) => {
+          if (x < 50) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const { left, right } = extractStereoEyes(source, 'side-by-side', false);
+        expect(left.width).toBe(50);
+        expect(right.width).toBe(50);
+        expect(left.width + right.width).toBe(100);
+      });
+
+      it('odd width: right eye gets the extra pixel, total equals original', () => {
+        // Create 101-wide image: left 50px red, right 51px blue
+        const source = createTestImageData(101, 10, (x) => {
+          if (x < 50) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const { left, right } = extractStereoEyes(source, 'side-by-side', false);
+        expect(left.width).toBe(50);
+        expect(right.width).toBe(51);
+        expect(left.width + right.width).toBe(101);
+        expect(left.height).toBe(10);
+        expect(right.height).toBe(10);
+
+        // Verify pixel data integrity: left eye should be all red
+        const leftPixel = getPixel(left, 0, 0);
+        expect(leftPixel).toEqual([255, 0, 0, 255]);
+
+        // Right eye pixel at x=0 corresponds to source x=50 which is blue
+        const rightPixel = getPixel(right, 0, 0);
+        expect(rightPixel).toEqual([0, 0, 255, 255]);
+
+        // Right eye last pixel at x=50 corresponds to source x=100 which is blue
+        const rightLastPixel = getPixel(right, 50, 0);
+        expect(rightLastPixel).toEqual([0, 0, 255, 255]);
+      });
+
+      it('width = 1: left eye gets 0 width is not possible, right gets 1', () => {
+        // Width 1 means floor(1/2) = 0 for left, 1 for right
+        // ImageData with width=0 is invalid, so left eye should be 0-width
+        // Actually ImageData(0, h) throws, so width=1 is a degenerate case.
+        // Let's test width=2 as minimum meaningful, and width=1 should be handled
+        // by the caller. We verify width=2 works correctly.
+        const source = createTestImageData(2, 2, (x) => {
+          if (x < 1) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const { left, right } = extractStereoEyes(source, 'side-by-side', false);
+        expect(left.width).toBe(1);
+        expect(right.width).toBe(1);
+        expect(left.width + right.width).toBe(2);
+      });
+
+      it('width = 3: left gets 1, right gets 2', () => {
+        const source = createTestImageData(3, 2, (x) => {
+          if (x === 0) return [255, 0, 0, 255]; // left eye
+          if (x === 1) return [0, 255, 0, 255]; // right eye pixel 0
+          return [0, 0, 255, 255]; // right eye pixel 1
+        });
+        const { left, right } = extractStereoEyes(source, 'side-by-side', false);
+        expect(left.width).toBe(1);
+        expect(right.width).toBe(2);
+        expect(left.width + right.width).toBe(3);
+
+        // Verify pixel content
+        expect(getPixel(left, 0, 0)).toEqual([255, 0, 0, 255]);
+        expect(getPixel(right, 0, 0)).toEqual([0, 255, 0, 255]);
+        expect(getPixel(right, 1, 0)).toEqual([0, 0, 255, 255]);
+      });
+
+      it('large odd width (1921): correct split', () => {
+        const source = createTestImageData(1921, 1);
+        const { left, right } = extractStereoEyes(source, 'side-by-side', false);
+        expect(left.width).toBe(960);
+        expect(right.width).toBe(961);
+        expect(left.width + right.width).toBe(1921);
+      });
+    });
+
+    describe('over-under extraction with odd height', () => {
+      it('even height: both eyes get equal height', () => {
+        const source = createTestImageData(10, 100, (_x, y) => {
+          if (y < 50) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const { left, right } = extractStereoEyes(source, 'over-under', false);
+        expect(left.height).toBe(50);
+        expect(right.height).toBe(50);
+        expect(left.height + right.height).toBe(100);
+      });
+
+      it('odd height: bottom eye gets the extra pixel, total equals original', () => {
+        const source = createTestImageData(10, 101, (_x, y) => {
+          if (y < 50) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const { left, right } = extractStereoEyes(source, 'over-under', false);
+        expect(left.height).toBe(50);
+        expect(right.height).toBe(51);
+        expect(left.height + right.height).toBe(101);
+        expect(left.width).toBe(10);
+        expect(right.width).toBe(10);
+
+        // Verify pixel data: top eye should be red
+        const topPixel = getPixel(left, 0, 0);
+        expect(topPixel).toEqual([255, 0, 0, 255]);
+
+        // Bottom eye first row (source row 50) should be blue
+        const bottomPixel = getPixel(right, 0, 0);
+        expect(bottomPixel).toEqual([0, 0, 255, 255]);
+
+        // Bottom eye last row (source row 100) should be blue
+        const bottomLastPixel = getPixel(right, 0, 50);
+        expect(bottomLastPixel).toEqual([0, 0, 255, 255]);
+      });
+
+      it('height = 2: both eyes get 1 row', () => {
+        const source = createTestImageData(4, 2, (_x, y) => {
+          if (y === 0) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const { left, right } = extractStereoEyes(source, 'over-under', false);
+        expect(left.height).toBe(1);
+        expect(right.height).toBe(1);
+        expect(left.height + right.height).toBe(2);
+      });
+
+      it('height = 3: top gets 1, bottom gets 2', () => {
+        const source = createTestImageData(2, 3, (_x, y) => {
+          if (y === 0) return [255, 0, 0, 255];
+          if (y === 1) return [0, 255, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const { left, right } = extractStereoEyes(source, 'over-under', false);
+        expect(left.height).toBe(1);
+        expect(right.height).toBe(2);
+        expect(left.height + right.height).toBe(3);
+
+        expect(getPixel(left, 0, 0)).toEqual([255, 0, 0, 255]);
+        expect(getPixel(right, 0, 0)).toEqual([0, 255, 0, 255]);
+        expect(getPixel(right, 0, 1)).toEqual([0, 0, 255, 255]);
+      });
+    });
+
+    describe('side-by-side rendering with odd width', () => {
+      it('odd output width: result covers all pixels without gap', () => {
+        // Create a 101-wide side-by-side source
+        const source = createTestImageData(101, 10, (x) => {
+          if (x < 50) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const state: StereoState = { mode: 'side-by-side', eyeSwap: false, offset: 0 };
+        const result = applyStereoMode(source, state);
+
+        expect(result.width).toBe(101);
+        expect(result.height).toBe(10);
+
+        // Verify no uninitialized (all-zero) pixels at the seam
+        const leftEdge = getPixel(result, 49, 0);
+        expect(leftEdge[3]).toBe(255); // alpha should be set
+        const rightEdge = getPixel(result, 50, 0);
+        expect(rightEdge[3]).toBe(255); // alpha should be set
+        const lastPixel = getPixel(result, 100, 0);
+        expect(lastPixel[3]).toBe(255); // last pixel should be set
+      });
+    });
+
+    describe('over-under rendering with odd height', () => {
+      it('odd output height: result covers all pixels without gap', () => {
+        const source = createTestImageData(10, 101, (_x, y) => {
+          if (y < 50) return [255, 0, 0, 255];
+          return [0, 0, 255, 255];
+        });
+        const state: StereoState = { mode: 'over-under', eyeSwap: false, offset: 0 };
+        const result = applyStereoMode(source, state);
+
+        expect(result.width).toBe(10);
+        expect(result.height).toBe(101);
+
+        // Verify no uninitialized pixels at the seam
+        const topEdge = getPixel(result, 0, 49);
+        expect(topEdge[3]).toBe(255);
+        const bottomEdge = getPixel(result, 0, 50);
+        expect(bottomEdge[3]).toBe(255);
+        const lastPixel = getPixel(result, 0, 100);
+        expect(lastPixel[3]).toBe(255);
+      });
     });
   });
 });

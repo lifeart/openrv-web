@@ -73,6 +73,8 @@ Each layer in the stack supports:
 
 The stack is ordered from bottom (background) to top (foreground), following standard compositing conventions.
 
+A small number of compositing options -- notably `topmost` -- are *stack-level* rather than per-layer: choosing them applies the same mode uniformly to every layer in the stack. See [Layer Stack Blend Modes](blend-modes.md#layer-stack-blend-modes) for the full list and the stack-level uniformity contract.
+
 ## Comparison Annotations
 
 Annotations can be drawn during A/B compare mode. Annotations are keyed to the A/B slot assignment, not to the underlying media source. This means that swapping which source is assigned to slot A vs. slot B will also swap which annotations are visible in each slot. If you reassign a different source to slot A, the annotations previously drawn in slot A remain attached to that slot and will appear over the new source.

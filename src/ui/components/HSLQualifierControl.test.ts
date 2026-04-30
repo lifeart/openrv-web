@@ -2,12 +2,18 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HSLQualifierControl } from './HSLQualifierControl';
 import { HSLQualifier } from './HSLQualifier';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('HSLQualifierControl', () => {
   let control: HSLQualifierControl;
   let hslQualifier: HSLQualifier;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     hslQualifier = new HSLQualifier();
     control = new HSLQualifierControl(hslQualifier);
   });
@@ -15,6 +21,7 @@ describe('HSLQualifierControl', () => {
   afterEach(() => {
     control.dispose();
     hslQualifier.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -53,60 +60,32 @@ describe('HSLQualifierControl', () => {
     });
   });
 
-  describe('outside click listener lifecycle', () => {
-    it('HSL-M21a: outside click listener should NOT be registered when dropdown is closed', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      control.dispose();
-      hslQualifier.dispose();
-      addSpy.mockClear();
-
-      hslQualifier = new HSLQualifier();
-      control = new HSLQualifierControl(hslQualifier);
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(0);
-      addSpy.mockRestore();
-    });
-
-    it('HSL-M21b: outside click listener should be registered when dropdown opens', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('HSL-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
 
-      addSpy.mockClear();
+      expectRegistrationCount(0);
       button.click(); // open
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      addSpy.mockRestore();
-    });
-
-    it('HSL-M21c: outside click listener should be removed when dropdown closes', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
-
-      button.click(); // open
-      removeSpy.mockClear();
+      expectRegistrationCount(1);
       button.click(); // close
-
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
+      expectRegistrationCount(0);
     });
 
-    it('HSL-M21d: dispose should remove outside click listener regardless of dropdown state', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
+    it('HSL-OCR-002: outside click dismisses the dropdown', () => {
       const el = control.render();
+      document.body.appendChild(el);
       const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
 
-      button.click(); // open dropdown
-      removeSpy.mockClear();
-      control.dispose();
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('block');
 
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
+      dispatchOutsideClick();
+
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      el.remove();
     });
   });
 

@@ -8,6 +8,7 @@
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
 import type { OverlayPosition, TimecodeOverlay, TimecodeOverlayState, TimecodeDisplayFormat } from './TimecodeOverlay';
+import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
 const VIEWPORT_MARGIN = 8;
 
@@ -32,7 +33,7 @@ const DISPLAY_FORMAT_LABELS: Record<TimecodeDisplayFormat, string> = {
 
 export class TimecodeOverlaySettingsMenu {
   private menuEl: HTMLDivElement | null = null;
-  private dismissHandlers: (() => void)[] = [];
+  private deregisterDismiss: (() => void) | null = null;
   private _isVisible = false;
   private overlay: TimecodeOverlay;
 
@@ -149,7 +150,10 @@ export class TimecodeOverlaySettingsMenu {
     menu.style.visibility = 'visible';
 
     this._isVisible = true;
-    this.setupDismissHandlers(menu);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [menu],
+      onDismiss: () => this.hide(),
+    });
   }
 
   hide(): void {
@@ -158,7 +162,10 @@ export class TimecodeOverlaySettingsMenu {
       this.menuEl = null;
     }
     this._isVisible = false;
-    this.cleanupDismissHandlers();
+    if (this.deregisterDismiss) {
+      this.deregisterDismiss();
+      this.deregisterDismiss = null;
+    }
   }
 
   isVisible(): boolean {
@@ -314,30 +321,5 @@ export class TimecodeOverlaySettingsMenu {
       const check = item.querySelector<HTMLElement>('.menu-check');
       if (check) check.textContent = checked ? '\u2713' : '';
     }
-  }
-
-  private setupDismissHandlers(menu: HTMLDivElement): void {
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node) || !menu.contains(target)) {
-        this.hide();
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        this.hide();
-      }
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    this.dismissHandlers.push(() => document.removeEventListener('mousedown', onPointerDown));
-    this.dismissHandlers.push(() => document.removeEventListener('keydown', onKeyDown));
-  }
-
-  private cleanupDismissHandlers(): void {
-    for (const cleanup of this.dismissHandlers) cleanup();
-    this.dismissHandlers = [];
   }
 }

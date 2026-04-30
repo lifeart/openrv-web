@@ -7,12 +7,13 @@
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
 import type { ClippingOverlay } from './ClippingOverlay';
+import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
 const VIEWPORT_MARGIN = 8;
 
 export class ClippingOverlaySettingsMenu {
   private menuEl: HTMLDivElement | null = null;
-  private dismissHandlers: (() => void)[] = [];
+  private deregisterDismiss: (() => void) | null = null;
   private _isVisible = false;
   private overlay: ClippingOverlay;
 
@@ -82,7 +83,10 @@ export class ClippingOverlaySettingsMenu {
     menu.style.visibility = 'visible';
 
     this._isVisible = true;
-    this.setupDismissHandlers(menu);
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [menu],
+      onDismiss: () => this.hide(),
+    });
   }
 
   hide(): void {
@@ -91,7 +95,10 @@ export class ClippingOverlaySettingsMenu {
       this.menuEl = null;
     }
     this._isVisible = false;
-    this.cleanupDismissHandlers();
+    if (this.deregisterDismiss) {
+      this.deregisterDismiss();
+      this.deregisterDismiss = null;
+    }
   }
 
   isVisible(): boolean {
@@ -214,32 +221,5 @@ export class ClippingOverlaySettingsMenu {
     if (check) {
       check.textContent = checked ? '\u2713' : '';
     }
-  }
-
-  private setupDismissHandlers(menu: HTMLDivElement): void {
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node) || !menu.contains(target)) {
-        this.hide();
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        this.hide();
-      }
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    this.dismissHandlers.push(() => document.removeEventListener('mousedown', onPointerDown));
-    this.dismissHandlers.push(() => document.removeEventListener('keydown', onKeyDown));
-  }
-
-  private cleanupDismissHandlers(): void {
-    for (const dispose of this.dismissHandlers) {
-      dispose();
-    }
-    this.dismissHandlers = [];
   }
 }

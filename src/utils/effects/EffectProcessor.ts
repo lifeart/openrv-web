@@ -322,12 +322,16 @@ export class EffectProcessor {
   private static highlightLUT: Float32Array | null = null;
   private static shadowLUT: Float32Array | null = null;
 
-  // Cached midtone mask for clarity (static since it never changes)
-  private static midtoneMask: Float32Array | null = null;
-
   // Vibrance 3D LUT cache (static - shared across instances for same parameters)
   private static vibrance3DLUT: Float32Array | null = null;
-  private static vibrance3DLUTParams: { vibrance: number; skinProtection: boolean } | null = null;
+  private static vibrance3DLUTParams: {
+    vibrance: number;
+    skinProtection: boolean;
+    lutSize: number;
+    skinHueCenter: number;
+    skinHueRange: number;
+    skinProtectionMin: number;
+  } | null = null;
   static readonly VIBRANCE_LUT_SIZE = 32; // 32x32x32 = 32K entries
 
   // Reusable buffers for clarity blur to avoid repeated allocations
@@ -372,7 +376,11 @@ export class EffectProcessor {
       EffectProcessor.vibrance3DLUT &&
       EffectProcessor.vibrance3DLUTParams &&
       EffectProcessor.vibrance3DLUTParams.vibrance === vibrance &&
-      EffectProcessor.vibrance3DLUTParams.skinProtection === skinProtection
+      EffectProcessor.vibrance3DLUTParams.skinProtection === skinProtection &&
+      EffectProcessor.vibrance3DLUTParams.lutSize === EffectProcessor.VIBRANCE_LUT_SIZE &&
+      EffectProcessor.vibrance3DLUTParams.skinHueCenter === SKIN_TONE_HUE_CENTER &&
+      EffectProcessor.vibrance3DLUTParams.skinHueRange === SKIN_TONE_HUE_RANGE &&
+      EffectProcessor.vibrance3DLUTParams.skinProtectionMin === SKIN_PROTECTION_MIN
     ) {
       return EffectProcessor.vibrance3DLUT;
     }
@@ -447,7 +455,14 @@ export class EffectProcessor {
     }
 
     EffectProcessor.vibrance3DLUT = lut;
-    EffectProcessor.vibrance3DLUTParams = { vibrance, skinProtection };
+    EffectProcessor.vibrance3DLUTParams = {
+      vibrance,
+      skinProtection,
+      lutSize: EffectProcessor.VIBRANCE_LUT_SIZE,
+      skinHueCenter: SKIN_TONE_HUE_CENTER,
+      skinHueRange: SKIN_TONE_HUE_RANGE,
+      skinProtectionMin: SKIN_PROTECTION_MIN,
+    };
     return lut;
   }
 
@@ -1081,20 +1096,15 @@ export class EffectProcessor {
     }
   }
 
-  /**
-   * Get cached midtone mask for clarity (lazily initialized)
-   */
-  private getMidtoneMask(): Float32Array {
-    if (!EffectProcessor.midtoneMask) {
-      EffectProcessor.midtoneMask = new Float32Array(256);
-      for (let i = 0; i < 256; i++) {
-        const normalized = i / 255;
-        const deviation = Math.abs(normalized - 0.5) * 2;
-        EffectProcessor.midtoneMask[i] = 1.0 - deviation * deviation;
-      }
-    }
-    return EffectProcessor.midtoneMask;
-  }
+  // Note: prior versions cached a 256-entry midtone mask LUT and indexed it by
+  // Math.round(luminance). That integer-rounded lookup produced banding in
+  // smooth gradients (LOW-24). The clarity loops now compute the mask formula
+  // `1 - (|n - 0.5| * 2)^2` inline in float precision. The canonical
+  // implementation is `computeMidtoneMaskValue` in
+  // `effectProcessing.shared.ts`; the inline copies here are kept verbatim
+  // (formula-identical) for tight-loop performance — the worker and the
+  // ViewerEffects.applyClarity callsite use the same shared helper /
+  // identical inline formula.
 
   /**
    * Ensure clarity buffers are allocated and sized correctly.
@@ -1129,6 +1139,17 @@ export class EffectProcessor {
    *
    * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
    * processes at half resolution for ~4x speedup with minimal quality loss.
+   *
+   * Sampling note (LOW-07): This CPU path snapshots the current imageData
+   * buffer (`original.set(data)`) and reads neighbours from that snapshot,
+   * so the blur kernel operates on whatever the prior CPU effects produced
+   * — i.e. display-referred 8-bit RGB at this point in the pipeline. This
+   * differs from the GLSL single-pass renderer, which samples the raw input texture
+   * (not the post-color-pipeline result) for the same kernel because
+   * post-pipeline neighbour sampling would require an extra FBO + render
+   * pass — see viewer.frag.glsl section 5e for the full rationale. The
+   * CPU/GPU output therefore differs by a small expected amount; both are
+   * intentional within their respective architectures.
    */
   applyClarity(
     imageData: ImageData,
@@ -1156,9 +1177,12 @@ export class EffectProcessor {
     this.applyGaussianBlur5x5InPlace(original, width, height);
     const blurred = this.clarityBlurResultBuffer!;
 
-    // Use cached midtone mask
-    const midtoneMask = this.getMidtoneMask();
     const effectScale = clarity * CLARITY_EFFECT_SCALE;
+    // Float-precision midtone mask (LOW-24): avoids the integer LUT quantization
+    // that produced banding in smooth gradients. inv255 normalizes the luma sum
+    // (already in [0, 255] since LUMA_R + LUMA_G + LUMA_B === 1) into [0, 1] so
+    // the mask formula 1 - (|n - 0.5| * 2)^2 is computed in float throughout.
+    const inv255 = 1 / 255;
 
     for (let i = 0; i < len; i += 4) {
       const r = original[i]!;
@@ -1169,9 +1193,9 @@ export class EffectProcessor {
       const blurredG = blurred[i + 1]!;
       const blurredB = blurred[i + 2]!;
 
-      const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-      const mask = midtoneMask[lumIndex]!;
+      const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+      const dev = Math.abs(lumNorm - 0.5) * 2;
+      const mask = 1.0 - dev * dev;
 
       const highR = r - blurredR;
       const highG = g - blurredG;
@@ -1217,9 +1241,9 @@ export class EffectProcessor {
     // Upsample the blurred result back to full resolution
     const upsampled = upsample2x(halfBlurred, halfW, halfH, width, height);
 
-    // Use cached midtone mask
-    const midtoneMask = this.getMidtoneMask();
     const effectScale = clarity * CLARITY_EFFECT_SCALE;
+    // Float-precision midtone mask (LOW-24).
+    const inv255 = 1 / 255;
 
     // Apply high-pass blend at full resolution: original + (original - upsampled_blur) * mask
     for (let i = 0; i < len; i += 4) {
@@ -1231,9 +1255,9 @@ export class EffectProcessor {
       const blurredG = upsampled[i + 1]!;
       const blurredB = upsampled[i + 2]!;
 
-      const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-      const mask = midtoneMask[lumIndex]!;
+      const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+      const dev = Math.abs(lumNorm - 0.5) * 2;
+      const mask = 1.0 - dev * dev;
 
       const highR = r - blurredR;
       const highG = g - blurredG;
@@ -1309,6 +1333,18 @@ export class EffectProcessor {
    * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
    * processes at half resolution for ~4x speedup. The sharpened detail is upsampled
    * and blended with the original at full resolution.
+   *
+   * Sampling note (LOW-07): This CPU path snapshots the current imageData
+   * buffer (`new Uint8ClampedArray(data)`) and applies the 3x3 kernel against
+   * that snapshot, so the convolution operates on the post-prior-effect
+   * display-referred values present in the buffer. The GLSL single-pass
+   * renderer samples the RAW input texture for its Laplacian kernel instead
+   * (see viewer.frag.glsl section 7b for the full rationale: post-pipeline
+   * neighbour sampling would require an extra FBO + render pass that the
+   * single-pass GPU renderer deliberately avoids). The WebGPU multi-pass
+   * pipeline samples the previous stage's output, which IS post-color-pipeline.
+   * Small CPU/GPU differences in heavily-graded scenes are therefore expected
+   * and intentional.
    */
   applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number, halfRes = false): void {
     // Half-resolution path
@@ -1492,9 +1528,9 @@ export class EffectProcessor {
     this.applyGaussianBlur5x5InPlace(original, width, height);
     const blurred = this.clarityBlurResultBuffer!;
 
-    // Use cached midtone mask
-    const midtoneMask = this.getMidtoneMask();
     const effectScale = clarity * CLARITY_EFFECT_SCALE;
+    // Float-precision midtone mask (LOW-24).
+    const inv255 = 1 / 255;
 
     // Process the high-pass blend in row-based chunks
     const chunkRows = EffectProcessor.CHUNK_ROWS;
@@ -1512,9 +1548,9 @@ export class EffectProcessor {
         const blurredG = blurred[i + 1]!;
         const blurredB = blurred[i + 2]!;
 
-        const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-        const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-        const mask = midtoneMask[lumIndex]!;
+        const lumNorm = (LUMA_R * r + LUMA_G * g + LUMA_B * b) * inv255;
+        const dev = Math.abs(lumNorm - 0.5) * 2;
+        const mask = 1.0 - dev * dev;
 
         const highR = r - blurredR;
         const highG = g - blurredG;

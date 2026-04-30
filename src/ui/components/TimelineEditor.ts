@@ -18,6 +18,7 @@ import { formatTimecode } from '../../utils/media/Timecode';
 import { Z_INDEX, OPACITY } from './shared/theme';
 import type { Session } from '../../core/session/Session';
 import type { SequenceGroupNode, EDLEntry } from '../../nodes/groups/SequenceGroupNode';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 /**
  * Events emitted by the TimelineEditor
@@ -104,7 +105,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   private boundMouseUp: () => void;
   private boundZoomInput: ((e: Event) => void) | null = null;
   private boundKeyDown: (e: KeyboardEvent) => void;
-  private activeContextMenuHandler: ((e: MouseEvent) => void) | null = null;
+  private deregisterContextMenuDismiss: OutsideClickDeregister | null = null;
   private unsubscribeFrameChanged: (() => void) | null = null;
   private scrollSyncInProgress: boolean = false;
 
@@ -467,11 +468,12 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       this.unsubscribeFrameChanged = null;
     }
 
-    // Clean up context menu handler if active
-    if (this.activeContextMenuHandler) {
-      document.removeEventListener('click', this.activeContextMenuHandler);
-      this.activeContextMenuHandler = null;
-    }
+    // Clean up context menu handler if active. Deregister and remove the
+    // menu DOM (the registry only handles dismissal, not DOM lifecycle).
+    this.deregisterContextMenuDismiss?.();
+    this.deregisterContextMenuDismiss = null;
+    const openMenu = document.querySelector('.timeline-context-menu');
+    if (openMenu) openMenu.remove();
 
     // Clean up zoom slider listener
     if (this.zoomSlider && this.boundZoomInput) {
@@ -1070,7 +1072,13 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   }
 
   private showContextMenu(cutIndex: number, x: number, y: number): void {
-    // Remove any existing context menu
+    // Re-entry safety: if a previous context menu is still registered (e.g.,
+    // user right-clicked a second cut without dismissing the first), tear it
+    // down before opening the new one.
+    this.deregisterContextMenuDismiss?.();
+    this.deregisterContextMenuDismiss = null;
+
+    // Remove any existing context menu DOM
     const existing = document.querySelector('.timeline-context-menu');
     if (existing) existing.remove();
 
@@ -1119,17 +1127,22 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
 
     document.body.appendChild(menu);
 
-    // Close on click outside
-    const closeHandler = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        menu.remove();
-        document.removeEventListener('click', closeHandler);
-        this.activeContextMenuHandler = null;
-      }
+    // Close on click outside or Escape via OutsideClickRegistry. The
+    // pre-existing implementation used `setTimeout(() => addEventListener,
+    // 0)` to dodge the same-tick contextmenu/click event that opened the
+    // menu. The registry's register-during-dispatch contract
+    // (`OutsideClickRegistry.ts:188-191`) makes that shim unnecessary: a
+    // synchronous `register()` is invisible to the in-flight event.
+    const removeMenu = (): void => {
+      menu.remove();
+      this.deregisterContextMenuDismiss = null;
     };
-    // Store reference for cleanup
-    this.activeContextMenuHandler = closeHandler;
-    setTimeout(() => document.addEventListener('click', closeHandler), 0);
+    this.deregisterContextMenuDismiss = outsideClickRegistry.register({
+      elements: [menu],
+      onDismiss: removeMenu,
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
   }
 
   private createMenuItem(label: string, shortcut: string | null, onClick: () => void): HTMLElement {

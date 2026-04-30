@@ -43,6 +43,8 @@ import {
   MediabunnyFrameExtractor,
   createFrameExtractor,
   UnsupportedCodecException,
+  computeDetectedFps,
+  _probeInternals,
   type FrameResult,
 } from './MediabunnyFrameExtractor';
 import { Input, CanvasSink, VideoSampleSink } from 'mediabunny';
@@ -351,10 +353,79 @@ describe('MediabunnyFrameExtractor', () => {
       // Build frame index
       await extractor.getActualFrameCount();
 
-      // With only 1 frame at timestamp 0, FPS detection may return null or calculated value
+      // The mock yields 1 frame, so detection must return null
+      // (FPS is indeterminate from a single frame regardless of its timestamp)
       const detectedFps = await extractor.getDetectedFps();
-      // The result depends on the algorithm - just verify it doesn't throw
-      expect(detectedFps === null || typeof detectedFps === 'number').toBe(true);
+      expect(detectedFps).toBeNull();
+    });
+  });
+
+  // MED-42 regression: pure-function tests for the FPS calculation, exercised
+  // independently of WebCodecs availability so they actually run in jsdom.
+  describe('computeDetectedFps (MED-42)', () => {
+    it('returns null for 0 frames', () => {
+      expect(computeDetectedFps(0, 0)).toBeNull();
+      // lastTimestamp is meaningless when no frames; result should still be null
+      expect(computeDetectedFps(0, 5)).toBeNull();
+    });
+
+    it('returns null for a single frame at t=0', () => {
+      expect(computeDetectedFps(1, 0)).toBeNull();
+    });
+
+    it('returns null for a single frame at a non-zero timestamp (still-image video)', () => {
+      // Regression: previously the guard `lastTimestamp > 0` allowed this case
+      // through and the formula `N / (lastTimestamp + lastTimestamp/(N-1))`
+      // produced a bogus FPS (e.g. 1.0) for a still-image video with one frame
+      // at t=0.5. FPS is indeterminate from a single frame.
+      expect(computeDetectedFps(1, 0.5)).toBeNull();
+      expect(computeDetectedFps(1, 1)).toBeNull();
+      expect(computeDetectedFps(1, 10)).toBeNull();
+    });
+
+    it('returns null when lastTimestamp is non-positive even with N>=2', () => {
+      // Malformed timestamps — both frames at t=0 (or negative), can't compute
+      expect(computeDetectedFps(2, 0)).toBeNull();
+      expect(computeDetectedFps(5, 0)).toBeNull();
+      expect(computeDetectedFps(2, -1)).toBeNull();
+    });
+
+    it('detects ~30 FPS family from 2 frames at t=0 and t=1/30', () => {
+      // Raw (N - 1) / lastTimestamp = 1 / (1/30) = 30, which is then snapped
+      // to the first common FPS within 0.5 (29.97 here, since the snap loop
+      // walks the array in order — pre-existing behavior).
+      const fps = computeDetectedFps(2, 1 / 30);
+      expect(fps).toBe(29.97);
+    });
+
+    it('detects ~24 FPS family from 24 frames at standard 24 FPS spacing', () => {
+      // 24 frames at 0, 1/24, ..., 23/24 → lastTimestamp = 23/24
+      // (24 - 1) / (23/24) = 24, snapped to 23.976 by the common-FPS pass.
+      const fps = computeDetectedFps(24, 23 / 24);
+      expect(fps).toBe(23.976);
+    });
+
+    it('detects ~60 FPS family from 60 evenly spaced frames', () => {
+      // (60 - 1) / (59/60) = 60, snapped to 59.94 by the common-FPS pass.
+      expect(computeDetectedFps(60, 59 / 60)).toBe(59.94);
+    });
+
+    it('snaps to 23.976 when raw value is exactly 23.976', () => {
+      // 2 frames giving exactly 23.976 FPS — must hit the 23.976 bucket
+      const fps = computeDetectedFps(2, 1 / 23.976);
+      expect(fps).toBe(23.976);
+    });
+
+    it('snaps to 29.97 when raw value is exactly 29.97', () => {
+      // 30 frames at slightly slower-than-30 spacing → exactly 29.97
+      // lastTimestamp = 29 / 29.97 ≈ 0.967634
+      expect(computeDetectedFps(30, 29 / 29.97)).toBe(29.97);
+    });
+
+    it('returns the raw FPS when not close to any common value', () => {
+      // 100 frames at 100 FPS spacing — no common FPS at 100
+      // (100 - 1) / (99/100) = 100, no snap match
+      expect(computeDetectedFps(100, 99 / 100)).toBe(100);
     });
   });
 
@@ -674,6 +745,72 @@ describe('MediabunnyFrameExtractor', () => {
 
       expect(metadata.isHDR).toBe(false);
       expect(metadata.hdrDowngraded).toBe(true);
+    });
+
+    // CRIT-01: probeSample.close() must run even when probeFrame.close() throws
+    // or probeSample.toVideoFrame() throws. Previous code only closed
+    // probeSample on the success path of the inner block.
+    //
+    // These tests exercise _probeInternals.closeProbePair() directly because
+    // the original load()-based tests were unreachable in jsdom: load() is
+    // gated by isSupported() which checks for VideoDecoder/VideoEncoder
+    // globals, both undefined in jsdom. Routing through the helper lets us
+    // verify the close-pair guarantee without WebCodecs polyfills.
+    it('CRIT-01-MFE-001: closeProbePair closes probeSample when probeFrame.close() throws', () => {
+      const probeFrame = {
+        close: vi.fn(() => {
+          throw new Error('synthetic VideoFrame.close() failure');
+        }),
+      };
+      const probeSample = {
+        close: vi.fn(),
+      };
+
+      // Helper must not propagate the close() error
+      expect(() => _probeInternals.closeProbePair(probeFrame, probeSample)).not.toThrow();
+
+      // Both close() attempts must have run, even though the first threw
+      expect(probeFrame.close).toHaveBeenCalledTimes(1);
+      expect(probeSample.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('CRIT-01-MFE-002: closeProbePair closes probeSample when probeFrame is null (toVideoFrame() failure path)', () => {
+      // Models the production path where probeSample.toVideoFrame() threw
+      // BEFORE probeFrame was assigned; probeFrame stays null but probeSample
+      // is still owned by us and must be closed.
+      const probeSample = {
+        close: vi.fn(),
+      };
+
+      expect(() => _probeInternals.closeProbePair(null, probeSample)).not.toThrow();
+
+      // probeSample.close() MUST be called even though probeFrame is null
+      expect(probeSample.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('CRIT-01-MFE-003: closeProbePair handles both close() failures without throwing', () => {
+      // Sanity test: even if BOTH close() calls throw, the helper must
+      // attempt both and never propagate. This guards against future
+      // regressions where the order of try/finally is reversed.
+      const probeFrame = {
+        close: vi.fn(() => {
+          throw new Error('frame close failure');
+        }),
+      };
+      const probeSample = {
+        close: vi.fn(() => {
+          throw new Error('sample close failure');
+        }),
+      };
+
+      expect(() => _probeInternals.closeProbePair(probeFrame, probeSample)).not.toThrow();
+      expect(probeFrame.close).toHaveBeenCalledTimes(1);
+      expect(probeSample.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('CRIT-01-MFE-004: closeProbePair is a no-op when both arguments are null', () => {
+      // Sanity test: helper must tolerate the "no probe ran" path.
+      expect(() => _probeInternals.closeProbePair(null, null)).not.toThrow();
     });
   });
 

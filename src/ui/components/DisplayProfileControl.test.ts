@@ -12,6 +12,11 @@ import {
   isDisplayStateActive,
   type DisplayColorState,
 } from '../../color/ColorProcessingFacade';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 // ---------------------------------------------------------------------------
 // Mock localStorage
@@ -43,12 +48,47 @@ describe('DisplayProfileControl', () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+    resetOutsideClickRegistry();
   });
 
   afterEach(() => {
     if (control) {
       control.dispose();
     }
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('DPC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      control = new DisplayProfileControl();
+      const root = control.render();
+      document.body.appendChild(root);
+      const button = root.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+
+      expectRegistrationCount(0);
+      button.click(); // open
+      expectRegistrationCount(1);
+      button.click(); // close
+      expectRegistrationCount(0);
+      root.remove();
+    });
+
+    it('DPC-OCR-002: outside click dismisses the dropdown', () => {
+      control = new DisplayProfileControl();
+      const root = control.render();
+      document.body.appendChild(root);
+      const button = root.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = root.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('block');
+
+      dispatchOutsideClick();
+
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      root.remove();
+    });
   });
 
   // ========================================================================
@@ -652,6 +692,221 @@ describe('DisplayProfileControl', () => {
         control.dispose();
         control.dispose();
       }).not.toThrow();
+    });
+  });
+
+  // ========================================================================
+  // 9. Slider range validation on load and setState (MED-23)
+  // ========================================================================
+  describe('slider range validation on load and setState', () => {
+    it('DPC-120: setState with valid values works normally', () => {
+      control = new DisplayProfileControl();
+      control.setState({ displayGamma: 2.0, displayBrightness: 1.5, customGamma: 5.0 });
+      const state = control.getState();
+      expect(state.displayGamma).toBe(2.0);
+      expect(state.displayBrightness).toBe(1.5);
+      expect(state.customGamma).toBe(5.0);
+    });
+
+    it('DPC-121: setState clamps displayGamma above max (4.0)', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayGamma: 10.0 });
+      expect(control.getState().displayGamma).toBe(4.0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('displayGamma'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('out of range'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-122: setState clamps displayGamma below min (0.1)', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayGamma: -5.0 });
+      expect(control.getState().displayGamma).toBe(0.1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('displayGamma'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-123: setState clamps displayBrightness above max (2.0)', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayBrightness: 5.0 });
+      expect(control.getState().displayBrightness).toBe(2.0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('displayBrightness'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-124: setState clamps displayBrightness below min (0.0)', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayBrightness: -1.0 });
+      expect(control.getState().displayBrightness).toBe(0.0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('displayBrightness'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-125: setState clamps customGamma above max (10.0)', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ customGamma: 20.0 });
+      expect(control.getState().customGamma).toBe(10.0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('customGamma'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-126: setState clamps customGamma below min (0.1)', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ customGamma: 0.0 });
+      expect(control.getState().customGamma).toBe(0.1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('customGamma'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-127: setState with NaN displayGamma falls back to default', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayGamma: NaN });
+      expect(control.getState().displayGamma).toBe(1.0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid value'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-128: setState with NaN displayBrightness falls back to default', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayBrightness: NaN });
+      expect(control.getState().displayBrightness).toBe(1.0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid value'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-129: setState with NaN customGamma falls back to default', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ customGamma: NaN });
+      expect(control.getState().customGamma).toBe(2.2);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid value'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-130: setState with Infinity falls back to clamped/default', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayGamma: Infinity });
+      expect(control.getState().displayGamma).toBe(1.0); // default for non-finite
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-131: UI slider syncs correctly after clamping displayGamma', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const el = control.render();
+      control.setState({ displayGamma: 99.0 });
+      const slider = el.querySelector('[data-testid="display-gamma-slider"]') as HTMLInputElement;
+      expect(slider.value).toBe('4'); // clamped to max
+      const label = el.querySelector('[data-testid="display-gamma-value"]') as HTMLElement;
+      expect(label.textContent).toContain('4.0');
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-132: UI slider syncs correctly after clamping displayBrightness', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const el = control.render();
+      control.setState({ displayBrightness: -10.0 });
+      const slider = el.querySelector('[data-testid="display-brightness-slider"]') as HTMLInputElement;
+      expect(slider.value).toBe('0'); // clamped to min
+      const label = el.querySelector('[data-testid="display-brightness-value"]') as HTMLElement;
+      expect(label.textContent).toContain('0.0');
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-133: loading out-of-range values from localStorage clamps them', () => {
+      const state = {
+        transferFunction: 'srgb',
+        displayGamma: 100.0,
+        displayBrightness: -5.0,
+        customGamma: 999.0,
+      };
+      localStorageMock.setItem('openrv-display-profile', JSON.stringify(state));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      control = new DisplayProfileControl();
+      expect(control.getState().displayGamma).toBe(4.0);
+      expect(control.getState().displayBrightness).toBe(0.0);
+      expect(control.getState().customGamma).toBe(10.0);
+      // loadDisplayProfile already clamps, but our constructor also validates
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-134: setState emits clamped values, not original out-of-range values', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+      control.setState({ displayGamma: 99.0 });
+      expect(handler).toHaveBeenCalledTimes(1);
+      const emitted = handler.mock.calls[0]![0] as DisplayColorState;
+      expect(emitted.displayGamma).toBe(4.0);
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-135: setState with boundary min values are accepted without warning', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayGamma: 0.1, displayBrightness: 0.0, customGamma: 0.1 });
+      expect(control.getState().displayGamma).toBe(0.1);
+      expect(control.getState().displayBrightness).toBe(0.0);
+      expect(control.getState().customGamma).toBe(0.1);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-136: setState with boundary max values are accepted without warning', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayGamma: 4.0, displayBrightness: 2.0, customGamma: 10.0 });
+      expect(control.getState().displayGamma).toBe(4.0);
+      expect(control.getState().displayBrightness).toBe(2.0);
+      expect(control.getState().customGamma).toBe(10.0);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-137: -Infinity falls back to default', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      control.setState({ displayGamma: -Infinity });
+      expect(control.getState().displayGamma).toBe(1.0); // default for non-finite
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid value'));
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-138: sequential setState with same out-of-range value does not emit duplicate events', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+      control.setState({ displayGamma: 99 }); // clamped to 4.0
+      control.setState({ displayGamma: 99 }); // clamped to 4.0 again, matches stored value
+      expect(handler).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
+
+    it('DPC-139: non-number value falls back to default via clampSliderValue guard', () => {
+      control = new DisplayProfileControl();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // First set a non-default value so we can verify the fallback
+      control.setState({ displayGamma: 2.5 });
+      warnSpy.mockClear();
+      // Pass null (which passes the !== undefined guard in setState, reaching
+      // clampSliderValue where typeof null !== 'number' triggers the fallback)
+      control.setState({ displayGamma: null as any });
+      expect(control.getState().displayGamma).toBe(1.0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid value'));
+      warnSpy.mockRestore();
     });
   });
 

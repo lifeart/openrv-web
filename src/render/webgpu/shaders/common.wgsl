@@ -63,8 +63,18 @@ fn hlgToLinear(signal: vec3f) -> vec3f {
     hlgOETFInverse(signal.b)
   );
   // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ~ 1.2
+  // Below OOTF_THRESH, use a linear ramp to avoid extreme gain for
+  // near-black values. Linear extension from origin to threshold
+  // keeps the curve C0-continuous.
+  let OOTF_THRESH: f32 = 0.01;
+  let OOTF_SLOPE: f32 = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
   let ys = dot(scene, LUMA);
-  let ootfGain = pow(max(ys, 1e-6), 0.2); // gamma - 1 = 0.2
+  var ootfGain: f32;
+  if (ys < OOTF_THRESH) {
+    ootfGain = ys * OOTF_SLOPE; // linear ramp: ys * T^(0.2-1)
+  } else {
+    ootfGain = pow(ys, 0.2);    // normal power curve
+  }
   return scene * ootfGain;
 }
 
@@ -178,35 +188,42 @@ fn applyHueRotation(color: vec3f, hueMatrix: mat3x3f) -> vec3f {
 }
 
 // ---------------------------------------------------------------------------
-// 3D LUT sampling with domain clamping
+// 3D LUT sampling
+//
+// Note: stages that need 3D LUT sampling (color_pipeline.wgsl,
+// display_output.wgsl) define stage-local helpers that bind their own
+// sampler/texture variables — a generic "takes sampler+texture as args"
+// helper is unused here because WGSL does not allow passing texture/sampler
+// resources as function arguments across stages with the layout: 'auto'
+// pipeline reflection. Keeping a dead helper in this prelude would also
+// break the deduplication invariant the file documents.
 // ---------------------------------------------------------------------------
-
-fn applyLUT3DGeneric(
-  lut: texture_3d<f32>,
-  lutSampler: sampler,
-  color: vec3f,
-  lutSize: f32,
-  intensity: f32,
-  domainMin: vec3f,
-  domainMax: vec3f
-) -> vec3f {
-  let normalized = clamp((color - domainMin) / (domainMax - domainMin), vec3f(0.0), vec3f(1.0));
-  let offset = 0.5 / lutSize;
-  let scale = (lutSize - 1.0) / lutSize;
-  let lutCoord = normalized * scale + offset;
-  let lutColor = textureSample(lut, lutSampler, lutCoord).rgb;
-  return mix(color, lutColor, intensity);
-}
 
 // ---------------------------------------------------------------------------
 // Tone mapping operators (all 8 + drago = 9 total)
+//
+// HDR headroom semantics (MED-52): all operators except Drago use a uniform
+// headroom convention — normalize input by hdrHeadroom (peak white = 1.0
+// inside the curve), apply the operator-specific curve which maps roughly
+// [0,1] → [0,1], then re-scale by hdrHeadroom on output. This guarantees
+// that at hdrHeadroom == 1.0 every operator reduces to its canonical
+// SDR curve (output in [0,1]) and at hdrHeadroom > 1.0 every operator
+// preserves display headroom in the same way (output up to ~hdrHeadroom).
+// Drago is physically parameterized (Lwa, Lmax) and folds headroom into
+// Lmax instead — this is its own well-defined paradigm.
 // ---------------------------------------------------------------------------
 
-// 1. Reinhard tone mapping operator
+// 1. Reinhard tone mapping operator (uniform headroom convention)
 fn tonemapReinhard(color: vec3f, whitePoint: f32, hdrHeadroom: f32) -> vec3f {
-  let wp = whitePoint * hdrHeadroom;
+  // Defensive: floor headroom away from zero so divisions never blow up
+  // even if a caller manages to slip a non-finite/zero value past the
+  // CPU-side sanitization in WebGPUShaderPipeline.setGlobalHDRHeadroom.
+  let headroom = max(hdrHeadroom, 1e-6);
+  let wp = whitePoint;
   let wp2 = wp * wp;
-  return color * (1.0 + color / wp2) / (1.0 + color);
+  let scaled = color / headroom;
+  let mapped = scaled * (1.0 + scaled / wp2) / (1.0 + scaled);
+  return mapped * headroom;
 }
 
 // 2. Filmic helper (Uncharted 2 style)
@@ -220,10 +237,13 @@ fn filmicCurve(x: vec3f) -> vec3f {
   return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
 }
 
+// Filmic / Uncharted 2 (uniform headroom convention)
 fn tonemapFilmic(color: vec3f, exposureBias: f32, whitePoint: f32, hdrHeadroom: f32) -> vec3f {
-  let curr = filmicCurve(exposureBias * color);
-  let whiteScale = vec3f(1.0) / filmicCurve(vec3f(whitePoint * hdrHeadroom));
-  return max(curr * whiteScale, vec3f(0.0));
+  let headroom = max(hdrHeadroom, 1e-6);
+  let scaled = color / headroom;
+  let curr = filmicCurve(exposureBias * scaled);
+  let whiteScale = vec3f(1.0) / filmicCurve(vec3f(whitePoint));
+  return max(curr * whiteScale, vec3f(0.0)) * headroom;
 }
 
 // 3. ACES (Narkowicz fit)
@@ -233,9 +253,10 @@ fn tonemapACES(color: vec3f, hdrHeadroom: f32) -> vec3f {
   let c: f32 = 2.43;
   let d: f32 = 0.59;
   let e: f32 = 0.14;
-  let scaled = color / hdrHeadroom;
+  let headroom = max(hdrHeadroom, 1e-6);
+  let scaled = color / headroom;
   let mapped = clamp((scaled * (a * scaled + b)) / (scaled * (c * scaled + d) + e), vec3f(0.0), vec3f(1.0));
-  return mapped * hdrHeadroom;
+  return mapped * headroom;
 }
 
 // 4. AgX (Troy Sobotka / Blender 4.x)
@@ -252,6 +273,15 @@ fn agxDefaultContrastApprox(x: vec3f) -> vec3f {
 }
 
 fn tonemapAgX(color: vec3f, hdrHeadroom: f32) -> vec3f {
+  // AgX inset/outset matrices.
+  // Working space at call site: BT.709/sRGB linear (post input-primaries
+  // normalization). NOT classical primary conversions — they are the AgX
+  // "inner/outer gamut" pair: an inset (gentle compression toward white)
+  // and a near-inverse outset that contract/restore saturated values around
+  // the curve's sigmoid domain. Source: Troy Sobotka's AgX (Blender 4.x);
+  // values from MJP/Three.js port of AgX 0.13.5 LUT-free fit.
+  // Mirror of viewer.frag.glsl `tonemapAgX` and effectProcessing.shared.ts.
+  // Column-major: each `vec3f(...)` is one column.
   let AgXInsetMatrix = mat3x3f(
     vec3f(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
     vec3f(0.0784335999999992, 0.878468636469772, 0.0784336),
@@ -265,7 +295,8 @@ fn tonemapAgX(color: vec3f, hdrHeadroom: f32) -> vec3f {
   let AgxMinEv: f32 = -12.47393;
   let AgxMaxEv: f32 = 4.026069;
 
-  var scaled = color / hdrHeadroom;
+  let headroom = max(hdrHeadroom, 1e-6);
+  var scaled = color / headroom;
   scaled = AgXInsetMatrix * scaled;
   scaled = max(scaled, vec3f(1e-10));
   scaled = log2(scaled);
@@ -274,7 +305,7 @@ fn tonemapAgX(color: vec3f, hdrHeadroom: f32) -> vec3f {
   scaled = agxDefaultContrastApprox(scaled);
   scaled = AgXOutsetMatrix * scaled;
   scaled = clamp(scaled, vec3f(0.0), vec3f(1.0));
-  return scaled * hdrHeadroom;
+  return scaled * headroom;
 }
 
 // 5. PBR Neutral (Khronos)
@@ -282,7 +313,8 @@ fn tonemapPBRNeutral(color: vec3f, hdrHeadroom: f32) -> vec3f {
   let startCompression: f32 = 0.8 - 0.04;
   let desaturation: f32 = 0.15;
 
-  var scaled = color / hdrHeadroom;
+  let headroom = max(hdrHeadroom, 1e-6);
+  var scaled = color / headroom;
 
   let x = min(scaled.r, min(scaled.g, scaled.b));
   var offset: f32;
@@ -295,7 +327,7 @@ fn tonemapPBRNeutral(color: vec3f, hdrHeadroom: f32) -> vec3f {
 
   let peak = max(scaled.r, max(scaled.g, scaled.b));
   if (peak < startCompression) {
-    return scaled * hdrHeadroom;
+    return scaled * headroom;
   }
 
   let d = 1.0 - startCompression;
@@ -303,7 +335,7 @@ fn tonemapPBRNeutral(color: vec3f, hdrHeadroom: f32) -> vec3f {
   scaled = scaled * (newPeak / peak);
 
   let g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-  return mix(scaled, vec3f(newPeak), g) * hdrHeadroom;
+  return mix(scaled, vec3f(newPeak), g) * headroom;
 }
 
 // 6. GT tone mapping (Hajime Uchimura / Gran Turismo Sport)
@@ -333,13 +365,14 @@ fn gt_tonemap_channel(x: f32) -> f32 {
 }
 
 fn tonemapGT(color: vec3f, hdrHeadroom: f32) -> vec3f {
-  let scaled = color / hdrHeadroom;
+  let headroom = max(hdrHeadroom, 1e-6);
+  let scaled = color / headroom;
   let mapped = vec3f(
     gt_tonemap_channel(scaled.r),
     gt_tonemap_channel(scaled.g),
     gt_tonemap_channel(scaled.b)
   );
-  return mapped * hdrHeadroom;
+  return mapped * headroom;
 }
 
 // 7. ACES Hill (Stephen Hill RRT+ODT fit)
@@ -350,6 +383,17 @@ fn RRTAndODTFit(v: vec3f) -> vec3f {
 }
 
 fn tonemapACESHill(color: vec3f, hdrHeadroom: f32) -> vec3f {
+  // ACES Hill input/output matrices.
+  // ACESInputMat: BT.709 linear → ACES AP1 (ACEScg), Stephen Hill's
+  //   ODT-tuned composite (BT.709→AP0→AP1 with a slight desaturation pre-bake)
+  //   so the rational RRT+ODT fit on the next line matches the reference
+  //   ACES 1.0 Output Transform output for a BT.709 display.
+  // ACESOutputMat: AP1 → BT.709 linear, the tuned inverse companion.
+  // Working space at call site: BT.709 linear (post input-primaries).
+  // Reference: Stephen Hill, "ACES Filmic Tone Mapping Curve",
+  //   https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+  // Mirror of viewer.frag.glsl `tonemapACESHill` and effectProcessing.shared.ts.
+  // Column-major: each `vec3f(...)` is one column.
   let ACESInputMat = mat3x3f(
     vec3f(0.59719, 0.07600, 0.02840),
     vec3f(0.35458, 0.90834, 0.13383),
@@ -361,12 +405,13 @@ fn tonemapACESHill(color: vec3f, hdrHeadroom: f32) -> vec3f {
     vec3f(-0.07367, -0.00605, 1.07602)
   );
 
-  var scaled = color / hdrHeadroom;
+  let headroom = max(hdrHeadroom, 1e-6);
+  var scaled = color / headroom;
   scaled = ACESInputMat * scaled;
   scaled = RRTAndODTFit(scaled);
   scaled = ACESOutputMat * scaled;
   scaled = clamp(scaled, vec3f(0.0), vec3f(1.0));
-  return scaled * hdrHeadroom;
+  return scaled * headroom;
 }
 
 // 8. Drago adaptive logarithmic tone mapping (per-channel)

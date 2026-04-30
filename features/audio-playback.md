@@ -48,6 +48,11 @@ The audio playback feature is **fully implemented** with the following component
    - Audio-video sync with drift correction (100ms threshold)
    - Event-driven state management (stateChanged, error, ended)
    - CORS fallback handling (gracefully falls back to video element)
+   - **Synchronous play-state contract**: `isPlaying` and `stateChanged('playing')`
+     are set synchronously inside `play()` *before* awaiting `audioContext.resume()`,
+     so the UI reflects the playing state immediately with no resume-gap flicker.
+     A `_playEpoch` monotonic counter detects pause-during-resume races and
+     aborts the in-flight start cleanly (MED-35).
 
 2. **WaveformRenderer** (`/src/audio/WaveformRenderer.ts`)
    - Audio extraction from video files
@@ -144,7 +149,10 @@ App.ts
 ### AudioPlaybackManager Flow
 1. **Initialization**: `initContext()` creates AudioContext
 2. **Loading**: `loadFromVideo()` or `loadFromBlob()` decodes audio
-3. **Playback**: `play(fromTime?)` starts from position
+3. **Playback**: `play(fromTime?)` starts from position. `isPlaying` and the
+   `stateChanged('playing')` event fire synchronously up-front; the
+   `audioContext.resume()` await happens after that, and an epoch counter
+   guards against pause-during-resume races (MED-35).
 4. **Sync**: `syncToTime()` corrects drift during playback
 5. **Control**: `setVolume()`, `setMuted()`, `setPlaybackRate()`
 6. **Cleanup**: `dispose()` releases resources

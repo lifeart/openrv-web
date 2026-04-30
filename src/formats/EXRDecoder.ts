@@ -27,6 +27,16 @@ import { DecoderError } from '../core/errors';
 // EXR magic number
 const EXR_MAGIC = 0x01312f76;
 
+/**
+ * Maximum number of tiles allowed in a single level of a tiled EXR image.
+ * This prevents excessive memory allocation from malformed files.
+ * A 65536x65536 image with 1x1 tiles would need ~4 billion tiles, which is
+ * clearly malicious. Even a 65536x65536 image with 32x32 tiles needs ~4M tiles,
+ * which is reasonable. We set the limit at 16 million tiles per level, which
+ * accommodates any realistic tiled image within the IMAGE_LIMITS constraints.
+ */
+const MAX_TILES_PER_LEVEL = 16_777_216; // 2^24 = 16M tiles
+
 // Compression types
 export enum EXRCompression {
   NONE = 0,
@@ -1244,6 +1254,28 @@ function numMipLevels(size: number, roundingMode: EXRRoundingMode): number {
 }
 
 /**
+ * Validate that a tile grid does not exceed the maximum allowed tile count.
+ * Throws a DecoderError if the total number of tiles for a given level
+ * would be unreasonably large, indicating a malformed or malicious file.
+ *
+ * @param numXTiles - Number of tiles along the X axis
+ * @param numYTiles - Number of tiles along the Y axis
+ * @param context - Description of where this check is happening (for error messages)
+ */
+function validateTileCount(numXTiles: number, numYTiles: number, context: string): void {
+  if (numXTiles <= 0 || numYTiles <= 0) {
+    throw new DecoderError('EXR', `Invalid tile grid dimensions: ${numXTiles}x${numYTiles} tiles (${context})`);
+  }
+  const totalTiles = numXTiles * numYTiles;
+  if (totalTiles > MAX_TILES_PER_LEVEL) {
+    throw new DecoderError(
+      'EXR',
+      `Tile count ${numXTiles}x${numYTiles} = ${totalTiles} exceeds maximum of ${MAX_TILES_PER_LEVEL} (${context}). File may be malformed.`,
+    );
+  }
+}
+
+/**
  * Compute total number of offset table entries for a tiled image,
  * accounting for level mode (ONE_LEVEL, MIPMAP_LEVELS, RIPMAP_LEVELS).
  */
@@ -1251,10 +1283,15 @@ function computeTotalTileOffsets(width: number, height: number, tileDesc: EXRTil
   const { xSize, ySize, levelMode, roundingMode } = tileDesc;
 
   if (levelMode === EXRLevelMode.ONE_LEVEL) {
-    return Math.ceil(width / xSize) * Math.ceil(height / ySize);
+    const nx = Math.ceil(width / xSize);
+    const ny = Math.ceil(height / ySize);
+    validateTileCount(nx, ny, 'ONE_LEVEL offset table');
+    return nx * ny;
   }
 
   if (levelMode === EXRLevelMode.MIPMAP_LEVELS) {
+    // Validate level 0 (largest level) — smaller levels will always have fewer tiles
+    validateTileCount(Math.ceil(width / xSize), Math.ceil(height / ySize), 'MIPMAP_LEVELS level 0 offset table');
     const nLevels = numMipLevels(Math.max(width, height), roundingMode);
     let total = 0;
     for (let l = 0; l < nLevels; l++) {
@@ -1266,6 +1303,8 @@ function computeTotalTileOffsets(width: number, height: number, tileDesc: EXRTil
   }
 
   // RIPMAP_LEVELS
+  // Validate level 0 (largest level) — smaller levels will always have fewer tiles
+  validateTileCount(Math.ceil(width / xSize), Math.ceil(height / ySize), 'RIPMAP_LEVELS level 0 offset table');
   const nXLevels = numMipLevels(width, roundingMode);
   const nYLevels = numMipLevels(height, roundingMode);
   let total = 0;
@@ -1347,6 +1386,7 @@ async function decodeTiledImage(
   // Compute tile grid for level 0 (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
   const numYTiles = Math.ceil(height / tileYSize);
+  validateTileCount(numXTiles, numYTiles, 'tiled image level 0');
   const level0Tiles = numXTiles * numYTiles;
 
   // Read offset table - for multi-level images, this includes all levels
@@ -1525,6 +1565,7 @@ async function decodeMultiPartTiledImage(
   // Level 0 tile count (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
   const numYTiles = Math.ceil(height / tileYSize);
+  validateTileCount(numXTiles, numYTiles, 'multi-part tiled image level 0');
   const level0Tiles = numXTiles * numYTiles;
 
   const MAX_CHUNKS = level0Tiles * 1024 * 2;

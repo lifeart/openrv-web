@@ -8,16 +8,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CDLControl } from './CDLControl';
 import { DEFAULT_CDL, type CDLValues } from '../../color/ColorProcessingFacade';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('CDLControl', () => {
   let control: CDLControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new CDLControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('initialization', () => {
@@ -399,25 +406,29 @@ describe('CDLControl', () => {
 
       expect(panel.style.display).toBe('none');
     });
+  });
 
-    it('CDL-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+  describe('OutsideClickRegistry integration', () => {
+    it('CDL-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      expectRegistrationCount(0);
       control.showPanel();
+      expectRegistrationCount(1);
       control.hidePanel();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      expectRegistrationCount(0);
     });
 
-    it('CDL-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
+    it('CDL-OCR-002: outside-click after open dismisses the panel', () => {
       control.showPanel();
-      control.dispose();
+      const panel = document.querySelector('.cdl-panel') as HTMLElement;
+      expect(panel.style.display).toBe('block');
 
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      dispatchOutsideClick(outside);
+
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+      document.body.removeChild(outside);
     });
   });
 

@@ -5,16 +5,46 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PerspectiveCorrectionControl } from './PerspectiveCorrectionControl';
 import { DEFAULT_PERSPECTIVE_PARAMS } from '../../transform/PerspectiveCorrection';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  dispatchOutsideEscape,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('PerspectiveCorrectionControl', () => {
   let control: PerspectiveCorrectionControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new PerspectiveCorrectionControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('PC-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      document.body.appendChild(control.render());
+      expectRegistrationCount(0);
+      control.show();
+      expectRegistrationCount(1);
+      control.hide();
+      expectRegistrationCount(0);
+    });
+
+    it('PC-OCR-002: outside click dismisses the panel', () => {
+      document.body.appendChild(control.render());
+      control.show();
+      expect(control.isOpen).toBe(true);
+
+      dispatchOutsideClick();
+
+      expect(control.isOpen).toBe(false);
+      expectRegistrationCount(0);
+    });
   });
 
   describe('initialization', () => {
@@ -236,7 +266,7 @@ describe('PerspectiveCorrectionControl', () => {
       control.show();
       expect(control.isOpen).toBe(true);
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      dispatchOutsideEscape();
 
       expect(control.isOpen).toBe(false);
     });
@@ -244,29 +274,9 @@ describe('PerspectiveCorrectionControl', () => {
     it('PC-M14b: pressing Escape while the panel is closed should have no effect', () => {
       expect(control.isOpen).toBe(false);
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      dispatchOutsideEscape();
 
       expect(control.isOpen).toBe(false);
-    });
-
-    it('PC-M14c: the keydown listener should be removed when the panel closes', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.show();
-      control.hide();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
-    });
-
-    it('PC-M14d: the keydown listener should be removed on dispose', () => {
-      const spy = vi.spyOn(document, 'removeEventListener');
-
-      control.show();
-      control.dispose();
-
-      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      spy.mockRestore();
     });
   });
 

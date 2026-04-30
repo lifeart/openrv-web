@@ -213,6 +213,174 @@ describe('AudioPlaybackManager', () => {
     });
   });
 
+  // ======================================================================
+  // MED-35: AudioContext resume gap before isPlaying set
+  // ======================================================================
+
+  describe('MED-35: synchronous isPlaying during resume()', () => {
+    beforeEach(async () => {
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+      await manager.loadFromVideo(video);
+    });
+
+    it('APM-MED35-001: isPlaying is set true SYNCHRONOUSLY before resume() resolves', () => {
+      // Make resume() hang so we can observe the synchronous state.
+      mockAudioContext.state = 'suspended';
+      let resolveResume!: () => void;
+      mockAudioContext.resume.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveResume = r;
+        }),
+      );
+
+      // Kick off play() but don't await -- we want to assert state BEFORE
+      // the await chain has progressed past audioContext.resume().
+      const playPromise = manager.play();
+
+      // Synchronously after play() returns its pending Promise, isPlaying
+      // and state must already reflect the intent.
+      expect(manager.isPlaying).toBe(true);
+      expect(manager.state).toBe('playing');
+
+      // Clean up
+      mockAudioContext.state = 'running';
+      resolveResume();
+      return playPromise;
+    });
+
+    it('APM-MED35-002: stateChanged fires synchronously with state=playing', () => {
+      const stateListener = vi.fn();
+      manager.on('stateChanged', stateListener);
+
+      mockAudioContext.state = 'suspended';
+      let resolveResume!: () => void;
+      mockAudioContext.resume.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveResume = r;
+        }),
+      );
+
+      const playPromise = manager.play();
+
+      // The 'playing' state event must have fired synchronously
+      expect(stateListener).toHaveBeenCalledWith('playing');
+
+      mockAudioContext.state = 'running';
+      resolveResume();
+      return playPromise;
+    });
+
+    it('APM-MED35-003: resume() rejection reverts isPlaying and emits error', async () => {
+      const errorListener = vi.fn();
+      manager.on('error', errorListener);
+
+      mockAudioContext.state = 'suspended';
+      const resumeError = new Error('Resume failed');
+      mockAudioContext.resume.mockRejectedValueOnce(resumeError);
+
+      const result = await manager.play();
+
+      expect(result).toBe(false);
+      expect(manager.isPlaying).toBe(false);
+      expect(manager.state).toBe('error');
+      expect(errorListener).toHaveBeenCalled();
+    });
+
+    it('APM-MED35-004: pause() during resume() window cleanly stops in-flight play', async () => {
+      mockAudioContext.state = 'suspended';
+      let resolveResume!: () => void;
+      mockAudioContext.resume.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveResume = r;
+        }),
+      );
+
+      // Start play() (will await resume)
+      const playPromise = manager.play();
+
+      // Immediately pause -- the in-flight play() should detect this and
+      // abort without starting a source node.
+      manager.pause();
+
+      expect(manager.isPlaying).toBe(false);
+      expect(manager.state).toBe('paused');
+
+      // Now let resume() finish
+      mockAudioContext.state = 'running';
+      const sourceCountBefore = createdSourceNodes.length;
+      resolveResume();
+
+      const result = await playPromise;
+
+      // play() returned false because it was superseded
+      expect(result).toBe(false);
+      // Final state remains paused
+      expect(manager.isPlaying).toBe(false);
+      expect(manager.state).toBe('paused');
+      // No source node should have been created by the aborted play()
+      expect(createdSourceNodes.length).toBe(sourceCountBefore);
+    });
+
+    it('APM-MED35-005: sequential play/pause/play -- final state matches last call', async () => {
+      mockAudioContext.state = 'suspended';
+      let resolveFirstResume!: () => void;
+      mockAudioContext.resume.mockReturnValueOnce(
+        new Promise<void>((r) => {
+          resolveFirstResume = r;
+        }),
+      );
+
+      // Start first play() (hangs on resume)
+      const firstPlay = manager.play();
+      expect(manager.isPlaying).toBe(true);
+
+      // Pause
+      manager.pause();
+      expect(manager.isPlaying).toBe(false);
+
+      // Resolve first resume so the in-flight play sees the pause and aborts
+      mockAudioContext.state = 'running';
+      resolveFirstResume();
+      const firstResult = await firstPlay;
+      expect(firstResult).toBe(false);
+      expect(manager.isPlaying).toBe(false);
+
+      // Now a fresh play() with running context
+      const secondResult = await manager.play(2);
+      expect(secondResult).toBe(true);
+      expect(manager.isPlaying).toBe(true);
+      expect(manager.state).toBe('playing');
+      // The successful play started a source node at offset 2
+      expect(getLastSourceNode().start).toHaveBeenCalledWith(0, 2);
+    });
+
+    it('APM-MED35-006: resume() rejection on suspended context does not start source node', async () => {
+      mockAudioContext.state = 'suspended';
+      mockAudioContext.resume.mockRejectedValueOnce(new Error('Resume failed'));
+
+      const sourceCountBefore = createdSourceNodes.length;
+      const result = await manager.play();
+
+      expect(result).toBe(false);
+      // No source node should have been created
+      expect(createdSourceNodes.length).toBe(sourceCountBefore);
+    });
+
+    it('APM-MED35-007: when context is already running, resume() is not called and play succeeds synchronously after microtask', async () => {
+      // Verify happy path still works -- no regression.
+      mockAudioContext.state = 'running';
+
+      const result = await manager.play();
+
+      expect(result).toBe(true);
+      expect(manager.isPlaying).toBe(true);
+      expect(manager.state).toBe('playing');
+      // resume() should NOT have been called (state was already running)
+      expect(mockAudioContext.resume).not.toHaveBeenCalled();
+    });
+  });
+
   describe('seek', () => {
     beforeEach(async () => {
       const video = document.createElement('video');

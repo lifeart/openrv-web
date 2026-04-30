@@ -26,6 +26,9 @@ import type {
 import { GPUBufferUsage } from './WebGPUTypes';
 import { WebGPUPingPong } from './WebGPUPingPong';
 import type { PingPongFormat } from './WebGPUPingPong';
+import commonSrc from './shaders/common.wgsl?raw';
+import viewerVertSrc from './shaders/_viewer_vert.wgsl?raw';
+import passthroughVertSrc from './shaders/_passthrough_vert.wgsl?raw';
 
 // ---------------------------------------------------------------------------
 // Stage descriptor for WebGPU pipeline
@@ -86,50 +89,22 @@ struct VSOut {
 // ---------------------------------------------------------------------------
 // Viewer vertex WGSL (pan/zoom transform for first stage)
 // ---------------------------------------------------------------------------
+//
+// Imported from `./shaders/_viewer_vert.wgsl?raw` for symmetry with the
+// existing `commonSrc` pattern. Prepended (after common.wgsl) to the first
+// active stage's fragment source at pipeline build time.
 
-const VIEWER_VERT_WGSL = /* wgsl */ `
-struct ViewerUniforms {
-  offset: vec2f,
-  scale: vec2f,
-}
-
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
-
-@group(1) @binding(0) var<uniform> viewer: ViewerUniforms;
-
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x * viewer.scale.x + viewer.offset.x,
-                  y * viewer.scale.y + viewer.offset.y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
-`;
+const VIEWER_VERT_WGSL = viewerVertSrc;
 
 // ---------------------------------------------------------------------------
 // Passthrough vertex WGSL (identity transform for intermediate FBO stages)
 // ---------------------------------------------------------------------------
+//
+// Imported from `./shaders/_passthrough_vert.wgsl?raw`. Prepended (after
+// common.wgsl) to every non-first stage's fragment source at pipeline build
+// time.
 
-const PASSTHROUGH_VERT_WGSL = /* wgsl */ `
-struct VSOut {
-  @builtin(position) pos: vec4f,
-  @location(0) uv: vec2f,
-}
-
-@vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var out: VSOut;
-  let x = f32(i32(i & 1u) * 2) - 1.0;
-  let y = f32(i32(i >> 1u) * 2) - 1.0;
-  out.pos = vec4f(x, y, 0.0, 1.0);
-  out.uv = vec2f((x + 1.0) * 0.5, 1.0 - (y + 1.0) * 0.5);
-  return out;
-}
-`;
+const PASSTHROUGH_VERT_WGSL = passthroughVertSrc;
 
 // ---------------------------------------------------------------------------
 // Pipeline cache key helpers
@@ -246,9 +221,17 @@ export class WebGPUShaderPipeline {
     this._defaultFilterMode = mode;
   }
 
-  /** Set the hdrHeadroom value for the global UBO. */
+  /** Set the hdrHeadroom value for the global UBO.
+   * Sanitizes non-finite (NaN, ±Infinity) to 1.0 and clamps to [1, 100] to
+   * match the WebGL2 Renderer.setHDRHeadroom contract — keeps GPU shader math
+   * robust regardless of caller hygiene.
+   */
   setGlobalHDRHeadroom(headroom: number): void {
-    this._hdrHeadroom = headroom;
+    if (!Number.isFinite(headroom)) {
+      this._hdrHeadroom = 1.0;
+      return;
+    }
+    this._hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
   }
 
   /** Set the outputMode value for the global UBO. */
@@ -498,9 +481,18 @@ export class WebGPUShaderPipeline {
     let pipeline = this.pipelineCache.get(cacheKey);
 
     if (!pipeline) {
-      // Build combined WGSL: vertex (viewer or passthrough) + stage fragment
+      // Build combined WGSL: common (shared helpers) + vertex (viewer or
+      // passthrough) + stage fragment.
+      //
+      // common.wgsl provides shared symbols (LUMA, applyTemperature, all 8
+      // tone mapping operators, gamutSoftClip, EOTF helpers, etc.) that
+      // stage shaders rely on. Prepending it here mirrors the pattern in
+      // wgsl-compile.gpu-test.ts and tonemap-webgpu.gpu-test.ts and is the
+      // single point that enforces the implicit "common is prepended"
+      // contract at runtime — without it, every stage that references a
+      // common symbol would fail compilation with `unresolved identifier`.
       const vertSource = isFirstStage ? VIEWER_VERT_WGSL : PASSTHROUGH_VERT_WGSL;
-      const combined = vertSource + '\n' + stage.wgslSource;
+      const combined = commonSrc + '\n' + vertSource + '\n' + stage.wgslSource;
       const shaderModule = device.createShaderModule({ code: combined });
 
       pipeline = device.createRenderPipeline({
@@ -535,6 +527,19 @@ export class WebGPUShaderPipeline {
     }
     if (!sampler) return;
 
+    // Bind group layout (MED-55 4a):
+    //   @group(0) = sampler + texture(s)         -- always present
+    //   @group(1) = stage `Uniforms` UBO         -- declared by every stage
+    //   @group(2) = viewer pan/zoom UBO          -- first-stage only
+    //
+    // The viewer UBO lives at @group(2) (not @group(1)) because every stage
+    // WGSL file declares `@group(1) @binding(0) var<uniform> u: Uniforms;`.
+    // Placing the viewer UBO at @group(1) collides with that declaration at
+    // module scope when the runtime concatenates `commonSrc + viewerVertSrc +
+    // stageSrc` and the WGSL spec rejects the duplicate binding. Intermediate
+    // stages skip @group(2) entirely (they use the passthrough vertex source
+    // which declares no viewer binding).
+
     // Create texture bind group (group 0)
     const textureBindGroup = device.createBindGroup({
       layout: pipeline.getBindGroupLayout(0),
@@ -544,7 +549,7 @@ export class WebGPUShaderPipeline {
       ],
     });
 
-    // Create viewer uniform bind group (group 1) if first stage
+    // Create viewer uniform bind group (group 2) if first stage
     let viewerBindGroup: WGPUBindGroup | null = null;
     if (isFirstStage) {
       const viewerUBO = this.ensureUniformBuffer(device, `viewer_${stage.id}`, 16);
@@ -552,7 +557,7 @@ export class WebGPUShaderPipeline {
       device.queue.writeBuffer(viewerUBO, 0, viewerData);
 
       viewerBindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(1),
+        layout: pipeline.getBindGroupLayout(2),
         entries: [{ binding: 0, resource: { buffer: viewerUBO } }],
       });
     }
@@ -571,8 +576,11 @@ export class WebGPUShaderPipeline {
 
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, textureBindGroup);
+    // @group(1) (stage Uniforms UBO) will be set by stage-specific code in
+    // Phase 4a; today none of the stages are registered in production so the
+    // pipeline only runs through the passthrough blit path above.
     if (viewerBindGroup) {
-      pass.setBindGroup(1, viewerBindGroup);
+      pass.setBindGroup(2, viewerBindGroup);
     }
     pass.draw(3);
     pass.end();

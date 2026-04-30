@@ -211,4 +211,65 @@ describe('LUTStage', () => {
     expect(state.inMatrix![0]).toBe(2);
     expect(state.outMatrix).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // Output color space metadata (issue MED-51)
+  // ---------------------------------------------------------------------------
+
+  it('LSTG-U019: default output color primaries are null (color-space-preserving)', () => {
+    const stage = new LUTStage();
+    expect(stage.getOutputColorPrimaries()).toBeNull();
+  });
+
+  it('LSTG-U020: default output transfer function is null (transfer-preserving)', () => {
+    const stage = new LUTStage();
+    expect(stage.getOutputTransferFunction()).toBeNull();
+  });
+
+  it('LSTG-U021: setOutputColorPrimaries stores declared primaries', () => {
+    const stage = new LUTStage();
+    stage.setOutputColorPrimaries('bt2020');
+    expect(stage.getOutputColorPrimaries()).toBe('bt2020');
+  });
+
+  it('LSTG-U022: setOutputTransferFunction stores declared transfer', () => {
+    const stage = new LUTStage();
+    stage.setOutputTransferFunction('pq');
+    expect(stage.getOutputTransferFunction()).toBe('pq');
+  });
+
+  it('LSTG-U023: passing null clears declared output color space', () => {
+    const stage = new LUTStage();
+    stage.setOutputColorPrimaries('bt2020');
+    stage.setOutputTransferFunction('pq');
+
+    stage.setOutputColorPrimaries(null);
+    stage.setOutputTransferFunction(null);
+
+    expect(stage.getOutputColorPrimaries()).toBeNull();
+    expect(stage.getOutputTransferFunction()).toBeNull();
+  });
+
+  it('LSTG-U024: getState round-trips output color space metadata', () => {
+    const stage = new LUTStage();
+    stage.setLUT(createTestLUT3D(), 'rec709-from-ap1.cube');
+    stage.setOutputColorPrimaries('bt709');
+    stage.setOutputTransferFunction('srgb');
+
+    const state = stage.getState();
+
+    expect(state.outputColorPrimaries).toBe('bt709');
+    expect(state.outputTransferFunction).toBe('srgb');
+  });
+
+  it('LSTG-U025: reset clears output color space metadata', () => {
+    const stage = new LUTStage();
+    stage.setOutputColorPrimaries('bt2020');
+    stage.setOutputTransferFunction('hlg');
+
+    stage.reset();
+
+    expect(stage.getOutputColorPrimaries()).toBeNull();
+    expect(stage.getOutputTransferFunction()).toBeNull();
+  });
 });
