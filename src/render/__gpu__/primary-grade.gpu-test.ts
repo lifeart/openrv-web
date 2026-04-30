@@ -215,10 +215,15 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
         g = 0.4,
         b = 0.2;
       const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
-      // mix(luma, color, 2.0) = luma + 2*(color - luma)
+      // mix(luma, color, 2.0) = luma + 2*(color - luma). For this input the
+      // raw saturation result on B is ~-0.028 (saturation amplifies away from
+      // luma and pulls the lowest channel below zero). The viewer.frag gamma
+      // stage applies pow(max(color, 0), 1/u_gammaRGB) unconditionally, so
+      // negative channels get clamped to 0 before reaching the framebuffer.
+      // Expect that clamped output, not the pre-clamp raw saturation value.
       const er = luma + 2 * (r - luma);
       const eg = luma + 2 * (g - luma);
-      const eb = luma + 2 * (b - luma);
+      const eb = Math.max(luma + 2 * (b - luma), 0);
       const pixels = renderWith(r, g, b, (gl, prog) => {
         gl.uniform1f(gl.getUniformLocation(prog, 'u_saturation'), 2);
       });
