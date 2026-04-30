@@ -4,6 +4,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TimelineContextMenu, type TimelineContextMenuOptions } from './TimelineContextMenu';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 function makeOptions(overrides: Partial<TimelineContextMenuOptions> = {}): TimelineContextMenuOptions {
   return {
@@ -34,6 +39,7 @@ describe('TimelineContextMenu', () => {
   let menu: TimelineContextMenu;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     menu = new TimelineContextMenu();
   });
 
@@ -41,6 +47,27 @@ describe('TimelineContextMenu', () => {
     menu.dispose();
     // Clean up any leftover menus
     document.querySelectorAll('.timeline-main-context-menu').forEach((el) => el.remove());
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('TCM-OCR-001: showing registers exactly 1 entry; hiding deregisters', () => {
+      expectRegistrationCount(0);
+      menu.show(makeOptions());
+      expectRegistrationCount(1);
+      menu.hide();
+      expectRegistrationCount(0);
+    });
+
+    it('TCM-OCR-002: outside click dismisses the menu', () => {
+      menu.show(makeOptions());
+      expect(menu.isVisible()).toBe(true);
+
+      dispatchOutsideClick();
+
+      expect(menu.isVisible()).toBe(false);
+      expectRegistrationCount(0);
+    });
   });
 
   describe('visibility and lifecycle', () => {

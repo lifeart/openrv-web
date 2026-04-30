@@ -8,6 +8,7 @@
 
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
+import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
 /**
  * Options for showing the timeline context menu.
@@ -350,33 +351,35 @@ export class TimelineContextMenu {
   }
 
   private setupDismissHandlers(menu: HTMLDivElement): void {
-    // Click outside
-    const onClickOutside = (e: MouseEvent) => {
+    // Click outside + Escape dismiss owned by OutsideClickRegistry. The
+    // pre-existing implementation used `setTimeout(() => addEventListener,
+    // 0)` to dodge the same-tick contextmenu/click event that opened the
+    // menu. The registry's register-during-dispatch contract
+    // (`OutsideClickRegistry.ts:188-191`) makes that shim unnecessary: a
+    // synchronous `register()` is invisible to the in-flight event.
+    const deregisterOutsideClick = outsideClickRegistry.register({
+      elements: [menu],
+      onDismiss: () => this.hide(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
+    this.dismissHandlers.push(deregisterOutsideClick);
+
+    // Right-click (contextmenu) outside is NOT covered by the registry, so
+    // keep a local listener. Defer with setTimeout(0) so the triggering
+    // right-click does not immediately dismiss the menu we just opened.
+    const onContextMenuOutside = (e: MouseEvent) => {
       if (!menu.contains(e.target as Node)) {
         this.hide();
       }
     };
-    // Defer to avoid the triggering right-click from immediately closing the menu
     setTimeout(() => {
       if (this._isVisible) {
-        document.addEventListener('click', onClickOutside);
-        document.addEventListener('contextmenu', onClickOutside);
+        document.addEventListener('contextmenu', onContextMenuOutside);
       }
     }, 0);
     this.dismissHandlers.push(() => {
-      document.removeEventListener('click', onClickOutside);
-      document.removeEventListener('contextmenu', onClickOutside);
-    });
-
-    // Escape key (handled in keyboard navigation above, but also on document)
-    const onEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        this.hide();
-      }
-    };
-    document.addEventListener('keydown', onEscape);
-    this.dismissHandlers.push(() => {
-      document.removeEventListener('keydown', onEscape);
+      document.removeEventListener('contextmenu', onContextMenuOutside);
     });
 
     // Window blur
