@@ -4,6 +4,12 @@
 //
 // Declares `struct VSOut` and `@vertex fn vs(...)` so stage shaders only
 // need to provide their `@fragment fn fs(in: VSOut) -> ...`.
+//
+// Bind group layout (MED-55 4a): `@group(0)` = sampler + textures (stage),
+// `@group(1)` = stage `Uniforms` UBO (stage), `@group(2)` = this viewer UBO
+// (first-stage only). Putting the viewer UBO at `@group(2)` avoids a WGSL
+// module-scope binding collision with stage shaders that all declare
+// `@group(1) @binding(0) var<uniform> u: Uniforms;`.
 
 struct ViewerUniforms {
   offset: vec2f,
@@ -15,7 +21,7 @@ struct VSOut {
   @location(0) uv: vec2f,
 }
 
-@group(1) @binding(0) var<uniform> viewer: ViewerUniforms;
+@group(2) @binding(0) var<uniform> viewer: ViewerUniforms;
 
 @vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
   var out: VSOut;

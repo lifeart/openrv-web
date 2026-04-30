@@ -184,6 +184,20 @@ async function renderToneMapWGPU(
     entries: [{ binding: 0, resource: { buffer: uniformBuf } }],
   });
 
+  // Viewer UBO at @group(2) (MED-55 4a: viewer was moved off @group(1) to
+  // resolve a WGSL bind-group collision with stage `Uniforms`). Identity
+  // pan/zoom (offset=0, scale=1) so the rasterized triangle is unchanged.
+  const viewerBuf = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(viewerBuf, 0, new Float32Array([0, 0, 1, 1]));
+
+  const bg2 = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(2),
+    entries: [{ binding: 0, resource: { buffer: viewerBuf } }],
+  });
+
   // Render pass.
   const pass = encoder.beginRenderPass({
     colorAttachments: [
@@ -198,6 +212,7 @@ async function renderToneMapWGPU(
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, bg0);
   pass.setBindGroup(1, bg1);
+  pass.setBindGroup(2, bg2);
   pass.draw(3);
   pass.end();
 
@@ -229,6 +244,7 @@ async function renderToneMapWGPU(
   inputTex.destroy();
   outputTex.destroy();
   uniformBuf.destroy();
+  viewerBuf.destroy();
   readBuf.destroy();
 
   return { rgba };

@@ -20,6 +20,7 @@ import type { IPImage } from '../../core/image/Image';
 import type { TextureFilterMode } from '../../core/types/filter';
 import {
   type DisplayCapabilities,
+  DEFAULT_CAPABILITIES,
   isDefaultCDL,
   isDefaultCurves,
   buildAllCurveLUTs,
@@ -133,6 +134,22 @@ export class ViewerGLRenderer {
   // initAsync promise so an opt-in caller could await readiness, while keeping
   // `ensureGLRenderer()` returning `Renderer | null` synchronously to preserve
   // the contract used by 3 sync render call sites and 24 setter passthroughs.
+  //
+  // KNOWN LIMITATION (MED-55 / WebGPU sync-render race):
+  //   The sync render entry points (`renderHDRWithWebGL`, `renderTiledHDR`,
+  //   `renderSDRWithWebGL`) assume `_glRenderer` returned by `ensureGLRenderer()`
+  //   is fully usable. That contract is honored by the WebGL2 backend (its
+  //   `initialize()` produces a working renderer before `initAsync()` resolves),
+  //   but a future WebGPU backend creates the device asynchronously inside
+  //   `initAsync()`. Sync renders dispatched before `_glRendererInitPromise`
+  //   resolves on the WebGPU path will see a partially-constructed renderer
+  //   and may render to a blank canvas.
+  //
+  //   The WebGPU pipeline backend is gated behind a feature flag whose default
+  //   is `'disabled'`, so production never hits this race. TODO (Phase 4b, when
+  //   the flag is flipped on): early-return at sync render entry points when
+  //   `_glRendererInitPromise !== null` AND backend is `'webgpu'`, OR have the
+  //   render entry points await readiness on first call before dispatching.
   private _glRendererInitPromise: Promise<Renderer | null> | null = null;
   private _hdrRenderActive = false;
   private _sdrWebGLRenderActive = false;
@@ -492,7 +509,7 @@ export class ViewerGLRenderer {
       // call sites (setLUT, setUserTransform, setLinearize, setOutOfRange,
       // setColorPrimaries, setChannelSwizzle, setOCIOShader, setSphericalProjection,
       // ensureImageTexture, isContextLost, …).
-      const renderer = createRenderer(this._capabilities ?? ({} as DisplayCapabilities)) as Renderer;
+      const renderer = createRenderer(this._capabilities ?? DEFAULT_CAPABILITIES) as Renderer;
       // initialize() sets drawingBufferColorSpace to rec2100-hlg/pq immediately
       // after context creation (before shaders/buffers) when displayHDR is true.
       renderer.initialize(this._glCanvas, this._capabilities);

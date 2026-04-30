@@ -527,6 +527,19 @@ export class WebGPUShaderPipeline {
     }
     if (!sampler) return;
 
+    // Bind group layout (MED-55 4a):
+    //   @group(0) = sampler + texture(s)         -- always present
+    //   @group(1) = stage `Uniforms` UBO         -- declared by every stage
+    //   @group(2) = viewer pan/zoom UBO          -- first-stage only
+    //
+    // The viewer UBO lives at @group(2) (not @group(1)) because every stage
+    // WGSL file declares `@group(1) @binding(0) var<uniform> u: Uniforms;`.
+    // Placing the viewer UBO at @group(1) collides with that declaration at
+    // module scope when the runtime concatenates `commonSrc + viewerVertSrc +
+    // stageSrc` and the WGSL spec rejects the duplicate binding. Intermediate
+    // stages skip @group(2) entirely (they use the passthrough vertex source
+    // which declares no viewer binding).
+
     // Create texture bind group (group 0)
     const textureBindGroup = device.createBindGroup({
       layout: pipeline.getBindGroupLayout(0),
@@ -536,7 +549,7 @@ export class WebGPUShaderPipeline {
       ],
     });
 
-    // Create viewer uniform bind group (group 1) if first stage
+    // Create viewer uniform bind group (group 2) if first stage
     let viewerBindGroup: WGPUBindGroup | null = null;
     if (isFirstStage) {
       const viewerUBO = this.ensureUniformBuffer(device, `viewer_${stage.id}`, 16);
@@ -544,7 +557,7 @@ export class WebGPUShaderPipeline {
       device.queue.writeBuffer(viewerUBO, 0, viewerData);
 
       viewerBindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(1),
+        layout: pipeline.getBindGroupLayout(2),
         entries: [{ binding: 0, resource: { buffer: viewerUBO } }],
       });
     }
@@ -563,8 +576,11 @@ export class WebGPUShaderPipeline {
 
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, textureBindGroup);
+    // @group(1) (stage Uniforms UBO) will be set by stage-specific code in
+    // Phase 4a; today none of the stages are registered in production so the
+    // pipeline only runs through the passthrough blit path above.
     if (viewerBindGroup) {
-      pass.setBindGroup(1, viewerBindGroup);
+      pass.setBindGroup(2, viewerBindGroup);
     }
     pass.draw(3);
     pass.end();
