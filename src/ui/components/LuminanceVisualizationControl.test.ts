@@ -8,6 +8,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LuminanceVisualization } from './LuminanceVisualization';
 import { LuminanceVisualizationControl } from './LuminanceVisualizationControl';
 import { FalseColor } from './FalseColor';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('LuminanceVisualizationControl', () => {
   let falseColor: FalseColor;
@@ -15,6 +20,7 @@ describe('LuminanceVisualizationControl', () => {
   let control: LuminanceVisualizationControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     falseColor = new FalseColor();
     lumVis = new LuminanceVisualization(falseColor);
     control = new LuminanceVisualizationControl(lumVis);
@@ -24,6 +30,7 @@ describe('LuminanceVisualizationControl', () => {
     control.dispose();
     lumVis.dispose();
     falseColor.dispose();
+    resetOutsideClickRegistry();
   });
 
   describe('render', () => {
@@ -118,62 +125,32 @@ describe('LuminanceVisualizationControl', () => {
     });
   });
 
-  describe('outside click listener lifecycle', () => {
-    it('LUM-M21a: outside click listener should NOT be registered when dropdown is closed', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      control.dispose();
-      lumVis.dispose();
-      falseColor.dispose();
-      addSpy.mockClear();
-
-      falseColor = new FalseColor();
-      lumVis = new LuminanceVisualization(falseColor);
-      control = new LuminanceVisualizationControl(lumVis);
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(0);
-      addSpy.mockRestore();
-    });
-
-    it('LUM-M21b: outside click listener should be registered when dropdown opens', () => {
-      const addSpy = vi.spyOn(document, 'addEventListener');
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('LUM-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
 
-      addSpy.mockClear();
+      expectRegistrationCount(0);
       button.click(); // open
-
-      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      addSpy.mockRestore();
-    });
-
-    it('LUM-M21c: outside click listener should be removed when dropdown closes', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const el = control.render();
-      const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
-
-      button.click(); // open
-      removeSpy.mockClear();
+      expectRegistrationCount(1);
       button.click(); // close
-
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
+      expectRegistrationCount(0);
     });
 
-    it('LUM-M21d: dispose should remove outside click listener regardless of dropdown state', () => {
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
+    it('LUM-OCR-002: outside click dismisses the dropdown', () => {
       const el = control.render();
+      document.body.appendChild(el);
       const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
 
-      button.click(); // open dropdown
-      removeSpy.mockClear();
-      control.dispose();
+      button.click(); // open
+      const dropdown = document.querySelector('.luminance-vis-dropdown') as HTMLElement;
+      expect(dropdown.style.display).toBe('block');
 
-      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
-      expect(clickCalls.length).toBe(1);
-      removeSpy.mockRestore();
+      dispatchOutsideClick();
+
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      el.remove();
     });
   });
 

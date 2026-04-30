@@ -3,6 +3,7 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import type { GamutMappingState, GamutMappingMode, GamutIdentifier } from '../../core/types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export { DEFAULT_GAMUT_MAPPING_STATE };
 export type { GamutMappingState };
@@ -56,9 +57,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
   private targetSelect: HTMLSelectElement | null = null;
   private highlightCheckbox: HTMLInputElement | null = null;
 
-  private boundHandleDocumentClick: (e: MouseEvent) => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
   private readonly boundHandleReposition: () => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -133,16 +133,6 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.createPanelContent();
     this.container.appendChild(this.button);
 
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    document.addEventListener('click', this.boundHandleDocumentClick);
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isPanelOpen) {
-        this.hide();
-      }
-    };
-
     // Reposition on scroll/resize
     this.boundHandleReposition = () => {
       if (this.isPanelOpen) {
@@ -151,12 +141,6 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
         this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
       }
     };
-  }
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hide();
-    }
   }
 
   private createPanelContent(): void {
@@ -394,7 +378,13 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.panel.style.display = 'block';
     this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
-    document.addEventListener('keydown', this.boundHandleKeyDown);
+    // Outside-click + Escape dismiss owned by OutsideClickRegistry.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.container, this.panel],
+      onDismiss: () => this.hide(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
 
@@ -407,7 +397,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.panel.style.display = 'none';
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
 
@@ -448,8 +439,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
   }
 
   dispose(): void {
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
-    document.removeEventListener('click', this.boundHandleDocumentClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
     if (this.panel.parentNode) {

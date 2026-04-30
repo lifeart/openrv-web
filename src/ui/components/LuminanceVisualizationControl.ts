@@ -9,6 +9,7 @@ import { type LuminanceVisualization, type LuminanceVisMode } from './LuminanceV
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 const MODE_LABELS: Record<LuminanceVisMode, string> = {
   off: 'Off',
@@ -27,19 +28,12 @@ export class LuminanceVisualizationControl {
   private luminanceVis: LuminanceVisualization;
   private isDropdownOpen = false;
   private boundHandleReposition: () => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private unsubscribers: (() => void)[] = [];
 
   constructor(luminanceVis: LuminanceVisualization) {
     this.luminanceVis = luminanceVis;
     this.boundHandleReposition = () => this.positionDropdown();
-
-    // Close on Escape key
-    this.boundHandleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.isDropdownOpen) {
-        this.toggleDropdown();
-      }
-    };
 
     // Create container
     this.container = document.createElement('div');
@@ -414,17 +408,28 @@ export class LuminanceVisualizationControl {
       }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
-      document.addEventListener('click', this.handleOutsideClick);
-      document.addEventListener('keydown', this.boundHandleKeyDown);
+      // Outside-click + Escape dismiss owned by OutsideClickRegistry.
+      this.deregisterDismiss = outsideClickRegistry.register({
+        elements: [this.container, this.dropdown],
+        onDismiss: () => this.closeDropdown(),
+        dismissOn: 'click',
+        dismissOnEscape: true,
+      });
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
-      this.dropdown.style.display = 'none';
-      document.removeEventListener('click', this.handleOutsideClick);
-      document.removeEventListener('keydown', this.boundHandleKeyDown);
-      window.removeEventListener('resize', this.boundHandleReposition);
-      window.removeEventListener('scroll', this.boundHandleReposition, true);
+      this.closeDropdown();
     }
+  }
+
+  private closeDropdown(): void {
+    this.isDropdownOpen = false;
+    this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.dropdown.style.display = 'none';
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
+    window.removeEventListener('resize', this.boundHandleReposition);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
   }
 
   private positionDropdown(): void {
@@ -432,20 +437,6 @@ export class LuminanceVisualizationControl {
     this.dropdown.style.top = `${rect.bottom + 4}px`;
     this.dropdown.style.left = `${rect.left}px`;
   }
-
-  private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      if (this.isDropdownOpen) {
-        this.isDropdownOpen = false;
-        this.toggleButton.setAttribute('aria-expanded', 'false');
-        this.dropdown.style.display = 'none';
-        document.removeEventListener('click', this.handleOutsideClick);
-        document.removeEventListener('keydown', this.boundHandleKeyDown);
-        window.removeEventListener('resize', this.boundHandleReposition);
-        window.removeEventListener('scroll', this.boundHandleReposition, true);
-      }
-    }
-  };
 
   /**
    * Create the badge element that shows the active mode on the canvas overlay
@@ -495,8 +486,8 @@ export class LuminanceVisualizationControl {
   }
 
   dispose(): void {
-    document.removeEventListener('click', this.handleOutsideClick);
-    document.removeEventListener('keydown', this.boundHandleKeyDown);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

@@ -9,6 +9,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MultiSourceLayoutControl } from './MultiSourceLayoutControl';
 import { MultiSourceLayoutManager } from '../multisource/MultiSourceLayoutManager';
 import { MultiSourceLayoutStore } from '../multisource/MultiSourceLayoutStore';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('MultiSourceLayoutControl', () => {
   let store: MultiSourceLayoutStore;
@@ -16,6 +21,7 @@ describe('MultiSourceLayoutControl', () => {
   let control: MultiSourceLayoutControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     store = new MultiSourceLayoutStore();
     manager = new MultiSourceLayoutManager(store);
     control = new MultiSourceLayoutControl(manager);
@@ -24,6 +30,38 @@ describe('MultiSourceLayoutControl', () => {
   afterEach(() => {
     control.dispose();
     manager.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('MSL-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="layout-control-button"]') as HTMLButtonElement;
+
+      expectRegistrationCount(0);
+      button.click(); // open
+      expectRegistrationCount(1);
+      button.click(); // close
+      expectRegistrationCount(0);
+      el.remove();
+    });
+
+    it('MSL-OCR-002: outside click dismisses the dropdown', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="layout-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="layout-control-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('flex');
+
+      dispatchOutsideClick();
+
+      expect(dropdown.style.display).toBe('none');
+      expectRegistrationCount(0);
+      el.remove();
+    });
   });
 
   describe('initialization', () => {

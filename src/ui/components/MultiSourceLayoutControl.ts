@@ -16,6 +16,7 @@ import {
 } from '../multisource/MultiSourceLayoutTypes';
 import { MultiSourceLayoutManager } from '../multisource/MultiSourceLayoutManager';
 import { MultiSourceLayoutStore } from '../multisource/MultiSourceLayoutStore';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface MultiSourceLayoutControlEvents extends EventMap {
   layoutChanged: MultiSourceLayoutState;
@@ -37,9 +38,9 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
   private dropdown: HTMLElement;
   private manager: MultiSourceLayoutManager;
   private isOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
+  private deregisterDismiss: OutsideClickDeregister | null = null;
   private managerUnsubs: (() => void)[] = [];
   private _currentSourceIndex = 0;
   private _sourceCount = 1;
@@ -72,7 +73,6 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
 
     this.manager = manager ?? new MultiSourceLayoutManager(new MultiSourceLayoutStore());
 
-    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
     this.boundHandleKeydown = (e: KeyboardEvent) => this.handleDropdownKeydown(e);
 
@@ -371,7 +371,14 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     this.button.setAttribute('aria-expanded', 'true');
     this.button.style.background = 'var(--bg-hover)';
     this.button.style.borderColor = 'var(--border-primary)';
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    // Outside-click + Escape dismiss owned by OutsideClickRegistry. Navigation
+    // keys (Arrow/Home/End) remain in the local keydown handler.
+    this.deregisterDismiss = outsideClickRegistry.register({
+      elements: [this.button, this.dropdown],
+      onDismiss: () => this.closeDropdown(),
+      dismissOn: 'click',
+      dismissOnEscape: true,
+    });
     document.addEventListener('keydown', this.boundHandleKeydown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
@@ -382,7 +389,8 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     this.dropdown.style.display = 'none';
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonLabel();
-    document.removeEventListener('click', this.boundHandleOutsideClick);
+    this.deregisterDismiss?.();
+    this.deregisterDismiss = null;
     document.removeEventListener('keydown', this.boundHandleKeydown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
@@ -395,18 +403,8 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     this.dropdown.style.left = `${rect.left}px`;
   }
 
-  private handleOutsideClick(e: MouseEvent): void {
-    if (!this.button.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      this.closeDropdown();
-    }
-  }
-
   private handleDropdownKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Escape') {
-      this.closeDropdown();
-      return;
-    }
-
+    // Escape is owned by OutsideClickRegistry — only navigation keys here.
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
       const focusable = Array.from(
