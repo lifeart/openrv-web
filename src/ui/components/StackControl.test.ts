@@ -8,16 +8,46 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StackControl } from './StackControl';
 import { type BlendMode, BLEND_MODES } from '../../composite/BlendModes';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideClick,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 describe('StackControl', () => {
   let control: StackControl;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     control = new StackControl();
   });
 
   afterEach(() => {
     control.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('STACK-OCR-001: opening registers exactly 1 entry; closing deregisters', () => {
+      document.body.appendChild(control.render());
+      expectRegistrationCount(0);
+      control.showPanel();
+      expectRegistrationCount(1);
+      control.hidePanel();
+      expectRegistrationCount(0);
+    });
+
+    it('STACK-OCR-002: outside click dismisses the panel', () => {
+      document.body.appendChild(control.render());
+      control.showPanel();
+      const panel = document.querySelector('[data-testid="stack-panel"]') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+
+      dispatchOutsideClick();
+
+      expect(panel.style.display).toBe('none');
+      expectRegistrationCount(0);
+    });
   });
 
   describe('initialization', () => {
@@ -581,12 +611,12 @@ describe('StackControl', () => {
       expect(() => control.dispose()).not.toThrow();
     });
 
-    it('STACK-U153: dispose removes document click listener', () => {
-      const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    it('STACK-U153: dispose deregisters from OutsideClickRegistry when open', () => {
       control.render();
+      control.showPanel();
+      expectRegistrationCount(1);
       control.dispose();
-      expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function));
-      removeEventListenerSpy.mockRestore();
+      expectRegistrationCount(0);
     });
   });
 });

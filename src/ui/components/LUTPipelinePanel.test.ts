@@ -5,6 +5,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LUTPipeline, type LUT3D } from '../../color/ColorProcessingFacade';
 import { LUTPipelinePanel } from './LUTPipelinePanel';
+import {
+  resetOutsideClickRegistry,
+  dispatchOutsideMouseDown,
+  expectRegistrationCount,
+} from '../../utils/ui/__test-helpers__/outsideClickTestUtils';
 
 function createTestLUT3D(title: string = 'Test'): LUT3D {
   const size = 2;
@@ -27,12 +32,30 @@ describe('LUTPipelinePanel', () => {
   let panel: LUTPipelinePanel;
 
   beforeEach(() => {
+    resetOutsideClickRegistry();
     pipeline = new LUTPipeline();
     panel = new LUTPipelinePanel(pipeline);
   });
 
   afterEach(() => {
     panel.dispose();
+    resetOutsideClickRegistry();
+  });
+
+  describe('OutsideClickRegistry integration (MED-25 Phase 3)', () => {
+    it('LUTPP-OCR-001: opening help popover registers exactly 1 entry; closing deregisters', () => {
+      panel.show();
+
+      const helpButton = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement | null;
+      expect(helpButton).not.toBeNull();
+      if (!helpButton) return;
+
+      expectRegistrationCount(0);
+      helpButton.click(); // open help
+      expectRegistrationCount(1);
+      dispatchOutsideMouseDown();
+      expectRegistrationCount(0);
+    });
   });
 
   describe('construction', () => {

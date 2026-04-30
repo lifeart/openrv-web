@@ -12,6 +12,7 @@ import { LUTStageControl } from './LUTStageControl';
 import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { Z_INDEX } from './shared/theme';
+import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface LUTPipelinePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -34,7 +35,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
 
   // Help popover
   private helpPopover: HTMLElement | null = null;
-  private boundHelpOutsideClick: ((e: MouseEvent) => void) | null = null;
+  private deregisterHelpDismiss: OutsideClickDeregister | null = null;
 
   // Default source for single-source workflows
   private defaultSourceId = 'default';
@@ -558,12 +559,17 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
     this.panel.appendChild(popover);
     this.helpPopover = popover;
 
-    this.boundHelpOutsideClick = (e: MouseEvent) => {
-      if (!popover.contains(e.target as Node) && e.target !== anchor) {
-        this.hideHelpPopover();
-      }
-    };
-    document.addEventListener('mousedown', this.boundHelpOutsideClick);
+    // Outside-click + Escape dismiss for help popover owned by
+    // OutsideClickRegistry. Multi-popover surface: the LUT pipeline panel
+    // itself does not register (no outside-click dismiss), only the help
+    // popover does. The pre-existing semantic was 'mousedown' (popover
+    // closes on press), preserved via dismissOn: 'mousedown'.
+    this.deregisterHelpDismiss = outsideClickRegistry.register({
+      elements: [anchor, popover],
+      onDismiss: () => this.hideHelpPopover(),
+      dismissOn: 'mousedown',
+      dismissOnEscape: true,
+    });
   }
 
   private hideHelpPopover(): void {
@@ -571,10 +577,8 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
       this.helpPopover.remove();
       this.helpPopover = null;
     }
-    if (this.boundHelpOutsideClick) {
-      document.removeEventListener('mousedown', this.boundHelpOutsideClick);
-      this.boundHelpOutsideClick = null;
-    }
+    this.deregisterHelpDismiss?.();
+    this.deregisterHelpDismiss = null;
   }
 
   private resetAll(): void {
