@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WebGPUStateUploader, STAGE_FIELDS, DIRTY_FLAG_TO_STAGES } from './WebGPUStateUploader';
+import {
+  WebGPUStateUploader,
+  STAGE_FIELDS,
+  DIRTY_FLAG_TO_STAGES,
+  SCENE_ANALYSIS_OFFSETS,
+  SCENE_ANALYSIS_BYTE_SIZE,
+} from './WebGPUStateUploader';
+import { TONE_MAPPING_OPERATOR_CODES } from '../ShaderConstants';
 import { GPUBufferUsage, GPUTextureUsage } from './WebGPUTypes';
 import { createDefaultInternalState } from '../ShaderStateTypes';
 import type { InternalShaderState } from '../ShaderStateTypes';
@@ -354,16 +361,112 @@ describe('WebGPUStateUploader', () => {
     it('WGPU-SU-137: sceneAnalysis packs outOfRange (i32) and toneMappingState (i32)', () => {
       state.outOfRange = 2;
       state.toneMappingState.enabled = true;
+      state.toneMappingState.operator = 'aces'; // -> code 3
       state.gamutMappingEnabled = true;
       state.gamutMappingModeCode = 1;
 
       uploader.uploadStageUniforms(device, 'sceneAnalysis', state);
 
       const view = getUploadedView(device);
-      expect(readI32(view, 0)).toBe(2); // outOfRange as i32
-      expect(readI32(view, 1)).toBe(1); // toneMappingState.enabled as i32
-      expect(readI32(view, 2)).toBe(1); // gamutMappingEnabled as i32
-      expect(readI32(view, 3)).toBe(1); // gamutMappingModeCode as i32
+      // Offsets per scene_analysis.wgsl Uniforms struct order:
+      expect(readI32(view, 0)).toBe(2); // outOfRange (slot 0)
+      expect(readI32(view, 1)).toBe(1); // toneMappingState.enabled (slot 1)
+      expect(readI32(view, 2)).toBe(3); // toneMappingOperator (slot 2) -- aces
+      // hdrHeadroom (slot 3) defaults to 1.0
+      // gamutMappingEnabled now lives at slot 12 (byte offset 48)
+      expect(readI32(view, 12)).toBe(1); // gamutMappingEnabled
+      expect(readI32(view, 13)).toBe(1); // gamutMappingModeCode
+    });
+  });
+
+  // ─── RENDER-W4-01 regression: pin scene_analysis.wgsl byte layout ────
+
+  describe('sceneAnalysis byte layout (RENDER-W4-01)', () => {
+    /**
+     * Read a 4-byte slot at the named offset, asserting the layout matches
+     * the WGSL `Uniforms` struct in src/render/webgpu/shaders/scene_analysis.wgsl.
+     *
+     * If a future edit drifts the pack order from the WGSL struct order, this
+     * test will fail and the diff will point at the misaligned field — preventing
+     * a recurrence of the bug where toneMappingOperator got gamutMappingEnabled's
+     * value and hdrHeadroom + _pad0 were skipped entirely.
+     */
+    it('WGPU-SU-138: SCENE_ANALYSIS_OFFSETS map is monotonically increasing 4-byte slots', () => {
+      const entries = Object.entries(SCENE_ANALYSIS_OFFSETS);
+      for (let i = 0; i < entries.length; i++) {
+        expect(entries[i]![1]).toBe(i * 4);
+      }
+      // Trailing _pad3 lives at offset 76; struct total is 80 bytes.
+      expect(SCENE_ANALYSIS_BYTE_SIZE).toBe(76 + 4);
+    });
+
+    it('WGPU-SU-139: writes every field at the offset declared by SCENE_ANALYSIS_OFFSETS', () => {
+      // Assign distinct, recoverable values to every WGSL field so that
+      // a swap or skip in pack order is caught by the readback below.
+      state.outOfRange = 2;
+      state.toneMappingState.enabled = true;
+      state.toneMappingState.operator = 'drago'; // -> code 8
+      state.toneMappingState.reinhardWhitePoint = 4.5;
+      state.toneMappingState.filmicExposureBias = 2.5;
+      state.toneMappingState.filmicWhitePoint = 11.5;
+      state.toneMappingState.dragoBias = 0.9;
+      state.toneMappingState.dragoLwa = 0.25;
+      state.toneMappingState.dragoLmax = 1.75;
+      state.toneMappingState.dragoBrightness = 2.25;
+      state.gamutMappingEnabled = true;
+      state.gamutMappingModeCode = 1;
+      state.gamutSourceCode = 2;
+      state.gamutTargetCode = 1;
+      state.gamutHighlightEnabled = true;
+
+      uploader.setHDRHeadroom(3.5);
+      uploader.uploadStageUniforms(device, 'sceneAnalysis', state);
+
+      const view = getUploadedView(device);
+      const i32 = (offset: number): number => view.getInt32(offset, true);
+      const f32 = (offset: number): number => view.getFloat32(offset, true);
+
+      expect(i32(SCENE_ANALYSIS_OFFSETS.outOfRange)).toBe(2);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.toneMappingEnabled)).toBe(1);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.toneMappingOperator)).toBe(TONE_MAPPING_OPERATOR_CODES.drago);
+      expect(f32(SCENE_ANALYSIS_OFFSETS.hdrHeadroom)).toBeCloseTo(3.5);
+      expect(f32(SCENE_ANALYSIS_OFFSETS.tmReinhardWhitePoint)).toBeCloseTo(4.5);
+      expect(f32(SCENE_ANALYSIS_OFFSETS._pad0)).toBe(0); // pad MUST be zero
+      expect(f32(SCENE_ANALYSIS_OFFSETS.tmFilmicExposureBias)).toBeCloseTo(2.5);
+      expect(f32(SCENE_ANALYSIS_OFFSETS.tmFilmicWhitePoint)).toBeCloseTo(11.5);
+      expect(f32(SCENE_ANALYSIS_OFFSETS.tmDragoBias)).toBeCloseTo(0.9);
+      expect(f32(SCENE_ANALYSIS_OFFSETS.tmDragoLwa)).toBeCloseTo(0.25);
+      expect(f32(SCENE_ANALYSIS_OFFSETS.tmDragoLmax)).toBeCloseTo(1.75);
+      expect(f32(SCENE_ANALYSIS_OFFSETS.tmDragoBrightness)).toBeCloseTo(2.25);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.gamutMappingEnabled)).toBe(1);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.gamutMappingModeCode)).toBe(1);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.gamutSourceCode)).toBe(2);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.gamutTargetCode)).toBe(1);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.gamutHighlightEnabled)).toBe(1);
+      expect(i32(SCENE_ANALYSIS_OFFSETS._pad1)).toBe(0);
+      expect(i32(SCENE_ANALYSIS_OFFSETS._pad2)).toBe(0);
+      expect(i32(SCENE_ANALYSIS_OFFSETS._pad3)).toBe(0);
+    });
+
+    it('WGPU-SU-13A: toneMappingOperator is 0 when tone mapping is disabled (regardless of operator string)', () => {
+      state.toneMappingState.enabled = false;
+      state.toneMappingState.operator = 'drago'; // would be code 8 if enabled
+      uploader.uploadStageUniforms(device, 'sceneAnalysis', state);
+
+      const view = getUploadedView(device);
+      expect(view.getInt32(SCENE_ANALYSIS_OFFSETS.toneMappingEnabled, true)).toBe(0);
+      expect(view.getInt32(SCENE_ANALYSIS_OFFSETS.toneMappingOperator, true)).toBe(0);
+    });
+
+    it('WGPU-SU-13B: setHDRHeadroom clamps non-finite to 1.0 and finite to [1, 100]', () => {
+      uploader.setHDRHeadroom(Number.NaN);
+      expect(uploader.getHDRHeadroom()).toBe(1.0);
+      uploader.setHDRHeadroom(0.5);
+      expect(uploader.getHDRHeadroom()).toBe(1.0);
+      uploader.setHDRHeadroom(150);
+      expect(uploader.getHDRHeadroom()).toBe(100);
+      uploader.setHDRHeadroom(5);
+      expect(uploader.getHDRHeadroom()).toBe(5);
     });
   });
 

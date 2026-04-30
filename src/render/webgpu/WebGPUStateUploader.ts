@@ -15,6 +15,7 @@
 
 import type { InternalShaderState } from '../ShaderStateTypes';
 import type { StageId } from '../ShaderStage';
+import { TONE_MAPPING_OPERATOR_CODES } from '../ShaderConstants';
 import type { WGPUDevice, WGPUBuffer, WGPUTexture } from './WebGPUTypes';
 import { GPUBufferUsage, GPUTextureUsage } from './WebGPUTypes';
 
@@ -291,6 +292,42 @@ function packMat3(view: DataView, offset: number, mat: Float32Array): number {
 }
 
 // ---------------------------------------------------------------------------
+// Scene-analysis byte layout — pinned to scene_analysis.wgsl Uniforms struct.
+//
+// All fields are 4 bytes (i32 or f32) so byte offset = slot * 4. The named
+// constants below MUST stay in sync with the WGSL `Uniforms` struct in
+// src/render/webgpu/shaders/scene_analysis.wgsl. Tests reference these to
+// pin the layout; bumping a slot here without bumping the WGSL counterpart
+// will fail the regression test.
+// ---------------------------------------------------------------------------
+
+export const SCENE_ANALYSIS_OFFSETS = {
+  outOfRange: 0,
+  toneMappingEnabled: 4,
+  toneMappingOperator: 8,
+  hdrHeadroom: 12,
+  tmReinhardWhitePoint: 16,
+  _pad0: 20,
+  tmFilmicExposureBias: 24,
+  tmFilmicWhitePoint: 28,
+  tmDragoBias: 32,
+  tmDragoLwa: 36,
+  tmDragoLmax: 40,
+  tmDragoBrightness: 44,
+  gamutMappingEnabled: 48,
+  gamutMappingModeCode: 52,
+  gamutSourceCode: 56,
+  gamutTargetCode: 60,
+  gamutHighlightEnabled: 64,
+  _pad1: 68,
+  _pad2: 72,
+  _pad3: 76,
+} as const;
+
+/** Total byte size of the scene-analysis uniform struct (after final pad). */
+export const SCENE_ANALYSIS_BYTE_SIZE = 80;
+
+// ---------------------------------------------------------------------------
 // WebGPUStateUploader
 // ---------------------------------------------------------------------------
 
@@ -306,6 +343,35 @@ export class WebGPUStateUploader {
 
   /** Maximum uniform buffer size per stage (generous default). */
   private static readonly MAX_STAGE_BUFFER_SIZE = 512;
+
+  /**
+   * HDR headroom value used when packing the sceneAnalysis stage.
+   *
+   * `hdrHeadroom` lives in the per-stage `Uniforms` struct in
+   * scene_analysis.wgsl but does not exist on InternalShaderState (it is
+   * managed at the pipeline level — see WebGPUShaderPipeline.setGlobalHDRHeadroom).
+   * Callers thread the runtime value in via setHDRHeadroom() so the WGSL
+   * uniform has the correct value at upload time. Defaults to 1.0 (SDR).
+   */
+  private hdrHeadroom = 1.0;
+
+  /**
+   * Set the HDR headroom value used when packing the sceneAnalysis uniforms.
+   * Mirrors the contract of WebGPUShaderPipeline.setGlobalHDRHeadroom:
+   * non-finite values become 1.0; finite values are clamped to [1, 100].
+   */
+  setHDRHeadroom(headroom: number): void {
+    if (!Number.isFinite(headroom)) {
+      this.hdrHeadroom = 1.0;
+      return;
+    }
+    this.hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
+  }
+
+  /** Get the current HDR headroom value. */
+  getHDRHeadroom(): number {
+    return this.hdrHeadroom;
+  }
 
   /**
    * Upload uniform data for a specific stage.
@@ -650,29 +716,43 @@ export class WebGPUStateUploader {
     packVec3(view, off, state.fileLUT3DDomainMax[0], state.fileLUT3DDomainMax[1], state.fileLUT3DDomainMax[2]);
   }
 
-  // WGSL struct: outOfRange: i32, toneMappingEnabled: i32, toneMappingOperator: i32,
-  //   hdrHeadroom: f32, tmReinhardWhitePoint: f32, _pad0: f32, tmFilmicExposureBias: f32,
-  //   tmFilmicWhitePoint: f32, tmDragoBias: f32, tmDragoLwa: f32, tmDragoLmax: f32,
-  //   tmDragoBrightness: f32, gamutMappingEnabled: i32, gamutMappingModeCode: i32,
-  //   gamutSourceCode: i32, gamutTargetCode: i32, gamutHighlightEnabled: i32, ...
+  // Layout MUST match scene_analysis.wgsl Uniforms struct exactly:
+  //   outOfRange: i32, toneMappingEnabled: i32, toneMappingOperator: i32,
+  //   hdrHeadroom: f32, tmReinhardWhitePoint: f32, _pad0: f32,
+  //   tmFilmicExposureBias: f32, tmFilmicWhitePoint: f32,
+  //   tmDragoBias: f32, tmDragoLwa: f32, tmDragoLmax: f32, tmDragoBrightness: f32,
+  //   gamutMappingEnabled: i32, gamutMappingModeCode: i32, gamutSourceCode: i32,
+  //   gamutTargetCode: i32, gamutHighlightEnabled: i32, _pad1: i32, _pad2: i32, _pad3: i32
+  //
+  // Named offsets are exported as SCENE_ANALYSIS_OFFSETS — pinned by tests.
+  // hdrHeadroom is sourced from this.hdrHeadroom because it is not a member
+  // of InternalShaderState — see setHDRHeadroom() above.
   private packSceneAnalysis(view: DataView, state: Readonly<InternalShaderState>): void {
     const tm = state.toneMappingState;
+    // Convert string operator to int code; force 0 when disabled so the
+    // shader can dispatch on the operator alone (matches WebGL ShaderUniformUploader).
+    const operatorCode = tm.enabled ? TONE_MAPPING_OPERATOR_CODES[tm.operator] : 0;
     let off = 0;
     off = packI32(view, off, state.outOfRange);
     off = packI32(view, off, tm.enabled ? 1 : 0);
-    off = packI32(view, off, state.gamutMappingEnabled ? 1 : 0);
-    off = packI32(view, off, state.gamutMappingModeCode);
-    off = packI32(view, off, state.gamutSourceCode);
-    off = packI32(view, off, state.gamutTargetCode);
-    off = packI32(view, off, state.gamutHighlightEnabled ? 1 : 0);
-    // Tone mapping params follow
+    off = packI32(view, off, operatorCode);
+    off = packFloat(view, off, this.hdrHeadroom);
     off = packFloat(view, off, tm.reinhardWhitePoint ?? 4.0);
+    off = packFloat(view, off, 0); // _pad0
     off = packFloat(view, off, tm.filmicExposureBias ?? 2.0);
     off = packFloat(view, off, tm.filmicWhitePoint ?? 11.2);
     off = packFloat(view, off, tm.dragoBias ?? 0.85);
     off = packFloat(view, off, tm.dragoLwa ?? 0.2);
     off = packFloat(view, off, tm.dragoLmax ?? 1.5);
-    packFloat(view, off, tm.dragoBrightness ?? 2.0);
+    off = packFloat(view, off, tm.dragoBrightness ?? 2.0);
+    off = packI32(view, off, state.gamutMappingEnabled ? 1 : 0);
+    off = packI32(view, off, state.gamutMappingModeCode);
+    off = packI32(view, off, state.gamutSourceCode);
+    off = packI32(view, off, state.gamutTargetCode);
+    off = packI32(view, off, state.gamutHighlightEnabled ? 1 : 0);
+    off = packI32(view, off, 0); // _pad1
+    off = packI32(view, off, 0); // _pad2
+    packI32(view, off, 0); // _pad3
   }
 
   // WGSL struct: sharpenEnabled: u32, sharpenAmount: f32, texelSize: vec2f
