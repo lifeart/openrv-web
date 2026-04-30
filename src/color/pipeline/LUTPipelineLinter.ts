@@ -27,8 +27,7 @@
  * comments inline below.
  */
 
-import type { TransferFunction } from '../../core/image/Image';
-import type { ImageMetadata } from '../../core/image/Image';
+import type { ImageMetadata, TransferFunction } from '../../core/image/Image';
 import type { LUTPipeline, StageKind } from './LUTPipeline';
 
 export type LintSeverity = 'info' | 'warn' | 'error';
