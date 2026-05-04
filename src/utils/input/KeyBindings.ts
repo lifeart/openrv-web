@@ -5,7 +5,7 @@
  * Each shortcut maps to an action name that the KeyboardManager will dispatch to.
  */
 
-import { type KeyCombination } from './KeyboardManager';
+import type { KeyCombination } from './KeyboardManager';
 import type { BindingContext } from './ActiveContextManager';
 
 export interface KeyBindingEntry extends KeyCombination {

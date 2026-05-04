@@ -109,6 +109,13 @@ describe('PlaybackConfig', () => {
     expect(PLAYBACK_SPEED_PRESETS).toContain(1);
   });
 
+  // Drift guard: e2e/playback-edge-cases.spec.ts inlines this literal to keep
+  // Playwright's TS loader from walking through Session.ts into decorated
+  // node classes. If you change the source, update the inlined copy too.
+  it('PLAYBACK_SPEED_PRESETS literal matches the e2e spec inlined copy', () => {
+    expect(Array.from(PLAYBACK_SPEED_PRESETS)).toEqual([0.1, 0.25, 0.5, 1, 2, 4, 8]);
+  });
+
   it('MAX_CONSECUTIVE_STARVATION_SKIPS is a positive integer', () => {
     expect(typeof MAX_CONSECUTIVE_STARVATION_SKIPS).toBe('number');
     expect(MAX_CONSECUTIVE_STARVATION_SKIPS).toBeGreaterThan(0);

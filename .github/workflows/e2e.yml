@@ -93,7 +93,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests (shard ${{ matrix.shard }}/6)
+      - name: Run E2E tests (shard ${{ matrix.shard }}/5)
         run: pnpm test:e2e:ci --shard=${{ matrix.shard }}/5 --reporter=json --reporter=html
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
