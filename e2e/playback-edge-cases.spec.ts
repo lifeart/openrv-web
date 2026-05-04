@@ -16,7 +16,11 @@ import {
   waitForPlaybackSpeed,
   waitForCondition,
 } from './fixtures';
-import { PLAYBACK_SPEED_PRESETS } from '../src/core/session/Session';
+
+// Mirrors src/config/PlaybackConfig.ts. Inlined to keep e2e specs from
+// importing app source — Playwright's TS loader walks the import graph
+// and the @decorated classes downstream of Session.ts trip its Babel.
+const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
 
 /**
  * Playback Edge Cases Tests

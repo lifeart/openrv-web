@@ -1,6 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    // useDefineForClassFields:true gives ES2022 class fields [[Define]]
+    // semantics: every typed field — even uninitialized like `foo: string;` —
+    // installs an own data property on the instance, shadowing anything an
+    // ancestor or constructor installed via Object.defineProperty. Node
+    // classes in src/nodes/ rely on runtime accessors installed by
+    // defineNodeProperty()/properties.add(), so any subclass that wants to
+    // type-expose those accessors MUST use `declare foo: T` (no initializer)
+    // to suppress the field emission. See FileSourceNode.ts for the pattern.
     "useDefineForClassFields": true,
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
