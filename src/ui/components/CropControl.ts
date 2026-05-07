@@ -165,6 +165,12 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       line-height: 1;
     `;
     closeButton.addEventListener('click', () => this.hidePanel());
+    closeButton.addEventListener('pointerenter', () => {
+      closeButton.style.color = 'var(--text-primary)';
+    });
+    closeButton.addEventListener('pointerleave', () => {
+      closeButton.style.color = 'var(--text-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(closeButton);
@@ -269,6 +275,12 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       margin-top: 8px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
     this.panel.appendChild(resetBtn);
 
     // Crop dimensions display
@@ -539,6 +551,12 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       font-size: 11px;
     `;
     resetUncropBtn.addEventListener('click', () => this.resetUncrop());
+    resetUncropBtn.addEventListener('pointerenter', () => {
+      resetUncropBtn.style.background = 'var(--text-muted)';
+    });
+    resetUncropBtn.addEventListener('pointerleave', () => {
+      resetUncropBtn.style.background = 'var(--border-secondary)';
+    });
     this.panel.appendChild(resetUncropBtn);
 
     // Initial visibility sync

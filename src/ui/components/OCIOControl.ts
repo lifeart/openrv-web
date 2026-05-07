@@ -209,6 +209,12 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       align-items: center;
     `;
     loadConfigButton.addEventListener('click', () => this.handleLoadConfig());
+    loadConfigButton.addEventListener('pointerenter', () => {
+      loadConfigButton.style.background = 'var(--bg-hover)';
+    });
+    loadConfigButton.addEventListener('pointerleave', () => {
+      loadConfigButton.style.background = 'var(--bg-tertiary)';
+    });
     loadConfigRow.appendChild(loadConfigButton);
     configSection.appendChild(loadConfigRow);
 
@@ -361,6 +367,14 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       justify-content: center;
     `;
     closeButton.addEventListener('click', () => this.hide());
+    closeButton.addEventListener('pointerenter', () => {
+      closeButton.style.background = 'var(--bg-hover)';
+      closeButton.style.color = 'var(--text-primary)';
+    });
+    closeButton.addEventListener('pointerleave', () => {
+      closeButton.style.background = 'transparent';
+      closeButton.style.color = 'var(--text-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(closeButton);
@@ -496,6 +510,12 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       font-size: 12px;
     `;
     resetButton.addEventListener('click', () => this.reset());
+    resetButton.addEventListener('pointerenter', () => {
+      resetButton.style.background = 'var(--bg-hover)';
+    });
+    resetButton.addEventListener('pointerleave', () => {
+      resetButton.style.background = 'var(--bg-tertiary)';
+    });
 
     // Enable toggle
     const toggleContainer = document.createElement('label');

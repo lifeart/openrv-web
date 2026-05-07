@@ -95,6 +95,12 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
