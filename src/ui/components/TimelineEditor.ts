@@ -796,7 +796,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 300px;
+        min-width: ${PANEL_WIDTHS.panel};
         pointer-events: none;
       `;
       this.cutsContainer.appendChild(emptyMsg);
