@@ -1,7 +1,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import {
   type StereoMode,
@@ -117,7 +117,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
-      min-width: 140px;
+      min-width: ${PANEL_WIDTHS.extraCompact};
       box-shadow: ${SHADOWS.dropdown};
     `;
 

@@ -18,7 +18,7 @@ import {
 import { getIconSvg } from './shared/Icons';
 import { createButton } from './shared/Button';
 import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 
 import { Logger } from '../../utils/Logger';
@@ -51,7 +51,7 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
 
     // Style the container for curves panel
     this.draggableContainer.element.style.cssText += `
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     `;
 

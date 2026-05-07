@@ -23,7 +23,7 @@ import {
   setButtonActive,
   applyA11yFocus,
 } from '../shared/Button';
-import { Z_INDEX, SHADOWS } from '../shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from '../shared/theme';
 import { SUPPORTED_MEDIA_ACCEPT, SUPPORTED_PROJECT_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 import { ShotStatusBadge } from '../ShotStatusBadge';
@@ -722,7 +722,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     menu.id = 'version-menu';
     menu.dataset.testid = 'version-menu-dropdown';
     menu.setAttribute('role', 'menu');
-    menu.style.cssText = `position: fixed; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; box-shadow: ${SHADOWS.dropdown}; padding: 4px 0; z-index: ${Z_INDEX.dropdown}; min-width: 160px;`;
+    menu.style.cssText = `position: fixed; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; box-shadow: ${SHADOWS.dropdown}; padding: 4px 0; z-index: ${Z_INDEX.dropdown}; min-width: ${PANEL_WIDTHS.compact};`;
 
     const header = document.createElement('div');
     header.style.cssText = `padding: 4px 12px 6px; font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-primary); margin-bottom: 2px;`;
@@ -1190,7 +1190,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
-      min-width: 180px;
+      min-width: ${PANEL_WIDTHS.dropdownMenu};
     `;
 
     const items: { icon: string; label: string; action: () => void }[] = [
@@ -1344,7 +1344,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
-      min-width: 140px;
+      min-width: ${PANEL_WIDTHS.extraCompact};
     `;
 
     let activeItem: HTMLButtonElement | null = null;

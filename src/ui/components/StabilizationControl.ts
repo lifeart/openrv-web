@@ -4,7 +4,7 @@ import { createCheckboxRow } from './shared/FormElements';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
 import { DEFAULT_STABILIZATION_PARAMS } from '../../filters/StabilizeMotion';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 export { DEFAULT_STABILIZATION_PARAMS };
 export type { StabilizationParams };
@@ -90,7 +90,7 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
-      min-width: 260px;
+      min-width: ${PANEL_WIDTHS.mediumWide};
       z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);

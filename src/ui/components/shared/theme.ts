@@ -40,10 +40,25 @@ export const COLORS = {
 } as const;
 
 // Panel width tokens
+//
+// Tiers cover the full range of floating panels, dropdown menus, and
+// modal dialogs in the app. Sizes are listed from smallest to largest;
+// pick the smallest tier that fits the panel's content comfortably.
 export const PANEL_WIDTHS = {
+  extraCompact: '140px',
+  tiny: '150px',
+  compact: '160px',
+  dropdownMenu: '180px',
+  menu: '200px',
   narrow: '220px',
+  medium: '240px',
+  mediumWide: '260px',
   standard: '280px',
+  panel: '300px',
+  panelWide: '320px',
   wide: '340px',
+  dialog: '400px',
+  dialogWide: '420px',
 } as const;
 
 // Box-shadow tokens

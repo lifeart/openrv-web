@@ -492,6 +492,59 @@ export class AudioMixer extends EventEmitter<AudioMixerEvents> implements Manage
     this.emit('trackChanged', track);
   }
 
+  /**
+   * Fetch an audio resource from `url`, decode it, and add it as a track.
+   *
+   * Owns the full audio-state path: fetch → decode → addTrack → loadTrackBuffer.
+   * If a track with the same `id` already exists, it is removed and replaced.
+   *
+   * Resolves to `true` when the track was loaded, or `false` when the resource
+   * could not be fetched, decoded (e.g. video file with no audio stream), or
+   * was rejected by the network. Network/decode failures are logged at debug
+   * level — they are expected when a video has no audio track.
+   *
+   * The decoder uses a transient `AudioContext` independent of the mixer's own
+   * context so decoding does not require the mixer to be initialized first.
+   */
+  async loadTrackFromUrl(id: string, url: string, label?: string): Promise<boolean> {
+    let response: Response;
+    try {
+      response = await fetch(url, { mode: 'cors', credentials: 'same-origin' });
+    } catch (err) {
+      log.debug('AudioMixer.loadTrackFromUrl: fetch failed', { id, err });
+      return false;
+    }
+    if (!response.ok) return false;
+
+    let arrayBuffer: ArrayBuffer;
+    try {
+      arrayBuffer = await response.arrayBuffer();
+    } catch (err) {
+      log.debug('AudioMixer.loadTrackFromUrl: arrayBuffer read failed', { id, err });
+      return false;
+    }
+
+    const decodeCtx = new AudioContext();
+    let audioBuffer: AudioBuffer | null = null;
+    try {
+      audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer);
+    } catch (err) {
+      log.debug('AudioMixer.loadTrackFromUrl: decode failed (resource may have no audio)', { id, err });
+    } finally {
+      decodeCtx.close().catch((closeErr) => {
+        log.debug('AudioMixer.loadTrackFromUrl: decode context close failed', { id, closeErr });
+      });
+    }
+    if (!audioBuffer) return false;
+
+    if (this.tracks.has(id)) {
+      this.removeTrack(id);
+    }
+    this.addTrack({ id, label: label ?? id });
+    this.loadTrackBuffer(id, audioBuffer);
+    return true;
+  }
+
   // ---------------------------------------------------------------------------
   // Track control
   // ---------------------------------------------------------------------------

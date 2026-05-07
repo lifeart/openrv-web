@@ -6,7 +6,7 @@ import {
   type FrameburnField,
   type FrameburnPosition,
 } from './FrameburnCompositor';
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
 import { createSectionHeader, createSeparator } from './shared/FormElements';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
@@ -59,7 +59,7 @@ export class FrameburnSettingsMenu {
       box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
-      min-width: 320px;
+      min-width: ${PANEL_WIDTHS.panelWide};
       max-width: min(440px, calc(100vw - 16px));
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       visibility: hidden;

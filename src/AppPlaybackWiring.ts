@@ -29,6 +29,7 @@ import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
 import { showAlert, showAnnotationImportDialog, showModal } from './ui/components/shared/Modal';
 import { createButton } from './ui/components/shared/Button';
+import { PANEL_WIDTHS } from './ui/components/shared/theme';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
 import {
@@ -401,7 +402,7 @@ async function handleSequenceExport(
   const cancellationToken = { cancelled: false };
 
   const progressBody = document.createElement('div');
-  progressBody.style.cssText = 'min-width: 300px;';
+  progressBody.style.cssText = `min-width: ${PANEL_WIDTHS.panel};`;
 
   const progressText = document.createElement('div');
   progressText.setAttribute('role', 'status');

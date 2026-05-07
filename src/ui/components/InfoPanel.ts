@@ -13,7 +13,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { Logger } from '../../utils/Logger';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 const logger = new Logger('InfoPanel');
 
@@ -94,7 +94,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
       z-index: ${Z_INDEX.panel};
       pointer-events: none;
       display: none;
-      min-width: 150px;
+      min-width: ${PANEL_WIDTHS.tiny};
       max-width: 250px;
       line-height: 1.5;
     `;

@@ -13,7 +13,7 @@ import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { type DifferenceMatteState } from './DifferenceMatteControl';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import {
   ComparisonManager,
   type WipeMode,
@@ -138,7 +138,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
-      min-width: 160px;
+      min-width: ${PANEL_WIDTHS.compact};
       max-height: min(75vh, 560px);
       overflow-y: auto;
       overflow-x: hidden;

@@ -20,7 +20,7 @@ import { rgbToHsl as rgbToHslFloat } from '../../utils/color';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { displayToSourceCoordinates } from './ViewerInteraction';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 
 import { Logger } from '../../utils/Logger';
@@ -188,7 +188,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 11px;
       color: var(--text-primary);
-      min-width: 200px;
+      min-width: ${PANEL_WIDTHS.menu};
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
       pointer-events: auto;
     `;

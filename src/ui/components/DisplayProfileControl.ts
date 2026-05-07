@@ -15,7 +15,7 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { detectBrowserColorSpace, colorSpaceLabel, gamutLabel } from '../../color/BrowserColorSpace';
 import { getIconSvg } from './shared/Icons';
-import { TRANSITIONS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, TRANSITIONS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 
@@ -142,7 +142,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.dropdown.style.cssText = `
       position: fixed; background: var(--bg-secondary);
       border: 1px solid var(--border-primary); border-radius: 4px;
-      padding: 8px; min-width: 220px; z-index: ${Z_INDEX.dropdown};
+      padding: 8px; min-width: ${PANEL_WIDTHS.narrow}; z-index: ${Z_INDEX.dropdown};
       display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     `;
 

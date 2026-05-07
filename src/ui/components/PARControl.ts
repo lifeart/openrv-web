@@ -10,7 +10,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { type PARState, DEFAULT_PAR_STATE, PAR_PRESETS, isPARActive } from '../../utils/media/PixelAspectRatio';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
@@ -99,7 +99,7 @@ export class PARControl extends EventEmitter<PARControlEvents> {
       border-radius: 6px;
       box-shadow: ${SHADOWS.dropdown};
       z-index: ${Z_INDEX.dropdown};
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       padding: 6px 0;
       flex-direction: column;
     `;

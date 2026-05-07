@@ -16,7 +16,7 @@ import { applyA11yFocus } from './shared/Button';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 export class HSLQualifierControl {
   private container: HTMLElement;
@@ -100,7 +100,7 @@ export class HSLQualifierControl {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 10px;
-      min-width: 300px;
+      min-width: ${PANEL_WIDTHS.panel};
       max-height: 500px;
       overflow-y: auto;
       z-index: ${Z_INDEX.dropdown};

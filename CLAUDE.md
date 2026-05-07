@@ -1,3 +1,7 @@
+## Conventions
+
+See [docs/CONVENTIONS.md](docs/CONVENTIONS.md) for the module suffix doctrine (Manager / Service / Orchestrator / Engine / Bridge / Controller).
+
 ## Type Boundaries
 
 The remaining `Record<string, unknown>` usages (~389) are intentionally dynamic and should not be tightened without justification. They cluster around: free-form `metadata` fields on decoder/OTIO/playlist/marker payloads where the shape is per-source/per-format, plugin settings (whose shape is plugin-defined), JSON-passthrough envelopes (e.g. `Property.toJSON` / `fromJSON`, `LayoutData` validators), narrowing intermediates inside type guards (`obj as Record<string, unknown>` to safely access untrusted-input fields), debug/global handles (`globalThis.PerfTrace`, `window.__openrvDev`), and the `EffectParams` alias used by `ImageEffect` adapters (intentionally polymorphic per-effect param bag). Tightening these requires either declaring a closed shape (which the underlying data does not have) or introducing per-decoder/per-plugin generics — both of which trade simplicity for marginal type safety. Replace only when a concrete typed boundary clearly exists.

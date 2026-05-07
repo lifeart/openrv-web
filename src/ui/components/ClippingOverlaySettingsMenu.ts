@@ -4,7 +4,7 @@
  * A context menu for configuring ClippingOverlay highlight/shadow visibility and opacity.
  */
 
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
 import {
   createCheckableMenuItem,
@@ -42,7 +42,7 @@ export class ClippingOverlaySettingsMenu {
       box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       max-width: calc(100vw - 16px);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       visibility: hidden;

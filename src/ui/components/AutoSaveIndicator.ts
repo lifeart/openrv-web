@@ -6,7 +6,7 @@
  */
 
 import { getIconSvg } from './shared/Icons';
-import { Z_INDEX, SHADOWS } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import type { AutoSaveManager, AutoSaveConfig } from '../../core/session/AutoSaveManager';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import { Logger } from '../../utils/Logger';
@@ -262,7 +262,7 @@ export class AutoSaveIndicator {
       border-radius: 6px;
       box-shadow: ${SHADOWS.dropdown};
       z-index: ${Z_INDEX.dropdown};
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       max-width: calc(100vw - 16px);
       font-size: 12px;
       color: var(--text-primary, #eee);

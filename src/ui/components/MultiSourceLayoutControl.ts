@@ -17,7 +17,7 @@ import {
 import { MultiSourceLayoutManager } from '../multisource/MultiSourceLayoutManager';
 import { MultiSourceLayoutStore } from '../multisource/MultiSourceLayoutStore';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 export interface MultiSourceLayoutControlEvents extends EventMap {
   layoutChanged: MultiSourceLayoutState;
@@ -143,7 +143,7 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
       display: none;
       flex-direction: column;
       gap: 6px;
-      min-width: 200px;
+      min-width: ${PANEL_WIDTHS.menu};
       max-height: 400px;
       overflow-y: auto;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);

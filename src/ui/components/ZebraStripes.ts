@@ -10,6 +10,7 @@
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
+import { PANEL_WIDTHS } from './shared/theme';
 
 export type { ZebraState } from '../../core/types/effects';
 export { DEFAULT_ZEBRA_STATE, MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
@@ -212,7 +213,7 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
     container.className = 'zebra-dropdown-content';
     container.style.cssText = `
       padding: 8px 0;
-      min-width: 200px;
+      min-width: ${PANEL_WIDTHS.menu};
     `;
 
     // High zebras section

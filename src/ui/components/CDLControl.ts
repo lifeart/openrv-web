@@ -11,7 +11,7 @@ import {
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 export interface CDLControlEvents extends EventMap {
   cdlChanged: CDLValues;
@@ -85,7 +85,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
-      min-width: 300px;
+      min-width: ${PANEL_WIDTHS.panel};
       max-height: 80vh;
       overflow-y: auto;
       z-index: ${Z_INDEX.dropdown};
