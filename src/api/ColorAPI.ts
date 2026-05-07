@@ -181,7 +181,7 @@ export class ColorAPI extends DisposableAPI {
         if (typeof value !== 'number' || !Number.isFinite(value)) {
           throw new ValidationError(`setAdjustments() "${key}" must be a finite number`);
         }
-        (merged as unknown as Record<string, unknown>)[key] = value;
+        merged[key] = value;
       }
     }
 
@@ -761,7 +761,7 @@ export class ColorAPI extends DisposableAPI {
       if (Object.prototype.hasOwnProperty.call(options, key)) {
         const value = options[key];
         if (typeof value === 'number' && Number.isFinite(value)) {
-          (merged as unknown as Record<string, unknown>)[key] = value;
+          (merged[key] as number) = value;
         }
       }
     }

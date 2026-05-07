@@ -330,14 +330,23 @@ export class PluginSettingsStore {
             try {
               this.validateValue(pluginId, setting, parsed[setting.key]);
               defaults[setting.key] = parsed[setting.key];
-            } catch {
+            } catch (error) {
               // Invalid stored value — keep default
+              logger.debug('loadSettings: invalid stored value; keeping default', {
+                pluginId,
+                key: setting.key,
+                error,
+              });
             }
           }
         }
       }
-    } catch {
+    } catch (error) {
       // localStorage not available or corrupted data -- use defaults
+      logger.debug('loadSettings: localStorage unavailable or corrupted; using defaults', {
+        pluginId,
+        error,
+      });
     }
 
     this.cache.set(pluginId, defaults);

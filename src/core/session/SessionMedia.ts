@@ -15,7 +15,7 @@ import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/ProceduralSourceNode';
 import { SequenceSourceNodeWrapper } from './loaders/SequenceRepresentationLoader';
-import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, ProceduralSourceOptions } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
 import type { IPImage } from '../../core/image/Image';
@@ -335,19 +335,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   /**
    * Load a procedural test pattern as a source.
    */
-  loadProceduralSource(
-    pattern: PatternName,
-    options?: {
-      width?: number;
-      height?: number;
-      color?: [number, number, number, number];
-      direction?: GradientDirection;
-      cellSize?: number;
-      steps?: number;
-      fps?: number;
-      duration?: number;
-    },
-  ): void {
+  loadProceduralSource(pattern: PatternName, options?: ProceduralSourceOptions): void {
     this._host!.clearGraphData();
     this.emitSourceLoadingStarted(pattern);
 

@@ -22,6 +22,16 @@
 export type EffectCategory = 'color' | 'tone' | 'spatial' | 'diagnostic';
 
 /**
+ * Parameter bag passed to ImageEffect.apply / isActive.
+ *
+ * Each effect adapter documents and reads only the keys it understands,
+ * so this is intentionally an open-ended record. The alias exists so
+ * the structural shape can be re-typed in one place if a more specific
+ * union becomes appropriate in the future.
+ */
+export type EffectParams = Record<string, unknown>;
+
+/**
  * A single image effect that can be applied to ImageData.
  *
  * Implementations should be thin adapters that delegate to the existing
@@ -44,7 +54,7 @@ export interface ImageEffect {
    * @param params    - Arbitrary parameter bag. Each effect documents the
    *                    keys it reads. Unknown keys are ignored.
    */
-  apply(imageData: ImageData, params: Record<string, unknown>): void;
+  apply(imageData: ImageData, params: EffectParams): void;
 
   /**
    * Return true when the effect would actually change pixels for the
@@ -52,5 +62,5 @@ export interface ImageEffect {
    *
    * @param params - Same parameter bag passed to `apply`.
    */
-  isActive(params: Record<string, unknown>): boolean;
+  isActive(params: EffectParams): boolean;
 }

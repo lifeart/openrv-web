@@ -9,7 +9,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { SHADOWS } from './shared/theme';
+import { SHADOWS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { BackgroundPatternType, BackgroundPatternState } from '../../core/types/background';
@@ -114,7 +114,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       box-shadow: ${SHADOWS.dropdown};
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       min-width: 220px;
       padding: 6px 0;
       flex-direction: column;

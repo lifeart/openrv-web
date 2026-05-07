@@ -8,6 +8,9 @@
 
 import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import type { ShotGridConfig } from './ShotGridBridge';
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('ShotGridConfigUI');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -317,22 +320,25 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-    } catch {
+    } catch (error) {
       /* localStorage unavailable */
+      logger.debug('saveConfig: localStorage write failed', { error });
     }
 
     // Only store API key in sessionStorage when opted in
     if (this.rememberKeyCheckbox.checked) {
       try {
         sessionStorage.setItem(`${STORAGE_KEY}-key`, config.apiKey);
-      } catch {
+      } catch (error) {
         /* sessionStorage unavailable */
+        logger.debug('saveConfig: sessionStorage write failed', { error });
       }
     } else {
       try {
         sessionStorage.removeItem(`${STORAGE_KEY}-key`);
-      } catch {
+      } catch (error) {
         /* ignore */
+        logger.debug('saveConfig: sessionStorage remove failed', { error });
       }
     }
   }
@@ -362,8 +368,9 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
           projectId: saved.projectId,
         });
       }
-    } catch {
+    } catch (error) {
       /* corrupted data */
+      logger.debug('loadConfig: corrupted data ignored', { error });
     }
   }
 }

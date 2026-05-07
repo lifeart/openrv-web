@@ -9,7 +9,7 @@
  *   blacks:     number  (-100 to +100, default 0)
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import { applyHighlightsShadows } from '../../ui/components/ViewerEffects';
 import type { HighlightsShadowsParams } from '../../ui/components/ViewerEffects';
 
@@ -18,7 +18,7 @@ export const highlightsShadowsEffect: ImageEffect = {
   label: 'Highlights / Shadows',
   category: 'tone',
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     const hsParams: HighlightsShadowsParams = {
       highlights: (params['highlights'] as number) ?? 0,
       shadows: (params['shadows'] as number) ?? 0,
@@ -28,7 +28,7 @@ export const highlightsShadowsEffect: ImageEffect = {
     applyHighlightsShadows(imageData, hsParams);
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     const h = (params['highlights'] as number) ?? 0;
     const s = (params['shadows'] as number) ?? 0;
     const w = (params['whites'] as number) ?? 0;

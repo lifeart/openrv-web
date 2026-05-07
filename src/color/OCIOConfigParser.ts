@@ -352,14 +352,14 @@ function parseColorSpacesSection(lines: string[]): ColorSpaceDefinition[] {
             break;
           case 'encoding':
             // Only set encoding if isdata hasn't already set it to 'data'
-            if ((current as Record<string, unknown>)._isdata !== true) {
+            if ((current as { _isdata?: boolean })._isdata !== true) {
               current.encoding = normalizeEncoding(value);
             }
             break;
           case 'isdata':
             if (value === 'true' || value === 'yes') {
               current.encoding = 'data';
-              (current as Record<string, unknown>)._isdata = true;
+              (current as { _isdata?: boolean })._isdata = true;
             }
             break;
         }

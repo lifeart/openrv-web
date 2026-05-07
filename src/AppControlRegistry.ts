@@ -86,6 +86,7 @@ import type { MultiSourceLayoutControl } from './ui/components/MultiSourceLayout
 import type { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { getIconSvg } from './ui/components/shared/Icons';
 import { createPanel, createPanelHeader, type Panel } from './ui/components/shared/Panel';
+import { probeAsync } from './utils/probe';
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
@@ -903,11 +904,10 @@ export class AppControlRegistry {
       const file = logoFileInput.files?.[0];
       if (!file) return;
       if (this._disposed) return;
-      try {
-        await this.slateEditor.loadLogoFile(file);
-      } catch {
-        // Error emitted via logoError event
-      }
+      // Error surfaced via slateEditor's logoError event; swallow here.
+      await probeAsync('AppControlRegistry.loadLogoFile', () =>
+        this.slateEditor.loadLogoFile(file),
+      );
       // Guard: component may have been disposed while the async load was in flight
       if (this._disposed) return;
       logoFileInput.value = '';

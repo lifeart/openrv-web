@@ -9,6 +9,7 @@
 import type { SyncUser } from '../../network/types';
 import { USER_COLORS } from '../../network/types';
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,7 +68,7 @@ export class PresenceOverlay extends EventEmitter<PresenceOverlayEvents> {
       position: absolute;
       top: 12px;
       right: 12px;
-      z-index: 60;
+      z-index: ${Z_INDEX.viewerHud};
       display: none;
       flex-direction: row;
       gap: 6px;

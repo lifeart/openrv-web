@@ -25,6 +25,7 @@ import {
 } from './CodecUtils';
 import { Logger } from '../Logger';
 import { LRUCache } from '../LRUCache';
+import { probe as probeUtil } from '../probe';
 
 const log = new Logger('MediabunnyFrameExtractor');
 
@@ -82,19 +83,13 @@ export const _probeInternals = {
   closeProbePair(probeFrame: { close(): void } | null, probeSample: { close(): void } | null): void {
     try {
       if (probeFrame) {
-        try {
-          probeFrame.close();
-        } catch {
-          /* already closed */
-        }
+        // VideoFrame may already be closed; swallow.
+        probeUtil('MediabunnyFrameExtractor.probeFrame.close', () => probeFrame.close());
       }
     } finally {
       if (probeSample) {
-        try {
-          probeSample.close();
-        } catch {
-          /* already closed */
-        }
+        // VideoSample may already be closed; swallow.
+        probeUtil('MediabunnyFrameExtractor.probeSample.close', () => probeSample.close());
       }
     }
   },

@@ -23,6 +23,7 @@ import { LRUCache } from '../../utils/LRUCache';
 import { Logger } from '../../utils/Logger';
 import { PerfTrace } from '../../utils/PerfTrace';
 import { defineNodeProperty } from '../base/defineNodeProperty';
+import { probe } from '../../utils/probe';
 
 const log = new Logger('VideoSourceNode');
 
@@ -1089,21 +1090,13 @@ export class VideoSourceNode extends BaseSourceNode {
         // getFrameHDR(). VideoFrame produced via toVideoFrame() now belongs to
         // the IPImage; closing the sample only releases the sample wrapper.
         if (sample) {
-          try {
-            sample.close();
-          } catch {
-            /* already closed */
-          }
+          probe('VideoSourceNode.sample.close', () => sample!.close());
         }
         // If we still hold the IPImage (didn't transfer to cache), release it.
         // This covers: error during cache.set, dispose race after creation,
         // and any unexpected exit path.
         if (ipImage) {
-          try {
-            ipImage.close();
-          } catch {
-            /* already closed */
-          }
+          probe('VideoSourceNode.ipImage.close', () => ipImage!.close());
         }
       }
     })();

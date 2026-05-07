@@ -118,5 +118,5 @@ export const PerfTrace = new PerfTraceImpl();
 // Expose globally for easy console toggling:
 //   PerfTrace.enabled = true
 if (typeof globalThis !== 'undefined') {
-  (globalThis as Record<string, unknown>).PerfTrace = PerfTrace;
+  (globalThis as { PerfTrace?: PerfTraceImpl }).PerfTrace = PerfTrace;
 }

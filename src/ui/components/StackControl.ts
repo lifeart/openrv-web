@@ -1,7 +1,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type BlendMode, BLEND_MODES, BLEND_MODE_LABELS } from '../../composite/BlendModes';
 import { getIconSvg } from './shared/Icons';
-import { OPACITY } from './shared/theme';
+import { OPACITY, Z_INDEX } from './shared/theme';
 import type { StencilBox } from '../../core/types/wipe';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
@@ -108,7 +108,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       padding: 12px;
       min-width: 280px;
       max-height: 400px;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;

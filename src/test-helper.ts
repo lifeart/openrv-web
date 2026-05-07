@@ -6,6 +6,9 @@
 import type { App } from './App';
 import { getThemeManager } from './utils/ui/ThemeManager';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
+import type { DeinterlaceParams } from './filters/Deinterlace';
+import type { FilmEmulationParams } from './filters/FilmEmulation';
+import type { ColorAdjustments } from './core/types/color';
 
 declare global {
   interface Window {
@@ -150,13 +153,13 @@ export interface TestMutations {
   setSessionFrame(frame: number): void;
   getSessionSourceCount(): number;
   // Color adjustments
-  setColorAdjustments(adjustments: Record<string, number | boolean>): void;
+  setColorAdjustments(adjustments: Partial<ColorAdjustments>): void;
   resetColorAdjustments(): void;
   // Deinterlace
-  setDeinterlaceParams(params: Record<string, unknown>): void;
+  setDeinterlaceParams(params: Partial<DeinterlaceParams>): void;
   resetDeinterlace(): void;
   // Film emulation
-  setFilmEmulationParams(params: Record<string, unknown>): void;
+  setFilmEmulationParams(params: Partial<FilmEmulationParams>): void;
   resetFilmEmulation(): void;
 }
 
@@ -317,7 +320,7 @@ export interface ViewerState {
   // Color inversion state
   colorInversionEnabled: boolean;
   // Viewer color pipeline adjustments snapshot (used by HDR/tone-mapping E2E)
-  colorAdjustments: Record<string, unknown>;
+  colorAdjustments: Partial<ColorAdjustments>;
   // HDR format info
   formatName: string | null;
   bitDepth: number | null;
@@ -1639,21 +1642,21 @@ export function exposeForTesting(app: App): void {
         return appAny.session?.sources?.length ?? 0;
       },
       // ── Color Adjustments ──
-      setColorAdjustments(adjustments: Record<string, number | boolean>) {
+      setColorAdjustments(adjustments: Partial<ColorAdjustments>) {
         getControl('colorControls')?.setAdjustments?.(adjustments);
       },
       resetColorAdjustments() {
         getControl('colorControls')?.reset?.();
       },
       // ── Deinterlace ──
-      setDeinterlaceParams(params: Record<string, unknown>) {
+      setDeinterlaceParams(params: Partial<DeinterlaceParams>) {
         getControl('deinterlaceControl')?.setParams?.(params);
       },
       resetDeinterlace() {
         getControl('deinterlaceControl')?.reset?.();
       },
       // ── Film Emulation ──
-      setFilmEmulationParams(params: Record<string, unknown>) {
+      setFilmEmulationParams(params: Partial<FilmEmulationParams>) {
         getControl('filmEmulationControl')?.setParams?.(params);
       },
       resetFilmEmulation() {

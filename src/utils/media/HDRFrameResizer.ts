@@ -166,8 +166,9 @@ export class HDRFrameResizer {
           this.float16Opt = opt; // remember which worked
           break;
         }
-      } catch {
+      } catch (error) {
         /* try next */
+        log.debug('getContext failed for option; trying next', { opt, error });
       }
     }
 

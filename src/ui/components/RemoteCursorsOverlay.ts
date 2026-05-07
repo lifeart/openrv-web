@@ -12,6 +12,7 @@
 
 import type { CursorSyncPayload, SyncUser } from '../../network/types';
 import { USER_COLORS } from '../../network/types';
+import { Z_INDEX } from './shared/theme';
 
 /** How long (ms) before an idle cursor starts fading out. */
 const FADE_START_MS = 5_000;
@@ -61,7 +62,7 @@ export class RemoteCursorsOverlay {
       width: 100%;
       height: 100%;
       pointer-events: none;
-      z-index: 110;
+      z-index: ${Z_INDEX.viewerOverlayTop};
       overflow: hidden;
       display: none;
     `;

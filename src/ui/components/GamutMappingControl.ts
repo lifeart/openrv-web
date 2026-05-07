@@ -4,6 +4,7 @@ import { applyA11yFocus } from './shared/Button';
 import type { GamutMappingState, GamutMappingMode, GamutIdentifier } from '../../core/types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { Z_INDEX } from './shared/theme';
 
 export { DEFAULT_GAMUT_MAPPING_STATE };
 export type { GamutMappingState };
@@ -125,7 +126,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
       border-radius: 6px;
       padding: 12px;
       min-width: 220px;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;

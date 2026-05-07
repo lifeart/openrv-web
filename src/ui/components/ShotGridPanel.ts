@@ -14,6 +14,7 @@ import { mapStatusFromShotGrid, type ShotGridVersion } from '../../integrations/
 import type { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // URL parsing
@@ -140,7 +141,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       display: none;
       flex-direction: column;
       overflow: hidden;

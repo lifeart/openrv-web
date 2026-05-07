@@ -2,7 +2,7 @@ import { type GTOData } from 'gto-js';
 import { EventEmitter } from '../../utils/EventEmitter';
 import { basename } from '../../utils/path';
 import type { RVEDLEntry } from '../../formats/RVEDLParser';
-import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, ProceduralSourceOptions } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { PenStroke, TextAnnotation, PaintEffects } from '../../paint/types';
 import type { UncropState } from '../../core/types/transform';
@@ -1054,19 +1054,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   // Procedural source loading — delegated to SessionMedia
-  loadProceduralSource(
-    pattern: PatternName,
-    options?: {
-      width?: number;
-      height?: number;
-      color?: [number, number, number, number];
-      direction?: GradientDirection;
-      cellSize?: number;
-      steps?: number;
-      fps?: number;
-      duration?: number;
-    },
-  ): void {
+  loadProceduralSource(pattern: PatternName, options?: ProceduralSourceOptions): void {
     this._media.loadProceduralSource(pattern, options);
   }
 

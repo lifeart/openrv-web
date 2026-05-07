@@ -11,7 +11,7 @@
 import { type FalseColor, type FalseColorPreset, type ColorRange } from './FalseColor';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { SHADOWS } from './shared/theme';
+import { SHADOWS, Z_INDEX } from './shared/theme';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
@@ -101,7 +101,7 @@ export class FalseColorControl {
       border-radius: 4px;
       padding: 8px;
       min-width: 200px;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: ${SHADOWS.dropdown};
     `;

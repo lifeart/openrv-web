@@ -9,6 +9,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { Z_INDEX } from './shared/theme';
 
 export type { ScopeType, ScopesState } from '../../core/types/scopes';
 
@@ -114,7 +115,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 4px;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
       min-width: 140px;

@@ -10,6 +10,9 @@
  */
 
 import { OCIOVirtualFS } from './OCIOVirtualFS';
+import { Logger } from '../../utils/Logger';
+
+const log = new Logger('OCIOWasmModule');
 
 // ---------------------------------------------------------------------------
 // Types — mirror of the OCIO C++ API surface exposed by Emscripten
@@ -149,8 +152,9 @@ export class OCIOWasmModule {
     for (const ph of this.processors) {
       try {
         this.wasm?.ocioDestroyProcessor(ph);
-      } catch {
+      } catch (error) {
         /* best effort */
+        log.debug('dispose: ocioDestroyProcessor failed', { handle: ph, error });
       }
     }
     this.processors.clear();
@@ -159,8 +163,9 @@ export class OCIOWasmModule {
     for (const [id] of this.configs) {
       try {
         this.wasm?.ocioDestroyConfig(id);
-      } catch {
+      } catch (error) {
         /* best effort */
+        log.debug('dispose: ocioDestroyConfig failed', { handle: id, error });
       }
     }
     this.configs.clear();

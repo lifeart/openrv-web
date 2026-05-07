@@ -13,6 +13,7 @@
 import { EventEmitter } from '../../utils/EventEmitter';
 import type { EventMap } from '../../utils/EventEmitter';
 import type { MediaCacheManager, CacheStats } from '../../cache/MediaCacheManager';
+import { Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // Events
@@ -69,7 +70,7 @@ export class CacheManagementPanel extends EventEmitter<CacheManagementPanelEvent
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 12px;
       color: var(--text-primary);
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
       overflow: hidden;
     `;

@@ -16,6 +16,7 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { showAlert, showConfirm } from './shared/Modal';
 import type { ExclusivePanelRef } from './NotePanel';
+import { Z_INDEX } from './shared/theme';
 
 /**
  * Marker export JSON structure
@@ -82,7 +83,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 12px;
       color: var(--text-primary);
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       overflow: hidden;
     `;

@@ -16,6 +16,7 @@ import {
   type DisplayColorState,
   PROFILE_LABELS,
 } from '../../color/ColorProcessingFacade';
+import { Z_INDEX } from './shared/theme';
 
 export interface DisplayProfileIndicatorState {
   enabled: boolean;
@@ -57,7 +58,7 @@ export class DisplayProfileIndicator extends EventEmitter<DisplayProfileIndicato
       position: absolute;
       bottom: 36px;
       left: 16px;
-      z-index: 49;
+      z-index: ${Z_INDEX.viewerStripFg};
       pointer-events: none;
       user-select: none;
       opacity: 0;

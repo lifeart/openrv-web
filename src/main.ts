@@ -76,9 +76,13 @@ if (import.meta.env.DEV) {
 
       // Always expose the on-demand activator so devs can opt in from the
       // console even when VITE_LOAD_SAMPLE_PLUGIN=0.
-      const devHandle = (window as Window & { __openrvDev?: Record<string, unknown> }).__openrvDev ?? {};
+      interface OpenRVDevHandle {
+        activateSample?: () => Promise<void>;
+      }
+      type OpenRVDevWindow = Window & { __openrvDev?: OpenRVDevHandle };
+      const devHandle: OpenRVDevHandle = (window as OpenRVDevWindow).__openrvDev ?? {};
       devHandle.activateSample = activateSample;
-      (window as Window & { __openrvDev?: Record<string, unknown> }).__openrvDev = devHandle;
+      (window as OpenRVDevWindow).__openrvDev = devHandle;
 
       if (loadSample) {
         await activateSample();

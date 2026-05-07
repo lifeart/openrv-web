@@ -2,6 +2,7 @@ import type { NodeProcessor } from '../../base/NodeProcessor';
 import type { IPImage } from '../../../core/image/Image';
 import type { EvalContext } from '../../../core/graph/Graph';
 import { WebGLSharpenProcessor } from '../../../filters/WebGLSharpen';
+import { probe } from '../../../utils/probe';
 
 /** Minimal interface for reading sharpen parameters from the owning node. */
 interface SharpenParamsProvider {
@@ -17,11 +18,8 @@ export class GPUSharpenProcessor implements NodeProcessor {
   private gpuProcessor: WebGLSharpenProcessor | null = null;
 
   constructor(private readonly params: SharpenParamsProvider) {
-    try {
-      this.gpuProcessor = new WebGLSharpenProcessor();
-    } catch {
-      // GPU not available -- node will use its built-in CPU path
-    }
+    // GPU may be unavailable -- node will use its built-in CPU path.
+    this.gpuProcessor = probe('GPUSharpenProcessor.init', () => new WebGLSharpenProcessor()) ?? null;
   }
 
   isReady(): boolean {

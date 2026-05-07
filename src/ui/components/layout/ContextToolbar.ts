@@ -9,6 +9,7 @@ import { EventEmitter, type EventMap } from '../../../utils/EventEmitter';
 import { type TabId } from './TabBar';
 import { getIconSvg, type IconName } from '../shared/Icons';
 import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton } from '../shared/Button';
+import { Z_INDEX } from '../shared/theme';
 
 export interface ContextToolbarEvents extends EventMap {
   // Events will be added as tabs are implemented
@@ -67,7 +68,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       pointer-events: none;
       background: linear-gradient(to right, var(--bg-secondary), transparent);
       flex-shrink: 0;
-      z-index: 1;
+      z-index: ${Z_INDEX.localStack};
       display: none;
     `;
 
@@ -82,7 +83,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       pointer-events: none;
       background: linear-gradient(to left, var(--bg-secondary), transparent);
       flex-shrink: 0;
-      z-index: 1;
+      z-index: ${Z_INDEX.localStack};
       display: none;
     `;
 

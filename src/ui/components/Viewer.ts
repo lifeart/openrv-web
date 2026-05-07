@@ -44,6 +44,7 @@ import {
 } from '../../utils/export/FrameExporter';
 import { type StackLayer } from './StackControl';
 import { getIconSvg } from './shared/Icons';
+import { Z_INDEX } from './shared/theme';
 import { type ChannelMode } from './ChannelSelect';
 import { DEFAULT_BLEND_MODE_STATE, type BlendModeState } from './ComparisonManager';
 import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
@@ -912,7 +913,7 @@ export class Viewer implements ViewerAccessor {
       align-items: center;
       justify-content: center;
       pointer-events: none;
-      z-index: 100;
+      z-index: ${Z_INDEX.viewerOverlayHigh};
     `;
     this.dropOverlay.innerHTML = `
       <div style="text-align: center; color: var(--accent-primary); font-size: 18px;">
@@ -1200,8 +1201,9 @@ export class Viewer implements ViewerAccessor {
         localStorage.removeItem(LEGACY_MISSING_FRAME_MODE_STORAGE_KEY);
         return legacy;
       }
-    } catch {
+    } catch (error) {
       // Ignore storage errors (private mode, disabled storage, etc.)
+      log.debug('loadMissingFrameModePreference failed', { error });
     }
     return 'show-frame';
   }
@@ -1209,8 +1211,9 @@ export class Viewer implements ViewerAccessor {
   private persistMissingFrameModePreference(): void {
     try {
       localStorage.setItem(MISSING_FRAME_MODE_STORAGE_KEY, this.missingFrameMode);
-    } catch {
+    } catch (error) {
       // Ignore storage errors
+      log.debug('persistMissingFrameModePreference failed', { error });
     }
   }
 
@@ -4207,7 +4210,7 @@ export class Viewer implements ViewerAccessor {
       this._referenceCanvas.className = 'reference-overlay';
       this._referenceCanvas.dataset.testid = 'reference-overlay';
       this._referenceCanvas.style.cssText =
-        'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:35;';
+        `position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:${Z_INDEX.viewerOverlayLow};`;
       this.canvasContainer.appendChild(this._referenceCanvas);
       this._referenceCtx = this._referenceCanvas.getContext('2d');
     }

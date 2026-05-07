@@ -6,6 +6,7 @@
  */
 
 import { formatRatio, findPresetForRatio } from './ScalePresets';
+import { Z_INDEX } from './shared/theme';
 
 const DISPLAY_DURATION_MS = 1500;
 const FADE_DURATION_MS = 300;
@@ -34,7 +35,7 @@ export class ScaleRatioIndicator {
       font-size: 14px;
       font-weight: 600;
       pointer-events: none;
-      z-index: 100;
+      z-index: ${Z_INDEX.viewerOverlayHigh};
       opacity: 0;
       transition: opacity ${FADE_DURATION_MS}ms ease;
       display: none;

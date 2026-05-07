@@ -20,6 +20,7 @@ import { getCSSColor } from '../../utils/ui/getCSSColor';
 import type { OverlayPosition } from './TimecodeOverlay';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
 import type { PreferencesManager, FPSIndicatorPrefs } from '../../core/PreferencesManager';
+import { Z_INDEX } from './shared/theme';
 
 export interface FPSIndicatorState {
   enabled: boolean;
@@ -102,7 +103,7 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
     this.container.dataset.testid = 'fps-indicator';
     this.container.style.cssText = `
       position: absolute;
-      z-index: 50;
+      z-index: ${Z_INDEX.viewerOverlay};
       display: none;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       user-select: none;

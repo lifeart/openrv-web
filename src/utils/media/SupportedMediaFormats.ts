@@ -3,6 +3,10 @@
  * and media type detection in SessionMedia.
  */
 
+import { Logger } from '../Logger';
+
+const logger = new Logger('SupportedMediaFormats');
+
 /**
  * Image extensions supported by FileSourceNode (including HDR/pro formats)
  * plus common browser-native image formats.
@@ -168,8 +172,9 @@ export async function detectMediaTypeFromFileBytes(file: File): Promise<'image' 
     if (format !== null) {
       return 'image';
     }
-  } catch {
+  } catch (error) {
     // Read or import failed — fall through to unknown
+    logger.debug('detectMediaTypeFromFileBytes: probe failed', { name: file.name, error });
   }
   return 'unknown';
 }
@@ -263,8 +268,9 @@ export async function detectMediaTypeFromUrl(url: string): Promise<'image' | 'vi
     if (VIDEO_MIME_ALIASES.has((contentType.split(';')[0] ?? '').trim())) {
       return 'video';
     }
-  } catch {
+  } catch (error) {
     // Network error, timeout, or abort — fall through to default
+    logger.debug('HEAD probe failed; defaulting to image', { error });
   }
 
   return 'image';

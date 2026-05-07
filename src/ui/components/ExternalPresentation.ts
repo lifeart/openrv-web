@@ -544,8 +544,9 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
     try {
       // Attach session ID to all outbound messages
       this.channel.postMessage({ ...message, sessionId: this.sessionId });
-    } catch {
+    } catch (error) {
       // Channel may have been closed
+      logger.debug('broadcast: postMessage failed (channel likely closed)', { error });
     }
   }
 

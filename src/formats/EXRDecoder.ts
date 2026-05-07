@@ -23,6 +23,9 @@ import { decompressPIZ } from './EXRPIZCodec';
 import { decompressDWA } from './EXRDWACodec';
 import { validateImageDimensions } from './shared';
 import { DecoderError } from '../core/errors';
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('EXRDecoder');
 
 // EXR magic number
 const EXR_MAGIC = 0x01312f76;
@@ -862,8 +865,9 @@ async function inflateRaw(compressedData: Uint8Array): Promise<Uint8Array> {
         inflateSync: (buf: Uint8Array) => Uint8Array;
       }>);
       return new Uint8Array(zlib.inflateSync(compressedData));
-    } catch {
+    } catch (error) {
       // Fall through to DecompressionStream
+      logger.debug('Node zlib inflate failed; falling back to DecompressionStream', { error });
     }
   }
 

@@ -699,8 +699,9 @@ export class AudioMixer extends EventEmitter<AudioMixerEvents> implements Manage
       try {
         track.sourceNode.stop();
         track.sourceNode.disconnect();
-      } catch {
+      } catch (error) {
         /* ignore already stopped */
+        log.debug('stopTrackPlayback: source.stop/disconnect failed', { error });
       }
       track.sourceNode = null;
     }

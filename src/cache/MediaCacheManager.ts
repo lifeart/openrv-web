@@ -228,8 +228,9 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
 
       try {
         await this.mediaDir.removeEntry(`${entry.key}.bin`);
-      } catch {
+      } catch (error) {
         // File may already be gone
+        log.debug('removeEntry failed (file likely already gone)', { key: entry.key, error });
       }
       await this.deleteManifestEntry(entry.key);
       freedBytes += entry.sizeBytes;
@@ -308,8 +309,9 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
         try {
           await this.mediaDir.removeEntry(name);
           removed++;
-        } catch {
+        } catch (error) {
           // best effort
+          log.debug('cleanup orphan removeEntry failed', { name, error });
         }
       }
     }
@@ -348,15 +350,16 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
       const probeHandle = await this.mediaDir.getFileHandle(probeName, { create: true });
       const supported =
         'createWritable' in probeHandle &&
-        typeof (probeHandle as unknown as Record<string, unknown>).createWritable === 'function';
+        typeof (probeHandle as { createWritable?: unknown }).createWritable === 'function';
       return supported;
     } catch {
       return false;
     } finally {
       try {
         await this.mediaDir.removeEntry(probeName);
-      } catch {
+      } catch (error) {
         // best effort cleanup
+        log.debug('probe cleanup removeEntry failed', { probeName, error });
       }
     }
   }
@@ -370,7 +373,7 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
       // Use createWritable when available (standard OPFS API)
       if (
         'createWritable' in fileHandle &&
-        typeof (fileHandle as unknown as Record<string, unknown>).createWritable === 'function'
+        typeof (fileHandle as { createWritable?: unknown }).createWritable === 'function'
       ) {
         const writable = await (
           fileHandle as unknown as { createWritable(): Promise<WritableStream> }

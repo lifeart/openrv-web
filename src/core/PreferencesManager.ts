@@ -21,6 +21,7 @@ import type { OCIOStateManager } from '../ui/components/OCIOStateManager';
 import type { DisplayColorState } from '../color/DisplayTransfer';
 import type { TimecodeDisplayMode } from '../utils/media/Timecode';
 import { DCC_STORAGE_KEY, DEFAULT_DCC_PREFS, sanitizeDCCPrefs, type DCCPrefs } from '../integrations/DCCSettings';
+import { sanitizeFrameburnConfig, type FrameburnConfig } from '../ui/components/FrameburnCompositor';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
@@ -71,7 +72,7 @@ export interface ExportDefaults {
   defaultQuality: number;
   includeAnnotations: boolean;
   frameburnEnabled: boolean;
-  frameburnConfig: Record<string, unknown> | null;
+  frameburnConfig: FrameburnConfig | null;
 }
 
 export interface GeneralPrefs {
@@ -216,7 +217,7 @@ function sanitizeExportDefaults(value: unknown): ExportDefaults {
   if (value.frameburnConfig === null) {
     out.frameburnConfig = null;
   } else if (isRecord(value.frameburnConfig)) {
-    out.frameburnConfig = value.frameburnConfig;
+    out.frameburnConfig = sanitizeFrameburnConfig(value.frameburnConfig);
   }
 
   return out;

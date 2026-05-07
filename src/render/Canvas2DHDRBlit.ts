@@ -64,8 +64,15 @@ export class Canvas2DHDRBlit {
   initialize(): void {
     if (this._initialized) return;
 
+    // Settings shape for HDR-aware Canvas 2D context creation.
+    // `colorType` is the modern Chrome 137+ key; `pixelFormat` is the legacy Chrome <137 key.
+    interface HDRCanvas2DSettings {
+      colorSpace: 'srgb-linear' | 'rec2100-hlg';
+      colorType?: 'float16';
+      pixelFormat?: 'float16';
+    }
     // Try each combination in priority order
-    const attempts: Array<{ colorSpace: string; settings: Record<string, unknown> }> = [
+    const attempts: Array<{ colorSpace: string; settings: HDRCanvas2DSettings }> = [
       // 1. srgb-linear + colorType (Chrome 137+)
       { colorSpace: 'srgb-linear', settings: { colorSpace: 'srgb-linear', colorType: 'float16' } },
       // 2. srgb-linear + pixelFormat (Chrome <137 legacy)

@@ -15,6 +15,7 @@ import { type StrokePoint, ShapeType, type Point } from '../../paint/types';
 import { type Session } from '../../core/session/Session';
 import { filterImageFiles, getBestSequence, inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
 import { showAlert } from './shared/Modal';
+import { Z_INDEX } from './shared/theme';
 import {
   type PointerState,
   getCanvasPoint as getCanvasPointUtil,
@@ -944,7 +945,7 @@ export class ViewerInputHandler {
       border-radius: 3px;
       outline: none;
       resize: both;
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       white-space: pre-wrap;
       overflow: auto;
     `;

@@ -2,7 +2,8 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type LUT, parseLUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
-import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
+import { createColorSliderRow } from './shared/FormElements';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
@@ -111,7 +112,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       min-width: ${PANEL_WIDTHS.standard};
       max-height: 80vh;
       overflow-y: auto;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: ${SHADOWS.panel};
     `;
@@ -484,80 +485,37 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     step: number;
     format: (v: number) => string;
   }): HTMLElement {
-    const row = document.createElement('div');
-    row.style.cssText = `
-      display: flex;
-      align-items: center;
-      margin-bottom: 8px;
-      gap: 8px;
-    `;
-
-    // Label
-    const label = document.createElement('label');
-    label.textContent = config.label;
-    label.style.cssText = `
-      color: var(--text-primary);
-      font-size: 12px;
-      width: 80px;
-      flex-shrink: 0;
-    `;
-
-    // Slider
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(config.min);
-    slider.max = String(config.max);
-    slider.step = String(config.step);
-    slider.value = String(this.adjustments[config.key]);
-    slider.dataset.testid = `slider-${config.key}`;
-    slider.style.cssText = `
-      flex: 1;
-      height: 4px;
-      cursor: pointer;
-      accent-color: var(--accent-primary);
-    `;
-
-    // Value display
-    const valueLabel = document.createElement('span');
-    valueLabel.textContent = config.format(this.adjustments[config.key]);
-    valueLabel.style.cssText = `
-      color: var(--text-secondary);
-      font-size: 11px;
-      width: 50px;
-      text-align: right;
-      font-family: monospace;
-    `;
+    const { container, slider, valueLabel } = createColorSliderRow({
+      label: config.label,
+      value: this.adjustments[config.key],
+      min: config.min,
+      max: config.max,
+      step: config.step,
+      format: config.format,
+      sliderTestId: `slider-${config.key}`,
+      defaultValue: DEFAULT_COLOR_ADJUSTMENTS[config.key],
+      onInput: (value) => {
+        this.adjustments[config.key] = value as never;
+        // Update skin protection indicator when vibrance changes
+        if (config.key === 'vibrance') {
+          this.updateSkinProtectionIndicator();
+        }
+        this.throttledEmitAdjustments();
+      },
+      onReset: (defaultValue) => {
+        this.adjustments[config.key] = defaultValue;
+        if (config.key === 'vibrance') {
+          this.updateSkinProtectionIndicator();
+        }
+        this.emit('adjustmentsChanged', { ...this.adjustments });
+      },
+    });
 
     // Store references
     this.sliders.set(config.key, slider);
     this.valueLabels.set(config.key, valueLabel);
 
-    // Event handling - throttled to avoid excessive render calls during drags
-    slider.addEventListener('input', () => {
-      const value = parseFloat(slider.value);
-      this.adjustments[config.key] = value as never;
-      valueLabel.textContent = config.format(value);
-      // Update skin protection indicator when vibrance changes
-      if (config.key === 'vibrance') {
-        this.updateSkinProtectionIndicator();
-      }
-      this.throttledEmitAdjustments();
-    });
-
-    // Double-click to reset individual slider
-    slider.addEventListener('dblclick', () => {
-      const defaultValue = DEFAULT_COLOR_ADJUSTMENTS[config.key];
-      slider.value = String(defaultValue);
-      this.adjustments[config.key] = defaultValue;
-      valueLabel.textContent = config.format(defaultValue);
-      this.emit('adjustmentsChanged', { ...this.adjustments });
-    });
-
-    row.appendChild(label);
-    row.appendChild(slider);
-    row.appendChild(valueLabel);
-
-    return row;
+    return container;
   }
 
   private skinProtectionCheckbox: HTMLInputElement | null = null;
@@ -736,10 +694,11 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
   setAdjustments(adjustments: Partial<ColorAdjustments>): void {
     // Sanitize numeric values: reject NaN/Infinity
-    const sanitized = { ...adjustments };
+    const sanitized: Partial<ColorAdjustments> = { ...adjustments };
     for (const [key, value] of Object.entries(sanitized)) {
       if (typeof value === 'number' && !Number.isFinite(value)) {
-        (sanitized as Record<string, unknown>)[key] = DEFAULT_COLOR_ADJUSTMENTS[key as keyof ColorAdjustments];
+        const k = key as keyof ColorAdjustments;
+        (sanitized[k] as ColorAdjustments[typeof k]) = DEFAULT_COLOR_ADJUSTMENTS[k];
       }
     }
 

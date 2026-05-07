@@ -6,6 +6,7 @@
  */
 
 import { showAlert } from '../ui/components/shared/Modal';
+import { Z_INDEX } from '../ui/components/shared/theme';
 
 // ---------------------------------------------------------------------------
 // Buffering overlay
@@ -40,7 +41,7 @@ function showBufferingOverlay(): void {
     bottom: 64px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 10000;
+    z-index: ${Z_INDEX.modal};
     display: flex;
     align-items: center;
     gap: 8px;

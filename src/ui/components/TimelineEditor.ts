@@ -137,7 +137,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       height: 100%;
       background: var(--accent-primary, #4a90d9);
       pointer-events: none;
-      z-index: 10;
+      z-index: ${Z_INDEX.localStackHigh};
       left: 0px;
     `;
 
@@ -153,7 +153,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       border-right: 5px solid transparent;
       border-bottom: 6px solid var(--accent-primary, #4a90d9);
       pointer-events: none;
-      z-index: 10;
+      z-index: ${Z_INDEX.localStackHigh};
       left: 0px;
       transform: translateX(-5px);
     `;

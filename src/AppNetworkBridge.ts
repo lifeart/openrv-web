@@ -880,8 +880,9 @@ export class AppNetworkBridge {
       controlWithShare.setShareLinkKind?.('invite');
       controlWithShare.setResponseToken?.('');
       controlWithShare.setShareLink?.(shareLink);
-    } catch {
+    } catch (error) {
       // Keep existing share URL on preview update errors.
+      logger.debug('share link preview update failed; keeping existing URL', { error });
     }
   }
 
@@ -948,8 +949,9 @@ export class AppNetworkBridge {
     if (typeof uiWithPrompt.promptMediaSyncConfirmation === 'function') {
       try {
         return await uiWithPrompt.promptMediaSyncConfirmation({ fileCount, totalBytes });
-      } catch {
+      } catch (error) {
         // fall through to browser confirm
+        logger.warn('promptMediaSyncConfirmation failed; falling back to browser confirm', { error });
       }
     }
 

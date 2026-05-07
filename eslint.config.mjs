@@ -47,8 +47,7 @@ export default tseslint.config(
     rules: {
       // Style
       'no-console': ['error', { allow: ['log'] }],
-      // no-empty kept at 'warn' until CONS-1 sweeps complete; flip to 'error' after.
-      'no-empty': ['warn', { allowEmptyCatch: false }],
+      'no-empty': ['error', { allowEmptyCatch: false }],
       'prefer-const': 'error',
       'no-var': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],

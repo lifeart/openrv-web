@@ -279,7 +279,7 @@ export class FrameburnSettingsMenu {
     this.preferencesManager.setExportDefaults({
       ...defaults,
       frameburnEnabled: normalized.enabled,
-      frameburnConfig: normalized as unknown as Record<string, unknown>,
+      frameburnConfig: normalized,
     } satisfies Partial<ExportDefaults>);
     this.renderMenuContents();
   }

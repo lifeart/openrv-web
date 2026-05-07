@@ -14,7 +14,7 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getIconSvg } from './shared/Icons';
 import { showConfirm } from './shared/Modal';
-import { OPACITY } from './shared/theme';
+import { OPACITY, Z_INDEX } from './shared/theme';
 import type { ExclusivePanelRef } from './NotePanel';
 
 export interface HistoryPanelEvents extends EventMap {
@@ -56,7 +56,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 12px;
       color: var(--text-primary);
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
       overflow: hidden;
     `;

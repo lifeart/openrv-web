@@ -143,6 +143,162 @@ export function createSliderRow(
 }
 
 /**
+ * Options for createColorSliderRow.
+ *
+ * Visual styling defaults match the ColorControls panel (the more polished
+ * reference layout). LeftPanelContent overrides the size-related fields to
+ * produce a compact variant of the same row.
+ */
+export interface ColorSliderRowOptions {
+  /** Visible label text. */
+  label: string;
+  /** Initial slider value. */
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  /** Formats the numeric value for display. Required so callers control rounding/units. */
+  format: (value: number) => string;
+  /** Called for every slider input event with the parsed numeric value. */
+  onInput: (value: number) => void;
+  /** When provided, double-clicking the label resets to this value and invokes onReset. */
+  defaultValue?: number;
+  /** Called when the user double-clicks the label to reset. Receives the default value. */
+  onReset?: (value: number) => void;
+  /** data-testid for the slider element. */
+  sliderTestId?: string;
+  /** Width of the label column. Default `'80px'` (ColorControls). */
+  labelWidth?: string;
+  /** Font size of the label. Default `'12px'` (ColorControls). */
+  labelFontSize?: string;
+  /** CSS variable name for label color (without `var()`). Default `'--text-primary'`. */
+  labelColorVar?: string;
+  /** Font size of the value display. Default `'11px'` (ColorControls). */
+  valueFontSize?: string;
+  /** Width of the value display column. Default `'50px'` (ColorControls). */
+  valueWidth?: string;
+  /** CSS variable name for value color (without `var()`). Default `'--text-secondary'`. */
+  valueColorVar?: string;
+  /** Height of the slider track. Default `'4px'` (ColorControls). */
+  sliderHeight?: string;
+  /** Bottom margin of the row. Default `'8px'` (ColorControls). */
+  marginBottom?: string;
+  /** Horizontal gap between row children. Default `'8px'` (ColorControls). */
+  gap?: string;
+}
+
+/**
+ * Create a color-style slider row with label, range input, and value display.
+ *
+ * Shared between {@link ColorControls} and {@link LeftPanelContent}. Defaults
+ * match the ColorControls (full panel) styling; the compact LeftPanelContent
+ * variant overrides label/value sizes via options. Double-clicking the label
+ * resets to `defaultValue` (used by both panels).
+ */
+export function createColorSliderRow(options: ColorSliderRowOptions): {
+  container: HTMLElement;
+  slider: HTMLInputElement;
+  valueLabel: HTMLSpanElement;
+  label: HTMLLabelElement;
+} {
+  const {
+    label,
+    value,
+    min,
+    max,
+    step,
+    format,
+    onInput,
+    defaultValue,
+    onReset,
+    sliderTestId,
+    labelWidth = '80px',
+    labelFontSize = '12px',
+    labelColorVar = '--text-primary',
+    valueFontSize = '11px',
+    valueWidth = '50px',
+    valueColorVar = '--text-secondary',
+    sliderHeight = '4px',
+    marginBottom = '8px',
+    gap = '8px',
+  } = options;
+
+  const row = document.createElement('div');
+  row.style.cssText = `
+    display: flex;
+    align-items: center;
+    margin-bottom: ${marginBottom};
+    gap: ${gap};
+  `;
+
+  const labelEl = document.createElement('label');
+  labelEl.textContent = label;
+  const labelHasReset = defaultValue !== undefined && onReset !== undefined;
+  labelEl.style.cssText = `
+    color: var(${labelColorVar});
+    font-size: ${labelFontSize};
+    width: ${labelWidth};
+    flex-shrink: 0;
+    ${labelHasReset ? 'cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' : ''}
+  `;
+  if (labelHasReset) {
+    labelEl.title = 'Double-click to reset';
+  }
+
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = String(min);
+  slider.max = String(max);
+  slider.step = String(step);
+  slider.value = String(value);
+  if (sliderTestId) {
+    slider.dataset.testid = sliderTestId;
+  }
+  slider.style.cssText = `
+    flex: 1;
+    height: ${sliderHeight};
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+    min-width: 0;
+  `;
+
+  const valueLabel = document.createElement('span');
+  valueLabel.textContent = format(value);
+  valueLabel.style.cssText = `
+    color: var(${valueColorVar});
+    font-size: ${valueFontSize};
+    width: ${valueWidth};
+    text-align: right;
+    font-family: monospace;
+    flex-shrink: 0;
+  `;
+
+  slider.addEventListener('input', () => {
+    const val = parseFloat(slider.value);
+    valueLabel.textContent = format(val);
+    onInput(val);
+  });
+
+  if (labelHasReset) {
+    const resetHandler = () => {
+      slider.value = String(defaultValue);
+      valueLabel.textContent = format(defaultValue);
+      onReset(defaultValue);
+    };
+    // Reset on dblclick of either the label (panel UI affordance) or the
+    // slider track (ColorControls historical behavior).
+    labelEl.addEventListener('dblclick', resetHandler);
+    slider.addEventListener('dblclick', resetHandler);
+  }
+
+  row.appendChild(labelEl);
+  row.appendChild(slider);
+  row.appendChild(valueLabel);
+
+  return { container: row, slider, valueLabel, label: labelEl };
+}
+
+/**
  * Options for createSliderControl.
  */
 export interface SliderControlOptions {

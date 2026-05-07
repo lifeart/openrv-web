@@ -7,6 +7,7 @@
  */
 
 import type { VirtualSliderParam } from './VirtualSliderConfig';
+import { Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // HUD element management
@@ -112,7 +113,7 @@ export class VirtualSliderHUD {
       left: 50%;
       transform: translateX(-50%);
       width: clamp(300px, 50%, 500px);
-      z-index: 60;
+      z-index: ${Z_INDEX.viewerHud};
       display: none;
       align-items: center;
       gap: 10px;

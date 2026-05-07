@@ -176,7 +176,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.15s ease;
-      z-index: 1;
+      z-index: ${Z_INDEX.localStack};
     `;
 
     // Left fade

@@ -13,6 +13,7 @@
 
 import { parseFrameInput, getFormatLabel, type FrameInputResult } from '../../utils/media/FrameInputParser';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { Z_INDEX } from './shared/theme';
 
 /**
  * Minimal session interface used by GotoFrameOverlay.
@@ -55,7 +56,7 @@ export class GotoFrameOverlay {
       bottom: 90px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 60;
+      z-index: ${Z_INDEX.viewerHud};
       display: none;
       flex-direction: column;
       gap: 8px;

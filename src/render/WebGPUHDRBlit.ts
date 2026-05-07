@@ -354,8 +354,9 @@ export class WebGPUHDRBlit {
     if (this.gpuContext) {
       try {
         this.gpuContext.unconfigure();
-      } catch {
+      } catch (error) {
         /* context may be lost */
+        log.debug('dispose: gpuContext.unconfigure failed (context may be lost)', { error });
       }
       this.gpuContext = null;
     }

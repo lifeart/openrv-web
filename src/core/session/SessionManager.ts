@@ -247,8 +247,13 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         for (const child of children) {
           try {
             graph.connect(child, parent);
-          } catch {
+          } catch (error) {
             // Cycle detection may prevent some re-parenting
+            logger.debug('reparent: graph.connect skipped (cycle or invalid)', {
+              childId: child.id,
+              parentId: parent.id,
+              error,
+            });
           }
         }
       }

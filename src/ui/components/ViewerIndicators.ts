@@ -11,6 +11,10 @@
 import type { TextureFilterMode } from '../../core/types/filter';
 import type { Session } from '../../core/session/Session';
 import type { WipeManager } from './WipeManager';
+import { Logger } from '../../utils/Logger';
+import { Z_INDEX } from './shared/theme';
+
+const logger = new Logger('ViewerIndicators');
 
 /**
  * Storage key for filter mode preference.
@@ -34,7 +38,7 @@ export function createLutIndicator(): HTMLElement {
     border-radius: 4px;
     font-size: 11px;
     font-weight: 600;
-    z-index: 60;
+    z-index: ${Z_INDEX.viewerHud};
     display: none;
     pointer-events: none;
   `;
@@ -59,7 +63,7 @@ export function createABIndicator(): HTMLElement {
     border-radius: 4px;
     font-size: 12px;
     font-weight: 700;
-    z-index: 60;
+    z-index: ${Z_INDEX.viewerHud};
     display: none;
     pointer-events: none;
   `;
@@ -84,7 +88,7 @@ export function createFilterModeBadge(): HTMLElement {
     border-radius: 4px;
     font-size: 11px;
     font-weight: 700;
-    z-index: 60;
+    z-index: ${Z_INDEX.viewerHud};
     display: none;
     pointer-events: none;
   `;
@@ -159,7 +163,7 @@ export function showFilterModeIndicator(
     font-size: 12px;
     padding: 6px 14px;
     border-radius: 4px;
-    z-index: 100;
+    z-index: ${Z_INDEX.viewerOverlayHigh};
     pointer-events: none;
     opacity: 1;
     transition: opacity 0.3s ease-out;
@@ -209,7 +213,7 @@ export function showFitModeIndicator(container: HTMLElement, mode: 'all' | 'widt
     font-size: 14px;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     pointer-events: none;
-    z-index: 1000;
+    z-index: ${Z_INDEX.sidePanel};
     transition: opacity 0.3s ease;
     opacity: 1;
   `;
@@ -232,8 +236,9 @@ export function loadFilterModePreference(): TextureFilterMode {
   try {
     const stored = localStorage.getItem(FILTER_MODE_STORAGE_KEY);
     if (stored === 'nearest' || stored === 'linear') return stored;
-  } catch {
+  } catch (error) {
     // localStorage may be unavailable
+    logger.debug('loadFilterModePreference failed', { error });
   }
   return 'linear';
 }
@@ -244,7 +249,8 @@ export function loadFilterModePreference(): TextureFilterMode {
 export function persistFilterModePreference(mode: TextureFilterMode): void {
   try {
     localStorage.setItem(FILTER_MODE_STORAGE_KEY, mode);
-  } catch {
+  } catch (error) {
     // localStorage may be unavailable
+    logger.debug('persistFilterModePreference failed', { error });
   }
 }

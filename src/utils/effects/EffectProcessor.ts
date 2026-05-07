@@ -70,14 +70,14 @@ import {
  * Uses the modern scheduler.yield() API when available, falling back
  * to setTimeout(0) for broader compatibility.
  */
+interface SchedulerYieldGlobal {
+  scheduler?: { yield?: () => Promise<void> };
+}
 export function yieldToMain(): Promise<void> {
-  if (
-    'scheduler' in globalThis &&
-    typeof (globalThis as Record<string, unknown>).scheduler === 'object' &&
-    (globalThis as Record<string, unknown>).scheduler !== null &&
-    'yield' in ((globalThis as Record<string, unknown>).scheduler as Record<string, unknown>)
-  ) {
-    return ((globalThis as Record<string, unknown>).scheduler as { yield: () => Promise<void> }).yield();
+  const g = globalThis as SchedulerYieldGlobal;
+  const sched = g.scheduler;
+  if (sched && typeof sched === 'object' && typeof sched.yield === 'function') {
+    return sched.yield();
   }
   return new Promise((resolve) => setTimeout(resolve, 0));
 }

@@ -9,6 +9,9 @@ import { getIconSvg } from './shared/Icons';
 import { Z_INDEX, SHADOWS } from './shared/theme';
 import type { AutoSaveManager, AutoSaveConfig } from '../../core/session/AutoSaveManager';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('AutoSaveIndicator');
 
 /** Auto-save status */
 export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'disabled';
@@ -467,8 +470,9 @@ export class AutoSaveIndicator {
           maxVersions: config.maxVersions,
         }),
       );
-    } catch {
-      // Ignore storage errors
+    } catch (error) {
+      // Ignore storage errors (private mode, quota exceeded, etc.)
+      logger.debug('saveConfigToStorage failed', { error });
     }
   }
 

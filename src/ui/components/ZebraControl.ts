@@ -11,7 +11,7 @@ import { type ZebraStripes } from './ZebraStripes';
 import { MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export class ZebraControl {
@@ -105,7 +105,7 @@ export class ZebraControl {
       border-radius: 4px;
       padding: 8px;
       min-width: ${PANEL_WIDTHS.narrow};
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: ${SHADOWS.dropdown};
     `;

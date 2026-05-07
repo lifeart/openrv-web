@@ -507,8 +507,12 @@ export class SessionSerializer {
                 loadedMedia++;
                 continue;
               }
-            } catch {
+            } catch (error) {
               // Cache lookup failed – fall through to file picker
+              logger.debug('OPFS cache lookup failed; falling through to file picker', {
+                opfsCacheKey: ref.opfsCacheKey,
+                error,
+              });
             }
           }
 

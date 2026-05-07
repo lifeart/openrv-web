@@ -2,6 +2,8 @@
  * Injects global CSS for focus-visible outlines and skip-link styling.
  */
 
+import { Z_INDEX } from '../components/shared/theme';
+
 const A11Y_STYLE_ID = 'openrv-a11y-styles';
 
 export function injectA11yStyles(): void {
@@ -24,7 +26,7 @@ export function injectA11yStyles(): void {
       padding: 8px 16px;
       background: var(--accent-primary);
       color: white;
-      z-index: 100000;
+      z-index: ${Z_INDEX.a11ySkipLink};
       text-decoration: none;
       font-size: 14px;
     }

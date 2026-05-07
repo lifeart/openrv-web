@@ -13,6 +13,7 @@
 import type { EventMap } from '../../utils/EventEmitter';
 import { CanvasOverlay } from './CanvasOverlay';
 import { clamp } from '../../utils/math';
+import { probe } from '../../utils/probe';
 
 export interface SpotlightEvents extends EventMap {
   stateChanged: SpotlightState;
@@ -211,11 +212,9 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
   private onPointerUp = (e: PointerEvent): void => {
     if (this.isDragging || this.isResizing) {
       // Release pointer capture (may already be released)
-      try {
-        this.canvas.releasePointerCapture(e.pointerId);
-      } catch {
-        // Pointer capture may have already been released
-      }
+      probe('SpotlightOverlay.releasePointerCapture', () =>
+        this.canvas.releasePointerCapture(e.pointerId),
+      );
       // Reset cursor
       this.canvas.style.cursor = '';
     }

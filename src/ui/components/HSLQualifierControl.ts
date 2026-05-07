@@ -16,6 +16,7 @@ import { applyA11yFocus } from './shared/Button';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { Z_INDEX } from './shared/theme';
 
 export class HSLQualifierControl {
   private container: HTMLElement;
@@ -102,7 +103,7 @@ export class HSLQualifierControl {
       min-width: 300px;
       max-height: 500px;
       overflow-y: auto;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     `;

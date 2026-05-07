@@ -71,6 +71,24 @@ export interface MovieProcParams {
   steps?: number; // grey_ramp step count (clamped to >= 2)
 }
 
+/**
+ * Options accepted by `Session.loadProceduralSource()` / `MediaAPI.loadProceduralSource()`.
+ *
+ * Different patterns honour different fields: `solid` reads `color`, `checkerboard`
+ * reads `cellSize`, `grey_ramp` reads `steps`, etc. Unsupported keys for a given
+ * pattern are silently ignored.
+ */
+export interface ProceduralSourceOptions {
+  width?: number;
+  height?: number;
+  color?: [number, number, number, number];
+  direction?: GradientDirection;
+  cellSize?: number;
+  steps?: number;
+  fps?: number;
+  duration?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------

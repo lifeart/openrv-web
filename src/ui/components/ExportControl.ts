@@ -5,6 +5,7 @@ import { applyA11yFocus } from './shared/Button';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import { type PreferencesManager, type ExportDefaults, getCorePreferencesManager } from '../../core/PreferencesManager';
 import { FrameburnSettingsMenu } from './FrameburnSettingsMenu';
+import { Z_INDEX } from './shared/theme';
 
 export interface ExportRequest {
   format: ExportFormat;
@@ -138,7 +139,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       border-radius: 4px;
       padding: 4px 0;
       min-width: 200px;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     `;

@@ -1105,7 +1105,7 @@ export class FileSourceNode extends BaseSourceNode {
       colorSpace: decodeResult.colorSpace,
       sourcePath: originalUrl ?? url,
       attributes: {
-        ...(decodeResult.metadata as Record<string, unknown>),
+        ...decodeResult.metadata,
         formatName,
       },
     };

@@ -6,7 +6,7 @@
 
 import { createButton } from './Button';
 import { getIconSvg } from './Icons';
-import { SHADOWS } from './theme';
+import { SHADOWS, Z_INDEX } from './theme';
 import type { FocusManager } from '../../a11y/FocusManager';
 
 // Module-level focus manager setter to avoid circular deps
@@ -64,7 +64,7 @@ function getModalContainer(): HTMLElement {
       left: 0;
       right: 0;
       bottom: 0;
-      z-index: 10000;
+      z-index: ${Z_INDEX.modal};
       display: none;
       align-items: center;
       justify-content: center;

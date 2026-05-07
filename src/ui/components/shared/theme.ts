@@ -60,11 +60,48 @@ export const OPACITY = {
 
 // Z-index layers
 export const Z_INDEX = {
+  // Local stacking inside a containing block (e.g., relative siblings)
+  localStack: 1,
+  // Local layering for layout chrome (resize handles, drag affordances)
+  localStackHigh: 10,
+  // Floating viewer overlay below the base viewer chrome (color picker, etc.)
+  viewerOverlayLow: 35,
+  // EXR window overlay canvas (sits below bug overlay, above base content)
+  viewerExrWindow: 42,
+  // Info strip overlay background row
+  viewerStripBg: 48,
+  // Display profile indicator (pinned just below base viewer overlay)
+  viewerStripFg: 49,
+  // Base viewer overlay layer (FPS, fit-mode badges, wipe primary)
   viewerOverlay: 50,
+  // Wipe line / wipe labels
+  viewerWipeLine: 51,
+  // Split-screen divider line
+  viewerSplitLine: 52,
+  // Split-screen labels
+  viewerSplitLabel: 53,
+  // Bug overlay canvas (above EXR/strip, below HUD)
+  viewerBugOverlay: 55,
+  // HUD-level transient indicators (filter mode, virtual slider, presence, A/B)
+  viewerHud: 60,
+  // Higher-priority overlays (transient mode indicators, scale ratio, missing frame)
+  viewerOverlayHigh: 100,
+  // Top-most viewer overlay (remote cursors)
+  viewerOverlayTop: 110,
+  // Floating panels above viewer (info panel)
+  panel: 500,
+  // Side / draggable panels (history, playlist, snapshots, etc.)
   sidePanel: 1000,
+  // Pixel probe magnifier (just below dropdown/modal stack)
+  pixelProbe: 9998,
+  // Dropdown menus and floating control panels
   dropdown: 9999,
+  // Modal dialogs
   modal: 10000,
+  // Tooltips above modals
   tooltip: 10001,
+  // Accessibility skip link (always on top)
+  a11ySkipLink: 100000,
 } as const;
 
 // Timing

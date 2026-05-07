@@ -6,7 +6,7 @@
  *   hueRotation: number   (degrees, 0 = identity)
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import { applyHueRotationInto, isIdentityHueRotation } from '../../color/HueRotation';
 
 export const hueRotationEffect: ImageEffect = {
@@ -14,7 +14,7 @@ export const hueRotationEffect: ImageEffect = {
   label: 'Hue Rotation',
   category: 'color',
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     const degrees = params['hueRotation'] as number | undefined;
     if (degrees === undefined) return;
 
@@ -36,7 +36,7 @@ export const hueRotationEffect: ImageEffect = {
     }
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     const degrees = params['hueRotation'] as number | undefined;
     return degrees !== undefined && !isIdentityHueRotation(degrees);
   },

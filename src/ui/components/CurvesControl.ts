@@ -18,6 +18,7 @@ import {
 import { getIconSvg } from './shared/Icons';
 import { createButton } from './shared/Button';
 import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
+import { Z_INDEX } from './shared/theme';
 
 
 import { Logger } from '../../utils/Logger';
@@ -43,7 +44,7 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
       id: 'curves-control',
       title: 'Color Curves',
       initialPosition: { top: '10px', left: '10px' },
-      zIndex: 100,
+      zIndex: Z_INDEX.viewerOverlayHigh,
       onClose: () => this.hide(),
       testId: 'curves-control', // Maintain backward compatibility with existing tests
     });

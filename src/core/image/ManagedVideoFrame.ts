@@ -12,6 +12,8 @@
  * **Constraint:** ManagedVideoFrame must only be used on the main thread.
  * Cross-worker VideoFrame transfer requires a different protocol.
  */
+import { probe } from '../../utils/probe';
+
 export class ManagedVideoFrame {
   private _refCount = 1;
   private _closed = false;
@@ -101,11 +103,8 @@ export class ManagedVideoFrame {
       ManagedVideoFrame._wrappedFrames.delete(this.frame);
       // Unregister from FinalizationRegistry to prevent finalizer noise for properly-released frames
       ManagedVideoFrame._registry?.unregister(this);
-      try {
-        this.frame.close();
-      } catch {
-        // Already closed externally
-      }
+      // Frame may already have been closed externally; swallow.
+      probe('ManagedVideoFrame.close', () => this.frame.close());
     }
   }
 

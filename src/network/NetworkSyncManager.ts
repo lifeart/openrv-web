@@ -1108,7 +1108,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (Array.isArray(sanitized.strokes)) {
       sanitized.strokes = sanitized.strokes.map((stroke: unknown) =>
         typeof stroke === 'object' && stroke !== null
-          ? { ...(stroke as Record<string, unknown>), user: senderUserId }
+          ? { ...(stroke as object), user: senderUserId }
           : stroke,
       );
     }
@@ -1127,11 +1127,11 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     // Override author field with authenticated sender identity
     const sanitized = { ...p };
     if (sanitized.note && typeof sanitized.note === 'object') {
-      sanitized.note = { ...(sanitized.note as Record<string, unknown>), author: senderUserId };
+      sanitized.note = { ...(sanitized.note as object), author: senderUserId };
     }
     if (Array.isArray(sanitized.notes)) {
       sanitized.notes = sanitized.notes.map((note: unknown) =>
-        note && typeof note === 'object' ? { ...(note as Record<string, unknown>), author: senderUserId } : note,
+        note && typeof note === 'object' ? { ...(note as object), author: senderUserId } : note,
       );
     }
 
@@ -1337,8 +1337,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       state.channel.onmessage = null;
       try {
         state.channel.close();
-      } catch {
+      } catch (error) {
         // ignore close errors
+        log.debug('disposeServerlessPeer: channel.close failed', { error });
       }
       state.channel = null;
     }
@@ -1347,8 +1348,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     state.pc.ondatachannel = null;
     try {
       state.pc.close();
-    } catch {
+    } catch (error) {
       // ignore close errors
+      log.debug('disposeServerlessPeer: pc.close failed', { error });
     }
 
     this._serverlessPeer = null;
@@ -1659,15 +1661,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (state.channel) {
       try {
         state.channel.close();
-      } catch {
+      } catch (error) {
         // ignore close errors
+        log.debug('disposeWebRTCPeer: channel.close failed', { error });
       }
       state.channel = null;
     }
     try {
       state.pc.close();
-    } catch {
+    } catch (error) {
       // ignore close errors
+      log.debug('disposeWebRTCPeer: pc.close failed', { error });
     }
     this._webrtcPeers.delete(key);
   }
@@ -1760,8 +1764,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
             encryptedSessionState: responsePayload.encryptedSessionState,
             transport: 'webrtc',
           });
-        } catch {
+        } catch (error) {
           // ignore malformed payloads
+          log.debug('webrtc data channel: malformed payload ignored', { error });
         }
       };
       channel.onclose = () => this.disposeWebRTCPeer(key);

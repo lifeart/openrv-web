@@ -16,6 +16,7 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { type StereoAlignMode, DEFAULT_STEREO_ALIGN_MODE, STEREO_ALIGN_MODES } from '../../stereo/StereoEyeTransform';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { Z_INDEX } from './shared/theme';
 
 export interface StereoAlignControlEvents extends EventMap {
   alignModeChanged: StereoAlignMode;
@@ -100,7 +101,7 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 4px;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
       min-width: 140px;

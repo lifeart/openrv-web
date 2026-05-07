@@ -329,8 +329,9 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
         showBorders: this.state.showBorders,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
-    } catch {
-      // localStorage may be unavailable
+    } catch (error) {
+      // localStorage may be unavailable (private mode, quota exceeded, etc.)
+      logger.debug('saveToStorage failed; localStorage unavailable', { error });
     }
   }
 
@@ -364,8 +365,9 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
       if (typeof data.showBorders === 'boolean') {
         this.state.showBorders = data.showBorders;
       }
-    } catch {
+    } catch (error) {
       // Invalid stored data, ignore
+      logger.debug('loadFromStorage failed; invalid stored data ignored', { error });
     }
   }
 

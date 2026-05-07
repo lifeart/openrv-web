@@ -4,6 +4,7 @@
  */
 
 import { type WipeState } from '../../core/types/wipe';
+import { Z_INDEX } from './shared/theme';
 
 // Wipe label constants
 const DEFAULT_WIPE_LABEL_A = 'Original';
@@ -28,7 +29,7 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
     position: absolute;
     background: var(--accent-primary);
     cursor: ew-resize;
-    z-index: 50;
+    z-index: ${Z_INDEX.viewerOverlay};
     display: none;
     box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);
   `;
@@ -47,7 +48,7 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
     border-radius: 4px;
     font-size: 11px;
     font-weight: 500;
-    z-index: 51;
+    z-index: ${Z_INDEX.viewerWipeLine};
     display: none;
     pointer-events: none;
   `;
@@ -65,7 +66,7 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
     border-radius: 4px;
     font-size: 11px;
     font-weight: 500;
-    z-index: 51;
+    z-index: ${Z_INDEX.viewerWipeLine};
     display: none;
     pointer-events: none;
   `;
@@ -76,11 +77,11 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
 
 // Base styles from createWipeUIElements (minus display, cursor, and mode-varying properties)
 const WIPE_LINE_BASE =
-  'position: absolute; background: var(--accent-primary); z-index: 50; box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);';
+  `position: absolute; background: var(--accent-primary); z-index: ${Z_INDEX.viewerOverlay}; box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);`;
 const WIPE_LABEL_A_BASE =
-  'position: absolute; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
+  `position: absolute; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: ${Z_INDEX.viewerWipeLine}; pointer-events: none;`;
 const WIPE_LABEL_B_BASE =
-  'position: absolute; background: rgba(var(--accent-primary-rgb), 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
+  `position: absolute; background: rgba(var(--accent-primary-rgb), 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: ${Z_INDEX.viewerWipeLine}; pointer-events: none;`;
 
 /**
  * Batch-update wipe label styles (internal helper)

@@ -232,8 +232,9 @@ export class WebGPUBackend implements RendererBackend {
     if (this.gpuContext) {
       try {
         this.gpuContext.unconfigure();
-      } catch {
+      } catch (error) {
         // Context may already be lost
+        logger.debug('gpuContext.unconfigure failed (context may be lost)', { error });
       }
     }
 

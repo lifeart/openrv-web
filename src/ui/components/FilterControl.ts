@@ -1,6 +1,6 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
-import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { FilterSettings } from '../../core/types/filter';
@@ -89,7 +89,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
       border-radius: 6px;
       padding: 12px;
       min-width: ${PANEL_WIDTHS.narrow};
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: ${SHADOWS.panel};
     `;
