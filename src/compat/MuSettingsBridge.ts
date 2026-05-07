@@ -7,7 +7,6 @@
 
 import type { SettingsValue } from './types';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('MuSettingsBridge');

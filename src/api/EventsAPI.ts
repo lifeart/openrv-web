@@ -11,7 +11,6 @@ import type { ViewerProvider } from './types';
 import { ValidationError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('EventsAPI');

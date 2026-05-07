@@ -17,7 +17,6 @@ import { resetNodeIdCounter } from '../../nodes/base/IPNode';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 import { BaseGroupNode } from '../../nodes/groups/BaseGroupNode';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('SessionManager');

@@ -10,7 +10,6 @@ import { type LUT, type LUT3D, type LUT1D, isLUT1D, createLUTTexture, createLUT1
 import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from './LUTUtils';
 import { ShaderProgram } from '../render/ShaderProgram';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('WebGLLUT');

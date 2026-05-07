@@ -29,7 +29,6 @@ import { CORE_PREFERENCE_STORAGE_KEYS } from '../../core/PreferencesManager';
 import { showAlert } from './shared/Modal';
 import { Z_INDEX } from './shared/theme';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('Timeline');

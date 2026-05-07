@@ -14,7 +14,6 @@
 import { ShaderProgram } from './ShaderProgram';
 import luminanceFragSource from './shaders/luminance.frag.glsl?raw';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('LuminanceAnalyzer');

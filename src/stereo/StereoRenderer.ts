@@ -79,7 +79,6 @@ export { DEFAULT_STEREO_STATE } from '../core/types/stereo';
 // Import for local use
 import type { StereoState, StereoMode, StereoInputFormat } from '../core/types/stereo';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('StereoRenderer');

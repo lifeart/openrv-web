@@ -26,7 +26,6 @@ import { IPNode } from '../nodes/base/IPNode';
 import type { IPImage } from '../core/image/Image';
 import type { EvalContext } from '../core/graph/Graph';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('MuSourceBridge');
@@ -652,7 +651,9 @@ export class MuSourceBridge {
         api.media.clearSources();
       }
     } catch (error) {
-      logger.warn('MuSourceBridge:clearSession failed (real session unavailable, clearing local state only)', { error });
+      logger.warn('MuSourceBridge:clearSession failed (real session unavailable, clearing local state only)', {
+        error,
+      });
     }
 
     // Remove media-rep nodes from the graph before clearing source records

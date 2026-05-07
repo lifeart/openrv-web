@@ -33,7 +33,6 @@ import { getAvailableConfigs as getOCIOAvailableConfigs } from '../color/OCIOCon
 import { ValidationError, APIError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('ColorAPI');

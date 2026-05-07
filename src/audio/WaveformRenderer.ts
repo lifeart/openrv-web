@@ -10,7 +10,6 @@
 import { Input, BlobSource, ALL_FORMATS, AudioBufferSink } from 'mediabunny';
 import type { InputAudioTrack } from 'mediabunny';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('WaveformRenderer');

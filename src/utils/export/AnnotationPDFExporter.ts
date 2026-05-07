@@ -9,7 +9,6 @@ import type { PaintEngine } from '../../paint/PaintEngine';
 import type { Session } from '../../core/session/Session';
 import type { Annotation, PaintSnapshot } from '../../paint/types';
 
-
 import { Logger } from '../Logger';
 
 const logger = new Logger('AnnotationPDFExporter');

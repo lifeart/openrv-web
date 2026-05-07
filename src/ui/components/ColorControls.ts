@@ -12,7 +12,6 @@ export { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 import type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ColorControls');

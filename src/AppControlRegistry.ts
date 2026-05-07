@@ -125,7 +125,6 @@ import { buildTransformTab } from './services/tabContent/buildTransformTab';
 import { buildAnnotateTab } from './services/tabContent/buildAnnotateTab';
 import { buildPanelToggles, type PanelTogglesResult } from './services/tabContent/buildPanelToggles';
 
-
 import { Logger } from './utils/Logger';
 
 const logger = new Logger('AppControlRegistry');
@@ -905,9 +904,7 @@ export class AppControlRegistry {
       if (!file) return;
       if (this._disposed) return;
       // Error surfaced via slateEditor's logoError event; swallow here.
-      await probeAsync('AppControlRegistry.loadLogoFile', () =>
-        this.slateEditor.loadLogoFile(file),
-      );
+      await probeAsync('AppControlRegistry.loadLogoFile', () => this.slateEditor.loadLogoFile(file));
       // Guard: component may have been disposed while the async load was in flight
       if (this._disposed) return;
       logoFileInput.value = '';

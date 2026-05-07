@@ -30,7 +30,6 @@ import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
 
-
 import { Logger } from './utils/Logger';
 
 const logger = new Logger('AppPersistenceManager');

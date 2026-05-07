@@ -76,12 +76,9 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
 }
 
 // Base styles from createWipeUIElements (minus display, cursor, and mode-varying properties)
-const WIPE_LINE_BASE =
-  `position: absolute; background: var(--accent-primary); z-index: ${Z_INDEX.viewerOverlay}; box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);`;
-const WIPE_LABEL_A_BASE =
-  `position: absolute; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: ${Z_INDEX.viewerWipeLine}; pointer-events: none;`;
-const WIPE_LABEL_B_BASE =
-  `position: absolute; background: rgba(var(--accent-primary-rgb), 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: ${Z_INDEX.viewerWipeLine}; pointer-events: none;`;
+const WIPE_LINE_BASE = `position: absolute; background: var(--accent-primary); z-index: ${Z_INDEX.viewerOverlay}; box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);`;
+const WIPE_LABEL_A_BASE = `position: absolute; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: ${Z_INDEX.viewerWipeLine}; pointer-events: none;`;
+const WIPE_LABEL_B_BASE = `position: absolute; background: rgba(var(--accent-primary-rgb), 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: ${Z_INDEX.viewerWipeLine}; pointer-events: none;`;
 
 /**
  * Batch-update wipe label styles (internal helper)

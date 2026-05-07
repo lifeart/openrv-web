@@ -31,7 +31,6 @@ import { applyColorMatrix } from '../../color/LUTUtils';
 import type { LUTStageState } from '../../color/pipeline/LUTPipelineState';
 import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ColorPipelineManager');
@@ -103,10 +102,7 @@ export class ColorPipelineManager {
     try {
       this._lutProcessor = new WebGLLUTProcessor();
     } catch (e) {
-      logger.warn(
-        'WebGL LUT processor not available — no CPU fallback exists, LUT processing will be unavailable:',
-        e,
-      );
+      logger.warn('WebGL LUT processor not available — no CPU fallback exists, LUT processing will be unavailable:', e);
       this._lutProcessor = null;
     }
     return this._lutProcessor;

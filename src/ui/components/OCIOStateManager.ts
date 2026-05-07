@@ -20,7 +20,6 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../../utils/preferences/PreferencesManager';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('OCIOStateManager');

@@ -20,7 +20,6 @@ import type { AddRepresentationConfig, MediaRepresentation } from '../core/types
 // Dependency interfaces (structural typing)
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('SessionURLService');

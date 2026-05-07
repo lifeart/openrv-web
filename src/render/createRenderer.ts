@@ -18,7 +18,6 @@ import { Renderer } from './Renderer';
 import { WebGPUBackend } from './WebGPUBackend';
 import { isWebGPUEnabled } from './webgpu/featureFlag';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('createRenderer');

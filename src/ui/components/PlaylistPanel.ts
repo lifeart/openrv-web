@@ -19,7 +19,6 @@ import { OPACITY, Z_INDEX } from './shared/theme';
 import { downloadEDL, type EDLClip, type EDLTransition } from '../../export/EDLWriter';
 import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('PlaylistPanel');

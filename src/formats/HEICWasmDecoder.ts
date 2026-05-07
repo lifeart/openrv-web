@@ -11,7 +11,6 @@ import { validateImageDimensions } from './shared';
 import { DecoderError } from '../core/errors';
 import { readBoxType, findBox, parsePitm, parseIinf } from './AVIFGainmapDecoder';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('HEICWasmDecoder');

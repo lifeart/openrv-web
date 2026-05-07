@@ -18,7 +18,6 @@ import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, TRANSITIONS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('DisplayProfileControl');

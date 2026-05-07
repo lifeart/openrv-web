@@ -43,13 +43,7 @@ export type {
   SessionEvents,
   MediaSource,
 } from './SessionTypes';
-import type {
-  GTOComponentDTO,
-  MatteSettings,
-  SessionMetadata,
-  SessionEvents,
-  MediaSource,
-} from './SessionTypes';
+import type { GTOComponentDTO, MatteSettings, SessionMetadata, SessionEvents, MediaSource } from './SessionTypes';
 
 export type { SubFramePosition };
 export type { FPSMeasurement };

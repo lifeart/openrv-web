@@ -15,7 +15,6 @@ import { parseLUT, isLUT3D, type LUT } from '../../color/ColorProcessingFacade';
 import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import { showAlert } from './shared/Modal';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('LUTStageControl');

@@ -5,7 +5,6 @@
 
 import { type ExportFormat } from './FrameExporter';
 
-
 import { Logger } from '../Logger';
 
 const logger = new Logger('SequenceExporter');

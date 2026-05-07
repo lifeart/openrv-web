@@ -10,7 +10,6 @@
 
 import { Signal } from '../../core/graph/Signal';
 
-
 import { Logger } from '../Logger';
 
 const logger = new Logger('ActiveContextManager');

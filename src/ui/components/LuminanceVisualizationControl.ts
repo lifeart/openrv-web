@@ -272,13 +272,17 @@ export class LuminanceVisualizationControl {
     this.subControlsContainer.appendChild(bandRow);
 
     // Reseed button via shared createButton.
-    const reseedBtn = createButton('Reseed', () => {
-      this.luminanceVis.reseedRandom();
-    }, {
-      variant: 'ghost',
-      size: 'xs',
-      title: 'Reseed random colors',
-    });
+    const reseedBtn = createButton(
+      'Reseed',
+      () => {
+        this.luminanceVis.reseedRandom();
+      },
+      {
+        variant: 'ghost',
+        size: 'xs',
+        title: 'Reseed random colors',
+      },
+    );
     reseedBtn.dataset.testid = 'random-color-reseed-btn';
     this.subControlsContainer.appendChild(reseedBtn);
   }

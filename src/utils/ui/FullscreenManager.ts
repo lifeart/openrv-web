@@ -7,7 +7,6 @@
 
 import { EventEmitter, type EventMap } from '../EventEmitter';
 
-
 import { Logger } from '../Logger';
 
 const logger = new Logger('FullscreenManager');

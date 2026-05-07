@@ -10,7 +10,6 @@
 
 import type { MinorModeDefinition, EventTable, MuEvent, MuEventCallback } from './types';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('ModeManager');

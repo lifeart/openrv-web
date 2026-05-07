@@ -8,7 +8,6 @@
 
 import { luminanceRec709 } from './PixelMath';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('CDL');

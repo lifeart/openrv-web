@@ -20,7 +20,6 @@ import type { ManagerBase } from '../ManagerBase';
 import type { TransitionConfig, TransitionFrameInfo } from '../types/transition';
 import type { TransitionManager } from './TransitionManager';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('PlaylistManager');

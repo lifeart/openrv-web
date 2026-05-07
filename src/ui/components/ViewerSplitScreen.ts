@@ -29,12 +29,9 @@ const LABEL_HIDE_THRESHOLD_LOW = 0.1;
 const LABEL_HIDE_THRESHOLD_HIGH = 0.9;
 
 // Base styles from createSplitScreenUIElements (minus display, cursor, and mode-varying properties)
-const SPLIT_LINE_BASE =
-  `position: absolute; z-index: ${Z_INDEX.viewerSplitLine}; box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);`;
-const SPLIT_LABEL_A_BASE =
-  `position: absolute; background: rgba(var(--accent-primary-rgb), 0.85); color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: ${Z_INDEX.viewerSplitLabel}; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);`;
-const SPLIT_LABEL_B_BASE =
-  `position: absolute; background: rgba(255, 180, 50, 0.9); color: var(--bg-primary); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: ${Z_INDEX.viewerSplitLabel}; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);`;
+const SPLIT_LINE_BASE = `position: absolute; z-index: ${Z_INDEX.viewerSplitLine}; box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);`;
+const SPLIT_LABEL_A_BASE = `position: absolute; background: rgba(var(--accent-primary-rgb), 0.85); color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: ${Z_INDEX.viewerSplitLabel}; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);`;
+const SPLIT_LABEL_B_BASE = `position: absolute; background: rgba(255, 180, 50, 0.9); color: var(--bg-primary); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: ${Z_INDEX.viewerSplitLabel}; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);`;
 
 /**
  * Batch-update split screen label styles (internal helper)

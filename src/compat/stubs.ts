@@ -10,7 +10,6 @@ import type { CommandSupportStatus } from './types';
 
 // ── Helpers ──
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('stubs');

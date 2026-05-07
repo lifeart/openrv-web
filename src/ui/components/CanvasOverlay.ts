@@ -22,7 +22,6 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import type { UIControl } from '../UIControl';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('CanvasOverlay');

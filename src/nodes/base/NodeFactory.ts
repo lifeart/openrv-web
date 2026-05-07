@@ -1,6 +1,5 @@
 import type { IPNode, NodeConstructor } from './IPNode';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('NodeFactory');

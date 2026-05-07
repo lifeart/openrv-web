@@ -212,9 +212,7 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
   private onPointerUp = (e: PointerEvent): void => {
     if (this.isDragging || this.isResizing) {
       // Release pointer capture (may already be released)
-      probe('SpotlightOverlay.releasePointerCapture', () =>
-        this.canvas.releasePointerCapture(e.pointerId),
-      );
+      probe('SpotlightOverlay.releasePointerCapture', () => this.canvas.releasePointerCapture(e.pointerId));
       // Reset cursor
       this.canvas.style.cursor = '';
     }

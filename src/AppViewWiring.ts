@@ -19,7 +19,6 @@ import { detectFloatingWindowViolations } from './stereo/FloatingWindowDetector'
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
-
 import { Logger } from './utils/Logger';
 
 const logger = new Logger('AppViewWiring');

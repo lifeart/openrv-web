@@ -324,8 +324,19 @@ export function createSliderControl(options: SliderControlOptions): {
   slider: HTMLInputElement;
   valueLabel: HTMLSpanElement;
 } {
-  const { label, id, value, min, max, onInput, formatValue, suffix = '', valueColor, ariaLabel, stopPropagation } =
-    options;
+  const {
+    label,
+    id,
+    value,
+    min,
+    max,
+    onInput,
+    formatValue,
+    suffix = '',
+    valueColor,
+    ariaLabel,
+    stopPropagation,
+  } = options;
   const step = options.step ?? 1;
   const fmt = formatValue ?? ((val: number) => `${Math.round(val)}${suffix}`);
 

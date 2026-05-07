@@ -31,7 +31,6 @@ import { RepresentationSelector } from '../RepresentationSelector';
 import type { VersionGroup } from '../../../core/session/VersionManager';
 import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
 
-
 import { Logger } from '../../../utils/Logger';
 
 const logger = new Logger('HeaderBar');

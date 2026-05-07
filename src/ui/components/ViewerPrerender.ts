@@ -18,7 +18,6 @@ import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS } from '../../filters/FilmEmulation';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ViewerPrerender');

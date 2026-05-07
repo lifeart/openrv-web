@@ -34,7 +34,6 @@ import { FPSIndicator } from './FPSIndicator';
 import { DisplayProfileIndicator } from './DisplayProfileIndicator';
 import { PresenceOverlay } from './PresenceOverlay';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('OverlayManager');

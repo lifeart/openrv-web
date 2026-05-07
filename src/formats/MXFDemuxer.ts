@@ -19,7 +19,6 @@ import { DecoderError } from '../core/errors';
 // Constants -- SMPTE Universal Labels
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('MXFDemuxer');

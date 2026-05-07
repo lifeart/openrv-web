@@ -18,7 +18,6 @@ import { isRAWExtension } from '../../formats/RAWPreviewDecoder';
 import { basename } from '../../utils/path';
 import type { RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
-
 import { Logger } from '../../utils/Logger';
 import { probe, probeAsync } from '../../utils/probe';
 

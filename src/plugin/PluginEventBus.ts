@@ -15,7 +15,6 @@ import type { PluginId } from './types';
 // Plugin Event Types
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('PluginEventBus');

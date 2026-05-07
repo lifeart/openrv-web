@@ -7,7 +7,6 @@
 
 import type { MuHttpResponse, RemoteConnectionInfo } from './types';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('MuNetworkBridge');

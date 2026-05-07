@@ -53,7 +53,6 @@ import { AutoExposureController } from '../../color/AutoExposureController';
 import { LuminanceAnalyzer } from '../../render/LuminanceAnalyzer';
 import { PerfTrace } from '../../utils/PerfTrace';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ViewerGLRenderer');

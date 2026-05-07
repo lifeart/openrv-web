@@ -24,7 +24,6 @@ import type { ManagerBase } from '../../core/ManagerBase';
 // Types
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ExternalPresentation');

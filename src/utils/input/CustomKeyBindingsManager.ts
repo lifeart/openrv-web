@@ -10,7 +10,6 @@ import { type KeyCombination } from './KeyboardManager';
 import { DEFAULT_KEY_BINDINGS, type KeyBindingKeys } from './KeyBindings';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
-
 import { Logger } from '../Logger';
 
 const logger = new Logger('CustomKeyBindingsManager');

@@ -186,7 +186,7 @@ export class SyncStateManager {
       panY: payload.panY,
       zoom: payload.zoom,
       channelMode: payload.channelMode,
-      fitMode: ((payload as { fitMode?: string | null }).fitMode) ?? null,
+      fitMode: (payload as { fitMode?: string | null }).fitMode ?? null,
     };
   }
 

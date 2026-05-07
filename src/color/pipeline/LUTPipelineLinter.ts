@@ -30,7 +30,6 @@
 import type { ImageMetadata, TransferFunction } from '../../core/image/Image';
 import type { LUTPipeline, StageKind } from './LUTPipeline';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('LUTPipelineLinter');

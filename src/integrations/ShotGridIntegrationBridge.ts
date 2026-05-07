@@ -34,7 +34,6 @@ import { isSequencePattern } from '../utils/media/SequenceLoader';
 // Types
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('ShotGridIntegrationBridge');

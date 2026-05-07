@@ -9,7 +9,6 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('SnapshotManager');

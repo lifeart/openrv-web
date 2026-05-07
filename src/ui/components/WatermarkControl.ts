@@ -9,7 +9,6 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { WatermarkOverlay, type WatermarkState, type WatermarkPosition } from './WatermarkOverlay';
 import { getIconSvg } from './shared/Icons';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('WatermarkControl');

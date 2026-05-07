@@ -50,7 +50,6 @@ import { WebGPUReadback } from './webgpu/WebGPUReadback';
 // WebGPUBackend
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('WebGPUBackend');

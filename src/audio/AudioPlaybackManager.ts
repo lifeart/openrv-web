@@ -13,7 +13,6 @@ import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { clamp } from '../utils/math';
 import type { ManagerBase } from '../core/ManagerBase';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('AudioPlaybackManager');

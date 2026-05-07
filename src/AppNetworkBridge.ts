@@ -33,7 +33,6 @@ import { decryptSessionStateWithPin, encryptSessionStateWithPin, isValidPinCode 
 import { createThrottle, type Throttled } from './utils/throttle';
 import { showConfirm } from './ui/components/shared/Modal';
 
-
 import { Logger } from './utils/Logger';
 
 const logger = new Logger('AppNetworkBridge');

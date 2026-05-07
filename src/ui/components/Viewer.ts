@@ -4209,8 +4209,7 @@ export class Viewer implements ViewerAccessor {
       this._referenceCanvas = document.createElement('canvas');
       this._referenceCanvas.className = 'reference-overlay';
       this._referenceCanvas.dataset.testid = 'reference-overlay';
-      this._referenceCanvas.style.cssText =
-        `position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:${Z_INDEX.viewerOverlayLow};`;
+      this._referenceCanvas.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:${Z_INDEX.viewerOverlayLow};`;
       this.canvasContainer.appendChild(this._referenceCanvas);
       this._referenceCtx = this._referenceCanvas.getContext('2d');
     }

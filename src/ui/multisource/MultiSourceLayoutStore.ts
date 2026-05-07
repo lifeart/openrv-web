@@ -15,7 +15,6 @@ import {
   createDefaultLayoutState,
 } from './MultiSourceLayoutTypes';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('MultiSourceLayoutStore');

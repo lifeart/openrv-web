@@ -11,7 +11,6 @@ import './nodes/sources';
 import './nodes/groups';
 import './nodes/CacheLUTNode';
 
-
 import { Logger } from './utils/Logger';
 
 const logger = new Logger('Main');

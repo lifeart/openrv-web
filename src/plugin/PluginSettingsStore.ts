@@ -12,7 +12,6 @@ import type { PluginId } from './types';
 // Schema Types
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('PluginSettingsStore');

@@ -154,7 +154,6 @@ export function mapStatusFromShotGrid(sgStatus: string): ShotStatus {
 
 import type { NoteStatus } from '../core/session/NoteManager';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('ShotGridBridge');

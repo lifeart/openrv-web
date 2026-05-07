@@ -14,7 +14,6 @@ import { showConfirm } from './shared/Modal';
 // Minimal interface for the keybindings manager (avoids hard coupling)
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ShortcutEditor');

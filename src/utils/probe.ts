@@ -26,10 +26,7 @@ export function probe<T>(name: string, fn: () => T): T | undefined {
  * Async variant of `probe`. Awaits `fn()` and returns `undefined` if it throws
  * or rejects. Logs at debug level on failure with the probe name.
  */
-export async function probeAsync<T>(
-  name: string,
-  fn: () => Promise<T> | T,
-): Promise<T | undefined> {
+export async function probeAsync<T>(name: string, fn: () => Promise<T> | T): Promise<T | undefined> {
   try {
     return await fn();
   } catch (error) {

@@ -487,8 +487,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       margin-bottom: 12px;
       position: relative;
     `;
-    divider.innerHTML =
-      `<span style="background: var(--bg-secondary); padding: 0 8px; position: relative; z-index: ${Z_INDEX.localStack};">or join a room</span>`;
+    divider.innerHTML = `<span style="background: var(--bg-secondary); padding: 0 8px; position: relative; z-index: ${Z_INDEX.localStack};">or join a room</span>`;
     divider.style.background = `linear-gradient(var(--border-secondary), var(--border-secondary)) no-repeat center / calc(100% - 16px) 1px`;
     panel.appendChild(divider);
 

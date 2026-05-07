@@ -1107,9 +1107,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const sanitized = { ...payload };
     if (Array.isArray(sanitized.strokes)) {
       sanitized.strokes = sanitized.strokes.map((stroke: unknown) =>
-        typeof stroke === 'object' && stroke !== null
-          ? { ...(stroke as object), user: senderUserId }
-          : stroke,
+        typeof stroke === 'object' && stroke !== null ? { ...(stroke as object), user: senderUserId } : stroke,
       );
     }
 

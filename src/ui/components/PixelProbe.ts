@@ -22,7 +22,6 @@ import { showAlert } from './shared/Modal';
 import { displayToSourceCoordinates } from './ViewerInteraction';
 import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('PixelProbe');

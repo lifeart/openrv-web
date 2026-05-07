@@ -12,7 +12,6 @@
 import { FileKind, MuCursor } from './types';
 import type { FileKindValue } from './types';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('MuUtilsBridge');

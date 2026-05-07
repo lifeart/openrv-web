@@ -20,7 +20,6 @@ import { createButton } from './shared/Button';
 import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('CurvesControl');

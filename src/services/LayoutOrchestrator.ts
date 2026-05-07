@@ -21,7 +21,6 @@ import type { ShortcutEditorManager } from '../ui/components/ShortcutEditor';
 // Dependency interfaces (structural typing — no need to import heavy classes)
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('LayoutOrchestrator');

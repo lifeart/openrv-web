@@ -35,7 +35,6 @@ import type { PaintToolInterface } from '../paint/AdvancedPaintTools';
 import type { PaintEngine } from '../paint/PaintEngine';
 import type { EventsAPI } from '../api/EventsAPI';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('PluginRegistry');

@@ -15,7 +15,6 @@ import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 import { Z_INDEX } from './shared/theme';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('SnapshotPanel');

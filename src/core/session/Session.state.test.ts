@@ -6,13 +6,7 @@ import type { IPImage } from '../image/Image';
 import type { EvalContext } from '../graph/Graph';
 import type { GTOData } from 'gto-js';
 import { getNumberValue, getBooleanValue, getNumberArray, getStringValue } from './AnnotationStore';
-import {
-  parseColorAdjustments,
-  parseChannelMode,
-  parseStereo,
-  parseCDL,
-  parseCrop,
-} from './GTOSettingsParser';
+import { parseColorAdjustments, parseChannelMode, parseStereo, parseCDL, parseCrop } from './GTOSettingsParser';
 
 const createMockDTO = (protocols: any) => {
   const mockObj = (data: any): any => ({
@@ -1255,10 +1249,7 @@ describe('Session', () => {
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       await session.loadFromGTO('GTOa 1.0');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to load node graph'),
-        'graph fail',
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to load node graph'), 'graph fail');
     });
 
     it('loadFromGTO handles success with graph info', async () => {

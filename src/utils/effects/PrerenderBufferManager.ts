@@ -17,7 +17,6 @@ import { EffectProcessor, type AllEffectsState, computeEffectsHash, hasActiveEff
 import { WorkerPool } from '../WorkerPool';
 import EffectWorker from '../../workers/effectProcessor.worker?worker';
 
-
 import { Logger } from '../Logger';
 
 const logger = new Logger('PrerenderBufferManager');

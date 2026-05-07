@@ -9,7 +9,6 @@
 import type { PluginId } from '../types';
 import type { PluginRegistry } from '../PluginRegistry';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('HotReloadManager');

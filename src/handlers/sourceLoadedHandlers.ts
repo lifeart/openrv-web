@@ -9,7 +9,6 @@ import { setScopesHDRAutoFit, setScopesHDRMode } from '../scopes/WebGLScopes';
 import { queryHDRHeadroom } from '../color/DisplayCapabilities';
 import { getCorePreferencesManager } from '../core/PreferencesManager';
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('sourceLoadedHandlers');

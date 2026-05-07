@@ -15,7 +15,6 @@ import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
 import type { DegradedModeInfo } from '../../composite/BlendModes';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('GTOGraphLoader');

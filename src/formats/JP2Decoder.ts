@@ -27,7 +27,6 @@ import { validateImageDimensions } from './shared';
 // Constants
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger('JP2Decoder');

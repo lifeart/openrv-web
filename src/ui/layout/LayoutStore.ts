@@ -11,7 +11,6 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 // Types
 // ---------------------------------------------------------------------------
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('LayoutStore');

@@ -113,23 +113,29 @@ export class FPSIndicatorSettingsMenu {
     targetItem.dataset.setting = 'show-target';
     menu.appendChild(targetItem);
 
-    menu.appendChild(this.createRatioSlider('Background', 'fps-bg', state.backgroundOpacity, (value) => {
-      this.indicator.setBackgroundOpacity(value);
-      return this.indicator.getState().backgroundOpacity;
-    }));
+    menu.appendChild(
+      this.createRatioSlider('Background', 'fps-bg', state.backgroundOpacity, (value) => {
+        this.indicator.setBackgroundOpacity(value);
+        return this.indicator.getState().backgroundOpacity;
+      }),
+    );
 
     menu.appendChild(createSeparator('4px 0', { menu: true }));
     menu.appendChild(createSectionHeader('Thresholds', { menu: true }));
 
-    menu.appendChild(this.createRatioSlider('Warning', 'fps-warning', state.warningThreshold, (value) => {
-      this.indicator.setState({ warningThreshold: value });
-      return this.indicator.getState().warningThreshold;
-    }));
+    menu.appendChild(
+      this.createRatioSlider('Warning', 'fps-warning', state.warningThreshold, (value) => {
+        this.indicator.setState({ warningThreshold: value });
+        return this.indicator.getState().warningThreshold;
+      }),
+    );
 
-    menu.appendChild(this.createRatioSlider('Critical', 'fps-critical', state.criticalThreshold, (value) => {
-      this.indicator.setState({ criticalThreshold: value });
-      return this.indicator.getState().criticalThreshold;
-    }));
+    menu.appendChild(
+      this.createRatioSlider('Critical', 'fps-critical', state.criticalThreshold, (value) => {
+        this.indicator.setState({ criticalThreshold: value });
+        return this.indicator.getState().criticalThreshold;
+      }),
+    );
 
     this.menuEl = menu;
     document.body.appendChild(menu);

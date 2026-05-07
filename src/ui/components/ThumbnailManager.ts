@@ -11,7 +11,6 @@
 import { type Session } from '../../core/session/Session';
 import { LRUCache } from '../../utils/LRUCache';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ThumbnailManager');

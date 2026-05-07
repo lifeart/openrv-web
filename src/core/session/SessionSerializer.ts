@@ -50,7 +50,6 @@ import { isDeinterlaceActive } from '../../filters/Deinterlace';
 import { isFilmEmulationActive } from '../../filters/FilmEmulation';
 import { isPerspectiveActive } from '../../transform/PerspectiveCorrection';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('SessionSerializer');

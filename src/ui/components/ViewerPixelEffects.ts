@@ -44,7 +44,6 @@ import type { BackgroundPatternState } from './BackgroundPatternControl';
 import type { InteractionQualityManager } from './InteractionQualityManager';
 import type { CropManager } from './CropManager';
 
-
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ViewerPixelEffects');
