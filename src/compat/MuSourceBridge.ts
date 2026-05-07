@@ -273,7 +273,8 @@ export class MuSourceBridge {
     try {
       const { width, height } = getOpenRV().media.getResolution();
       return [width, height];
-    } catch {
+    } catch (error) {
+      logger.warn('MuSourceBridge:getCurrentImageSize failed', { error });
       return [0, 0];
     }
   }
@@ -456,8 +457,8 @@ export class MuSourceBridge {
         fps = current.fps;
         duration = current.duration;
       }
-    } catch {
-      // openrv not available — use local state
+    } catch (error) {
+      logger.warn('MuSourceBridge:sourceMediaInfo enrichment failed (openrv unavailable)', { sourceName, error });
     }
 
     const activePaths = this._getActiveMediaPaths(source);
@@ -650,8 +651,8 @@ export class MuSourceBridge {
       if (api?.media.clearSources) {
         api.media.clearSources();
       }
-    } catch {
-      logger.warn('[MuSourceBridge] clearSession: real session unavailable, clearing local state only');
+    } catch (error) {
+      logger.warn('MuSourceBridge:clearSession failed (real session unavailable, clearing local state only)', { error });
     }
 
     // Remove media-rep nodes from the graph before clearing source records
@@ -924,8 +925,8 @@ export class MuSourceBridge {
         }
       }
       return current;
-    } catch {
-      // openrv not available
+    } catch (error) {
+      logger.warn('MuSourceBridge:ensureFallbackSourceRegistered failed (openrv unavailable)', { error });
       return undefined;
     }
   }

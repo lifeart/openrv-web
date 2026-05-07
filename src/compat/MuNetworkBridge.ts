@@ -529,8 +529,8 @@ export class MuNetworkBridge {
           break;
         }
       }
-    } catch {
-      // Non-JSON text payload — ignore
+    } catch (error) {
+      logger.warn('MuNetworkBridge:handleTextMessage failed (non-JSON payload)', { error });
     }
   }
 

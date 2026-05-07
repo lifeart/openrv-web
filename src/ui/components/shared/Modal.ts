@@ -510,9 +510,21 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
 }
 
 /**
+ * Handle returned by {@link showModal}.
+ *
+ * - `close()` dismisses the modal and runs the `onClose` callback.
+ * - `update(newContent)` swaps the body content in-place so callers can drive
+ *   live progress updates without tearing down and re-creating the dialog.
+ */
+export interface ModalHandle {
+  close: () => void;
+  update: (newContent: HTMLElement) => void;
+}
+
+/**
  * Show a custom modal with any content
  */
-export function showModal(content: HTMLElement, options: ModalOptions = {}): { close: () => void } {
+export function showModal(content: HTMLElement, options: ModalOptions = {}): ModalHandle {
   cleanupCustomModalEscapeHandler();
   const container = getModalContainer();
   container.innerHTML = '';
@@ -536,6 +548,10 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): { c
     options.onClose?.();
   };
 
+  const update = (newContent: HTMLElement) => {
+    contentWrapper.replaceChildren(newContent);
+  };
+
   if (options.closable !== false) {
     customModalEscapeHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -547,6 +563,7 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): { c
 
   return {
     close,
+    update,
   };
 }
 
