@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Session } from './Session';
+import { parseScopes, parseInitialSettings } from './GTOSettingsParser';
 
 const createMockDTO = (protocols: any) => {
   const mockObj = (data: any): any => ({
@@ -70,11 +71,11 @@ describe('Session', () => {
 
   describe('GTO detailed parsing', () => {
     it('parseScopes handles all protocols', () => {
-      const s = session as any;
-      const testScope = (proto: string, key: string) => {
+      const testScope = (proto: string, key: 'histogram' | 'waveform' | 'vectorscope') => {
         const dto = createMockDTO({ [proto]: [{ node: { active: 1 } }] });
-        const scopes = s.parseScopes(dto);
-        expect(scopes[key]).toBe(true);
+        const scopes = parseScopes(dto);
+        expect(scopes).not.toBeNull();
+        expect(scopes![key]).toBe(true);
       };
 
       testScope('Histogram', 'histogram');
@@ -84,42 +85,39 @@ describe('Session', () => {
       testScope('Vectorscope', 'vectorscope');
       testScope('RVVectorscope', 'vectorscope');
 
-      expect(s.parseScopes(createMockDTO({}))).toBeNull();
+      expect(parseScopes(createMockDTO({}))).toBeNull();
     });
 
     it('parseScopes returns state when all scopes are off (GTO has scope nodes with active=0)', () => {
-      const s = session as any;
       const dto = createMockDTO({
         Histogram: [{ node: { active: 0 } }],
         Waveform: [{ node: { active: 0 } }],
         Vectorscope: [{ node: { active: 0 } }],
         GamutDiagram: [{ node: { active: 0 } }],
       });
-      const scopes = s.parseScopes(dto);
+      const scopes = parseScopes(dto);
       expect(scopes).not.toBeNull();
-      expect(scopes.histogram).toBe(false);
-      expect(scopes.waveform).toBe(false);
-      expect(scopes.vectorscope).toBe(false);
-      expect(scopes.gamutDiagram).toBe(false);
+      expect(scopes!.histogram).toBe(false);
+      expect(scopes!.waveform).toBe(false);
+      expect(scopes!.vectorscope).toBe(false);
+      expect(scopes!.gamutDiagram).toBe(false);
     });
 
     it('parseScopes returns state when scope nodes exist but have no active property', () => {
-      const s = session as any;
       // Node exists but no 'active' property — scope data is present in GTO
       const dto = createMockDTO({
         Histogram: [{ node: {} }],
       });
-      const scopes = s.parseScopes(dto);
+      const scopes = parseScopes(dto);
       expect(scopes).not.toBeNull();
-      expect(scopes.histogram).toBe(false);
+      expect(scopes!.histogram).toBe(false);
     });
 
     it('parseScopes returns null when no scope protocol nodes exist', () => {
-      const s = session as any;
       const dto = createMockDTO({
         RVColor: [{ color: { exposure: 1.0 } }],
       });
-      expect(s.parseScopes(dto)).toBeNull();
+      expect(parseScopes(dto)).toBeNull();
     });
 
     it('parseInitialSettings handles various components', () => {
@@ -140,23 +138,24 @@ describe('Session', () => {
         Waveform: [{ node: { active: 0 } }],
       });
 
-      const settings = (session as any).parseInitialSettings(dto, { width: 100, height: 100 });
-      expect(settings.colorAdjustments.exposure).toBe(1.5);
-      expect(settings.colorAdjustments.brightness).toBe(0.5);
-      expect(settings.transform.rotation).toBe(180);
-      expect(settings.transform.flipV).toBe(true);
-      expect(settings.lens.k1).toBe(0.2);
-      expect(settings.lens.centerX).toBeCloseTo(0.1);
-      expect(settings.crop.enabled).toBe(true);
-      expect(settings.channelMode).toBe('red');
-      expect(settings.stereo.mode).toBe('side-by-side');
-      expect(settings.scopes.histogram).toBe(true);
-      expect(settings.scopes.waveform).toBe(false);
+      const settings = parseInitialSettings(dto, { width: 100, height: 100 });
+      expect(settings).not.toBeNull();
+      expect(settings!.colorAdjustments!.exposure).toBe(1.5);
+      expect(settings!.colorAdjustments!.brightness).toBe(0.5);
+      expect(settings!.transform!.rotation).toBe(180);
+      expect(settings!.transform!.flipV).toBe(true);
+      expect(settings!.lens!.k1).toBe(0.2);
+      expect(settings!.lens!.centerX).toBeCloseTo(0.1);
+      expect(settings!.crop!.enabled).toBe(true);
+      expect(settings!.channelMode).toBe('red');
+      expect(settings!.stereo!.mode).toBe('side-by-side');
+      expect(settings!.scopes!.histogram).toBe(true);
+      expect(settings!.scopes!.waveform).toBe(false);
     });
 
     it('parseInitialSettings returns null if no settings', () => {
       const dto = createMockDTO({});
-      expect((session as any).parseInitialSettings(dto, { width: 0, height: 0 })).toBeNull();
+      expect(parseInitialSettings(dto, { width: 0, height: 0 })).toBeNull();
     });
 
     it('parsePaintAnnotations handles pen and text', () => {
@@ -171,19 +170,19 @@ describe('Session', () => {
         ],
       });
       const emitSpy = vi.spyOn(session, 'emit');
-      (session as any).parsePaintAnnotations(dto, 1);
+      session.annotationStore.parsePaintAnnotations(dto, 1);
       expect(emitSpy).toHaveBeenCalledWith('annotationsLoaded', expect.anything());
     });
 
     it('parsePaintTagEffects handles JSON and string tags', () => {
-      const s = session as any;
-      expect(s.parsePaintTagEffects('{"ghost": true}')).toEqual({ ghost: true });
-      expect(s.parsePaintTagEffects('ghost:1, hold=0, ghostBefore:5')).toEqual({
+      const store = session.annotationStore;
+      expect(store.parsePaintTagEffects('{"ghost": true}')).toEqual({ ghost: true });
+      expect(store.parsePaintTagEffects('ghost:1, hold=0, ghostBefore:5')).toEqual({
         ghost: true,
         hold: false,
         ghostBefore: 5,
       });
-      expect(s.parsePaintTagEffects('ghost hold')).toEqual({ ghost: true, hold: true });
+      expect(store.parsePaintTagEffects('ghost hold')).toEqual({ ghost: true, hold: true });
     });
   });
 });

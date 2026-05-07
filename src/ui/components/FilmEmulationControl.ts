@@ -1,9 +1,10 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
-import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { createButton, setButtonActive } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
+import { PANEL_WIDTHS } from './shared/theme';
 import type { FilmEmulationParams, FilmStockId } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS, FILM_STOCKS } from '../../filters/FilmEmulation';
-import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export { DEFAULT_FILM_EMULATION_PARAMS };
 export type { FilmEmulationParams };
@@ -15,8 +16,7 @@ export interface FilmEmulationControlEvents extends EventMap {
 export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvents> {
   private container: HTMLElement;
   private button: HTMLButtonElement;
-  private panel: HTMLElement;
-  private isPanelOpen = false;
+  private panel: Panel;
   private params: FilmEmulationParams = { ...DEFAULT_FILM_EMULATION_PARAMS };
 
   private enabledCheckbox: HTMLInputElement | null = null;
@@ -25,8 +25,6 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   private grainSlider: HTMLInputElement | null = null;
   private intensityValueLabel: HTMLSpanElement | null = null;
   private grainValueLabel: HTMLSpanElement | null = null;
-
-  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -39,71 +37,28 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
       position: relative;
     `;
 
-    // Create button
-    this.button = document.createElement('button');
-    this.button.innerHTML = `${getIconSvg('film', 'sm')}<span style="margin-left: 6px;">Film</span>`;
+    this.button = createButton('Film', () => this.toggle(), {
+      variant: 'icon',
+      icon: getIconSvg('film', 'sm'),
+      title: 'Film stock emulation',
+    });
     this.button.dataset.testid = 'film-emulation-control-button';
-    this.button.title = 'Film stock emulation';
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-expanded', 'false');
-    this.button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    `;
 
-    this.button.addEventListener('click', () => this.toggle());
-    this.button.addEventListener('pointerenter', () => {
-      if (!this.isPanelOpen) {
-        this.button.style.background = 'var(--bg-hover)';
-        this.button.style.borderColor = 'var(--border-primary)';
-        this.button.style.color = 'var(--text-primary)';
-      }
-    });
-    this.button.addEventListener('pointerleave', () => {
-      if (!this.isPanelOpen) {
-        if (!this.params.enabled) {
-          this.button.style.background = 'transparent';
-          this.button.style.borderColor = 'transparent';
-          this.button.style.color = 'var(--text-muted)';
-        }
-      }
-    });
-
-    // Create panel
-    this.panel = document.createElement('div');
-    this.panel.className = 'film-emulation-panel';
-    this.panel.dataset.testid = 'film-emulation-panel';
-    this.panel.setAttribute('role', 'dialog');
-    this.panel.setAttribute('aria-label', 'Film Emulation Settings');
-    this.panel.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      padding: 12px;
-      min-width: ${PANEL_WIDTHS.standard};
-      z-index: 9999;
-      display: none;
-      box-shadow: ${SHADOWS.panel};
-    `;
+    this.panel = createPanel({ width: PANEL_WIDTHS.standard, align: 'right' });
+    this.panel.element.classList.add('film-emulation-panel');
+    this.panel.element.dataset.testid = 'film-emulation-panel';
+    this.panel.element.setAttribute('role', 'dialog');
+    this.panel.element.setAttribute('aria-label', 'Film Emulation Settings');
 
     this.createPanelContent();
     this.container.appendChild(this.button);
-    // Outside-click + Escape dismiss are handled by OutsideClickRegistry,
-    // registered in show() and deregistered in hide().
   }
 
   private createPanelContent(): void {
-    // Header
+    const panelEl = this.panel.element;
+
     const header = document.createElement('div');
     header.style.cssText = `
       display: flex;
@@ -131,26 +86,18 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => {
-      resetBtn.style.background = 'var(--text-muted)';
-    });
-    resetBtn.addEventListener('pointerleave', () => {
-      resetBtn.style.background = 'var(--border-secondary)';
-    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
-    this.panel.appendChild(header);
+    panelEl.appendChild(header);
 
-    // Enabled checkbox
     const enabledRow = this.createCheckboxRow('Enabled', this.params.enabled, (checked) => {
       this.params.enabled = checked;
       this.emitChange();
     });
     this.enabledCheckbox = enabledRow.checkbox;
-    this.panel.appendChild(enabledRow.container);
+    panelEl.appendChild(enabledRow.container);
 
-    // Stock dropdown
     const stockOptions: [string, string][] = FILM_STOCKS.map((s) => [s.id, s.name]);
     const stockRow = this.createSelectRow('Film Stock', stockOptions, this.params.stock, (value) => {
       this.params.stock = value as FilmStockId;
@@ -158,17 +105,15 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
       this.emitChange();
     });
     this.stockSelect = stockRow.select;
-    this.panel.appendChild(stockRow.container);
+    panelEl.appendChild(stockRow.container);
 
-    // Stock description
     const descEl = document.createElement('div');
     descEl.dataset.testid = 'film-emulation-stock-description';
     descEl.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-bottom: 12px; font-style: italic;';
     const stock = FILM_STOCKS.find((s) => s.id === this.params.stock);
     descEl.textContent = stock?.description ?? '';
-    this.panel.appendChild(descEl);
+    panelEl.appendChild(descEl);
 
-    // Intensity slider
     const intensityResult = this.createSlider('Intensity', 0, 100, 1, this.params.intensity, (value) => {
       this.params.intensity = value;
       this.emitChange();
@@ -176,7 +121,6 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     this.intensitySlider = intensityResult.slider;
     this.intensityValueLabel = intensityResult.valueLabel;
 
-    // Grain slider
     const grainResult = this.createSlider('Grain', 0, 100, 1, this.params.grainIntensity, (value) => {
       this.params.grainIntensity = value;
       this.emitChange();
@@ -186,7 +130,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   }
 
   private updateDescriptionText(): void {
-    const descEl = this.panel.querySelector('[data-testid="film-emulation-stock-description"]');
+    const descEl = this.panel.element.querySelector('[data-testid="film-emulation-stock-description"]');
     if (descEl) {
       const stock = FILM_STOCKS.find((s) => s.id === this.params.stock);
       descEl.textContent = stock?.description ?? '';
@@ -304,7 +248,6 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
       cursor: pointer;
     `;
 
-    // Style the slider thumb
     const styleId = 'film-emulation-slider-style';
     if (!document.getElementById(styleId)) {
       const style = document.createElement('style');
@@ -345,7 +288,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
 
     row.appendChild(labelRow);
     row.appendChild(slider);
-    this.panel.appendChild(row);
+    this.panel.element.appendChild(row);
 
     return { slider, valueLabel: valueEl };
   }
@@ -356,23 +299,11 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   }
 
   private updateButtonState(): void {
-    if (this.params.enabled) {
-      this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      this.button.style.borderColor = 'var(--accent-primary)';
-      this.button.style.color = 'var(--accent-primary)';
-    } else if (this.isPanelOpen) {
-      this.button.style.background = 'var(--bg-hover)';
-      this.button.style.borderColor = 'var(--border-primary)';
-      this.button.style.color = 'var(--text-primary)';
-    } else {
-      this.button.style.background = 'transparent';
-      this.button.style.borderColor = 'transparent';
-      this.button.style.color = 'var(--text-muted)';
-    }
+    setButtonActive(this.button, this.params.enabled || this.panel.isVisible(), 'icon');
   }
 
   toggle(): void {
-    if (this.isPanelOpen) {
+    if (this.panel.isVisible()) {
       this.hide();
     } else {
       this.show();
@@ -380,36 +311,16 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   }
 
   show(): void {
-    if (!document.body.contains(this.panel)) {
-      document.body.appendChild(this.panel);
-    }
-    const rect = this.button.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 280)}px`;
-    this.isPanelOpen = true;
-    this.panel.style.display = 'block';
+    this.panel.show(this.button);
     this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
-    this.deregisterDismiss = outsideClickRegistry.register({
-      elements: [this.container, this.panel],
-      onDismiss: () => this.hide(),
-      dismissOn: 'click',
-      dismissOnEscape: true,
-    });
-
-    // Move focus to the first interactive element in the panel
     this.enabledCheckbox?.focus();
   }
 
   hide(): void {
-    this.isPanelOpen = false;
-    this.panel.style.display = 'none';
+    this.panel.hide();
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
-    this.deregisterDismiss?.();
-    this.deregisterDismiss = null;
-
-    // Return focus to the toggle button
     this.button.focus();
   }
 
@@ -450,7 +361,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   }
 
   get isOpen(): boolean {
-    return this.isPanelOpen;
+    return this.panel.isVisible();
   }
 
   render(): HTMLElement {
@@ -458,11 +369,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   }
 
   dispose(): void {
-    this.deregisterDismiss?.();
-    this.deregisterDismiss = null;
-    if (this.panel.parentNode) {
-      this.panel.parentNode.removeChild(this.panel);
-    }
+    this.panel.dispose();
     const styleEl = document.getElementById('film-emulation-slider-style');
     if (styleEl) styleEl.remove();
   }

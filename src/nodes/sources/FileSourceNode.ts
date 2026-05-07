@@ -20,6 +20,7 @@ import type { RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
 
 import { Logger } from '../../utils/Logger';
+import { probe, probeAsync } from '../../utils/probe';
 
 const logger = new Logger('FileSourceNode');
 /**
@@ -665,8 +666,11 @@ export class FileSourceNode extends BaseSourceNode {
           }
         }
         // Non-float TIFF or fetch failed - fall through to standard image loading
-      } catch {
-        // Fall through to standard image loading
+      } catch (err) {
+        // Float-TIFF probe failed (likely a non-float / non-TIFF file with .tif extension).
+        // Fall through to standard image loading; if that also fails the <img> error
+        // path will surface a visible error to the caller.
+        logger.warn('[FileSource] TIFF float-detection probe failed, falling back to standard loading:', err);
       }
     }
 
@@ -812,13 +816,13 @@ export class FileSourceNode extends BaseSourceNode {
                 return;
               }
             }
-            // SDR path: try browser-native decode first (faster), fall back to WASM
-            try {
-              const loaded = await this.tryLoadJXLNative(buffer, filename, url, originalUrl);
-              if (loaded) return;
-            } catch {
-              // Browser doesn't support JXL natively — fall through to WASM
-            }
+            // SDR path: try browser-native decode first (faster), fall back to WASM.
+            // Native decode is a feature-detection probe — most browsers don't support
+            // JXL yet, so failure here is expected and triggers the WASM fallback.
+            const nativeLoaded = await probeAsync('jxl-native-url', () =>
+              this.tryLoadJXLNative(buffer, filename, url, originalUrl),
+            );
+            if (nativeLoaded) return;
             await this.loadJXLFromBuffer(buffer, filename, url, originalUrl);
             return;
           }
@@ -852,13 +856,13 @@ export class FileSourceNode extends BaseSourceNode {
               await this.loadHEICHDR(buffer, colorInfo, filename, url, originalUrl);
               return;
             }
-            // SDR fallback: try native first (Safari), then WASM
-            try {
-              const loaded = await this.tryLoadHEICNative(buffer, filename, url, originalUrl);
-              if (loaded) return;
-            } catch {
-              // Native decode failed
-            }
+            // SDR fallback: try native first (Safari), then WASM.
+            // Feature-detection probe — only Safari supports native HEIC decode,
+            // so failure here is expected on other browsers and triggers WASM fallback.
+            const heicNativeLoaded = await probeAsync('heic-native-url', () =>
+              this.tryLoadHEICNative(buffer, filename, url, originalUrl),
+            );
+            if (heicNativeLoaded) return;
             await this.loadHEICSDRWasm(buffer, filename, url, originalUrl);
             return;
           }
@@ -1023,7 +1027,7 @@ export class FileSourceNode extends BaseSourceNode {
 
     // Detect multi-view EXR stereo (left/right views → 'separate' input format)
     // and decode the right-eye view when present
-    const { isMultiViewEXR, getEXRViews, decodeEXRView } = await import('../../formats/MultiViewEXR');
+    const { isMultiViewEXR, getEXRViews, decodeEXRView } = await import('../../formats/MultiViewEXRDecoder');
     let rightEyeIPImage: IPImage | null = null;
     if (isMultiViewEXR(buffer)) {
       const views = getEXRViews(buffer);
@@ -1323,19 +1327,15 @@ export class FileSourceNode extends BaseSourceNode {
 
       videoFrame = null; // Ownership transferred to IPImage
     } catch (e) {
+      // Cleanup-after-error: best-effort close. A throw from .close() must NOT
+      // mask the original decode error (which we re-throw), but it must remain
+      // auditable — probe() logs at debug level rather than swallowing silently.
       if (!bitmapClosed) {
-        try {
-          bitmap.close();
-        } catch {
-          /* */
-        }
+        probe('avif-hdr-bitmap-cleanup', () => bitmap.close());
       }
       if (videoFrame) {
-        try {
-          videoFrame.close();
-        } catch {
-          /* */
-        }
+        const vf = videoFrame;
+        probe('avif-hdr-videoframe-cleanup', () => vf.close());
       }
       throw e;
     }
@@ -1416,19 +1416,14 @@ export class FileSourceNode extends BaseSourceNode {
 
       videoFrame = null; // Ownership transferred to IPImage
     } catch (e) {
+      // Cleanup-after-error: best-effort close. A throw from .close() must NOT
+      // mask the original decode error (which we re-throw).
       if (!bitmapClosed) {
-        try {
-          bitmap.close();
-        } catch {
-          /* */
-        }
+        probe('jxl-hdr-bitmap-cleanup', () => bitmap.close());
       }
       if (videoFrame) {
-        try {
-          videoFrame.close();
-        } catch {
-          /* */
-        }
+        const vf = videoFrame;
+        probe('jxl-hdr-videoframe-cleanup', () => vf.close());
       }
       throw e;
     }
@@ -1575,19 +1570,14 @@ export class FileSourceNode extends BaseSourceNode {
 
       videoFrame = null; // Ownership transferred to IPImage
     } catch (e) {
+      // Cleanup-after-error: best-effort close. A throw from .close() must NOT
+      // mask the original decode error (which we re-throw).
       if (!bitmapClosed) {
-        try {
-          bitmap.close();
-        } catch {
-          /* */
-        }
+        probe('heic-hdr-bitmap-cleanup', () => bitmap.close());
       }
       if (videoFrame) {
-        try {
-          videoFrame.close();
-        } catch {
-          /* */
-        }
+        const vf = videoFrame;
+        probe('heic-hdr-videoframe-cleanup', () => vf.close());
       }
       throw e;
     }
@@ -2012,14 +2002,13 @@ export class FileSourceNode extends BaseSourceNode {
               return;
             }
           }
-          // SDR path: try browser-native decode first (faster), fall back to WASM
+          // SDR path: try browser-native decode first (faster), fall back to WASM.
+          // Feature-detection probe — most browsers don't support JXL natively yet.
           jxlBlobUrl = URL.createObjectURL(file);
-          try {
-            const loaded = await this.tryLoadJXLNative(buffer, file.name, jxlBlobUrl);
-            if (loaded) return;
-          } catch {
-            // Browser doesn't support JXL natively — fall through to WASM
-          }
+          const jxlNativeLoaded = await probeAsync('jxl-native-file', () =>
+            this.tryLoadJXLNative(buffer, file.name, jxlBlobUrl as string),
+          );
+          if (jxlNativeLoaded) return;
           await this.loadJXLFromBuffer(buffer, file.name, jxlBlobUrl);
           return;
         }
@@ -2053,14 +2042,13 @@ export class FileSourceNode extends BaseSourceNode {
             await this.loadHEICHDR(buffer, colorInfo, file.name, url);
             return;
           }
-          // SDR: try native blob URL first (Safari), then WASM fallback
+          // SDR: try native blob URL first (Safari), then WASM fallback.
+          // Feature-detection probe — only Safari supports native HEIC decode.
           const heicBlobUrl = URL.createObjectURL(file);
-          try {
-            const loaded = await this.tryLoadHEICNative(buffer, file.name, heicBlobUrl);
-            if (loaded) return;
-          } catch {
-            // Native decode failed — fall through to WASM
-          }
+          const heicNativeLoaded = await probeAsync('heic-native-file', () =>
+            this.tryLoadHEICNative(buffer, file.name, heicBlobUrl),
+          );
+          if (heicNativeLoaded) return;
           try {
             await this.loadHEICSDRWasm(buffer, file.name, heicBlobUrl);
           } catch (err) {

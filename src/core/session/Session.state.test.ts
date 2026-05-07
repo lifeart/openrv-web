@@ -5,6 +5,14 @@ import { IPNode } from '../../nodes/base/IPNode';
 import type { IPImage } from '../image/Image';
 import type { EvalContext } from '../graph/Graph';
 import type { GTOData } from 'gto-js';
+import { getNumberValue, getBooleanValue, getNumberArray, getStringValue } from './AnnotationStore';
+import {
+  parseColorAdjustments,
+  parseChannelMode,
+  parseStereo,
+  parseCDL,
+  parseCrop,
+} from './GTOSettingsParser';
 
 const createMockDTO = (protocols: any) => {
   const mockObj = (data: any): any => ({
@@ -730,42 +738,38 @@ describe('Session', () => {
 
   describe('helper methods', () => {
     it('getNumberValue handles various inputs', () => {
-      const s = session as any;
-      expect(s.getNumberValue(10)).toBe(10);
-      expect(s.getNumberValue([20])).toBe(20);
-      expect(s.getNumberValue([[30]])).toBe(30);
-      expect(s.getNumberValue('abc')).toBeUndefined();
-      expect(s.getNumberValue([])).toBeUndefined();
+      expect(getNumberValue(10)).toBe(10);
+      expect(getNumberValue([20])).toBe(20);
+      expect(getNumberValue([[30]])).toBe(30);
+      expect(getNumberValue('abc')).toBeUndefined();
+      expect(getNumberValue([])).toBeUndefined();
     });
 
     it('getBooleanValue handles various inputs', () => {
-      const s = session as any;
-      expect(s.getBooleanValue(true)).toBe(true);
-      expect(s.getBooleanValue(false)).toBe(false);
-      expect(s.getBooleanValue(1)).toBe(true);
-      expect(s.getBooleanValue(0)).toBe(false);
-      expect(s.getBooleanValue('true')).toBe(true);
-      expect(s.getBooleanValue('0')).toBe(false);
-      expect(s.getBooleanValue('false')).toBe(false);
-      expect(s.getBooleanValue([true])).toBe(true);
-      expect(s.getBooleanValue(['1'])).toBe(true);
-      expect(s.getBooleanValue(['false'])).toBe(false);
-      expect(s.getBooleanValue({})).toBeUndefined();
+      expect(getBooleanValue(true)).toBe(true);
+      expect(getBooleanValue(false)).toBe(false);
+      expect(getBooleanValue(1)).toBe(true);
+      expect(getBooleanValue(0)).toBe(false);
+      expect(getBooleanValue('true')).toBe(true);
+      expect(getBooleanValue('0')).toBe(false);
+      expect(getBooleanValue('false')).toBe(false);
+      expect(getBooleanValue([true])).toBe(true);
+      expect(getBooleanValue(['1'])).toBe(true);
+      expect(getBooleanValue(['false'])).toBe(false);
+      expect(getBooleanValue({})).toBeUndefined();
     });
 
     it('getNumberArray handles various inputs', () => {
-      const s = session as any;
-      expect(s.getNumberArray([1, 2])).toEqual([1, 2]);
-      expect(s.getNumberArray([[3, 4]])).toEqual([3, 4]);
-      expect(s.getNumberArray('abc')).toBeUndefined();
-      expect(s.getNumberArray(['a'])).toBeUndefined();
+      expect(getNumberArray([1, 2])).toEqual([1, 2]);
+      expect(getNumberArray([[3, 4]])).toEqual([3, 4]);
+      expect(getNumberArray('abc')).toBeUndefined();
+      expect(getNumberArray(['a'])).toBeUndefined();
     });
 
     it('getStringValue handles various inputs', () => {
-      const s = session as any;
-      expect(s.getStringValue('test')).toBe('test');
-      expect(s.getStringValue(['val'])).toBe('val');
-      expect(s.getStringValue(123)).toBeUndefined();
+      expect(getStringValue('test')).toBe('test');
+      expect(getStringValue(['val'])).toBe('val');
+      expect(getStringValue(123)).toBeUndefined();
     });
   });
 
@@ -923,7 +927,6 @@ describe('Session', () => {
     });
 
     it('parseColorAdjustments contrast edge case', () => {
-      const s = session as any;
       const mockObj = (data: any): any => ({
         exists: () => true,
         component: () => mockObj(data),
@@ -940,12 +943,12 @@ describe('Session', () => {
           return [];
         },
       } as any;
-      const adj = s.parseColorAdjustments(dto);
-      expect(adj.contrast).toBe(1);
+      const adj = parseColorAdjustments(dto);
+      expect(adj).not.toBeNull();
+      expect(adj!.contrast).toBe(1);
     });
 
     it('parseChannelMode and Stereo mapping coverage', () => {
-      const s = session as any;
       const testChannel = (val: number, expected: string) => {
         const node = {
           component: (c: string) => ({
@@ -955,7 +958,7 @@ describe('Session', () => {
         };
         const results = [node];
         const dto = { byProtocol: () => results } as any;
-        expect(s.parseChannelMode(dto)).toBe(expected);
+        expect(parseChannelMode(dto)).toBe(expected);
       };
       testChannel(1, 'green');
       testChannel(5, 'luminance');
@@ -971,7 +974,9 @@ describe('Session', () => {
         const results = [node];
         (results as any).first = () => node;
         const dto = { byProtocol: () => results } as any;
-        expect(s.parseStereo(dto).mode).toBe(mode);
+        const stereo = parseStereo(dto);
+        expect(stereo).not.toBeNull();
+        expect(stereo!.mode).toBe(mode);
       };
       testStereo('vsqueezed', 'over-under');
       testStereo('checker', 'checkerboard');
@@ -979,7 +984,6 @@ describe('Session', () => {
     });
 
     it('parseCDL RVLinearize path', () => {
-      const s = session as any;
       const mockObj = (data: any): any => ({
         exists: () => data !== undefined,
         property: (name: string) => ({
@@ -999,8 +1003,9 @@ describe('Session', () => {
           return [];
         },
       } as any;
-      const cdl = s.parseCDL(dto);
-      expect(cdl.slope.r).toBe(2);
+      const cdl = parseCDL(dto);
+      expect(cdl).not.toBeNull();
+      expect(cdl!.slope.r).toBe(2);
     });
 
     it('A/B switching and clearing coverage', () => {
@@ -1029,7 +1034,6 @@ describe('Session', () => {
     });
 
     it('parsePaintAnnotations with annotation component', () => {
-      const s = session as any;
       const dto = createMockDTO({
         RVPaint: [
           {
@@ -1039,7 +1043,7 @@ describe('Session', () => {
         ],
       });
       const emitSpy = vi.spyOn(session, 'emit');
-      s.parsePaintAnnotations(dto, 1);
+      session.annotationStore.parsePaintAnnotations(dto, 1);
       expect(emitSpy).toHaveBeenCalledWith('annotationsLoaded', expect.anything());
     });
 
@@ -1349,11 +1353,11 @@ describe('Session', () => {
       const dto = createMockDTO({
         ChannelSelect: [{ node: { active: 0 } }, { node: { active: 1 }, parameters: { channel: 4 } }],
       });
-      expect(s.parseChannelMode(dto)).toBe('rgb');
+      expect(parseChannelMode(dto)).toBe('rgb');
 
       // getNumberArray edge cases
-      expect(s.getNumberArray('not an array')).toBeUndefined();
-      expect(s.getNumberArray([1, 'mix', 2])).toEqual([1, 2]);
+      expect(getNumberArray('not an array')).toBeUndefined();
+      expect(getNumberArray([1, 'mix', 2])).toEqual([1, 2]);
 
       // setSources index clamp - this test needs to be revisited if _currentSourceIndex is not clamped in setSources
       s._currentSourceIndex = 10;
@@ -1362,19 +1366,21 @@ describe('Session', () => {
 
     it('paint and CDL edge cases', () => {
       const s = session as any;
+      const store = session.annotationStore;
 
       // CDL failure and active=0 and RVLinearize path
       const dtoCDL = createMockDTO({
         RVLinearize: [{ CDL: { active: 1, slope: [1, 1, 1], offset: [0, 0, 0], power: [1, 1, 1], saturation: 1 } }],
       });
-      expect(s.parseCDL(dtoCDL)).not.toBeNull();
+      expect(parseCDL(dtoCDL)).not.toBeNull();
 
       // Paint tag effects JSON and error paths
-      const effects = s.parsePaintTagEffects('{"ghost": true, "ghostafter": 5, "unknown": 1}');
-      expect(effects.ghost).toBe(true);
-      expect(effects.ghostAfter).toBe(5);
-      expect(s.parsePaintTagEffects('not json or tags')).toBeNull();
-      expect(s.parsePaintTagEffects('{ invalid json }')).toBeNull(); // trigger catch
+      const effects = store.parsePaintTagEffects('{"ghost": true, "ghostafter": 5, "unknown": 1}');
+      expect(effects).not.toBeNull();
+      expect(effects!.ghost).toBe(true);
+      expect(effects!.ghostAfter).toBe(5);
+      expect(store.parsePaintTagEffects('not json or tags')).toBeNull();
+      expect(store.parsePaintTagEffects('{ invalid json }')).toBeNull(); // trigger catch
 
       // parsePenStroke flat points and numeric width
       const penComp = {
@@ -1405,23 +1411,23 @@ describe('Session', () => {
           },
         ],
       });
-      s.parsePaintAnnotations(dtoPaint, 1);
+      store.parsePaintAnnotations(dtoPaint, 1);
 
       // parseCrop edge cases
       const dtoCrop = createMockDTO({
         RVFormat: [{ crop: { active: 0 } }],
       });
-      expect(s.parseCrop(dtoCrop, { width: 100, height: 100 })).toBeNull();
+      expect(parseCrop(dtoCrop, { width: 100, height: 100 })).toBeNull();
 
       // getBooleanValue array of number
-      expect(s.getBooleanValue([1])).toBe(true);
-      expect(s.getBooleanValue([0])).toBe(false);
+      expect(getBooleanValue([1])).toBe(true);
+      expect(getBooleanValue([0])).toBe(false);
 
       // parseChannelMode loop return null
       const dtoChannel = createMockDTO({
         ChannelSelect: [{ node: { active: 1 } }],
       });
-      expect(s.parseChannelMode(dtoChannel)).toBeNull();
+      expect(parseChannelMode(dtoChannel)).toBeNull();
     });
 
     it('forward playback wrapping overrides', () => {

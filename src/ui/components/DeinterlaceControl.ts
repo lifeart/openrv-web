@@ -1,8 +1,9 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
-import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { createButton, setButtonActive } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
+import { PANEL_WIDTHS } from './shared/theme';
 import { createCheckboxRow } from './shared/FormElements';
-import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import type { DeinterlaceParams, DeinterlaceMethod, FieldOrder } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 
@@ -27,15 +28,12 @@ const FIELD_ORDER_LABELS: Record<FieldOrder, string> = {
 export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   private container: HTMLElement;
   private button: HTMLButtonElement;
-  private panel: HTMLElement;
-  private isPanelOpen = false;
+  private panel: Panel;
   private params: DeinterlaceParams = { ...DEFAULT_DEINTERLACE_PARAMS };
 
   private enabledCheckbox: HTMLInputElement | null = null;
   private methodSelect: HTMLSelectElement | null = null;
   private fieldOrderSelect: HTMLSelectElement | null = null;
-
-  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -48,71 +46,28 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
       position: relative;
     `;
 
-    // Create button
-    this.button = document.createElement('button');
-    this.button.innerHTML = `${getIconSvg('filter', 'sm')}<span style="margin-left: 6px;">Deinterlace</span>`;
+    this.button = createButton('Deinterlace', () => this.toggle(), {
+      variant: 'icon',
+      icon: getIconSvg('filter', 'sm'),
+      title: 'Deinterlace preview',
+    });
     this.button.dataset.testid = 'deinterlace-control-button';
-    this.button.title = 'Deinterlace preview';
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-expanded', 'false');
-    this.button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    `;
 
-    this.button.addEventListener('click', () => this.toggle());
-    this.button.addEventListener('pointerenter', () => {
-      if (!this.isPanelOpen) {
-        this.button.style.background = 'var(--bg-hover)';
-        this.button.style.borderColor = 'var(--border-primary)';
-        this.button.style.color = 'var(--text-primary)';
-      }
-    });
-    this.button.addEventListener('pointerleave', () => {
-      if (!this.isPanelOpen) {
-        if (!this.params.enabled) {
-          this.button.style.background = 'transparent';
-          this.button.style.borderColor = 'transparent';
-          this.button.style.color = 'var(--text-muted)';
-        }
-      }
-    });
-
-    // Create panel
-    this.panel = document.createElement('div');
-    this.panel.className = 'deinterlace-panel';
-    this.panel.dataset.testid = 'deinterlace-panel';
-    this.panel.setAttribute('role', 'dialog');
-    this.panel.setAttribute('aria-label', 'Deinterlace Settings');
-    this.panel.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      padding: 12px;
-      min-width: ${PANEL_WIDTHS.narrow};
-      z-index: 9999;
-      display: none;
-      box-shadow: ${SHADOWS.panel};
-    `;
+    this.panel = createPanel({ width: PANEL_WIDTHS.narrow, align: 'right' });
+    this.panel.element.classList.add('deinterlace-panel');
+    this.panel.element.dataset.testid = 'deinterlace-panel';
+    this.panel.element.setAttribute('role', 'dialog');
+    this.panel.element.setAttribute('aria-label', 'Deinterlace Settings');
 
     this.createPanelContent();
     this.container.appendChild(this.button);
-    // Outside-click + Escape dismiss are handled by OutsideClickRegistry,
-    // registered in show() and deregistered in hide().
   }
 
   private createPanelContent(): void {
-    // Header
+    const panelEl = this.panel.element;
+
     const header = document.createElement('div');
     header.style.cssText = `
       display: flex;
@@ -140,18 +95,11 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => {
-      resetBtn.style.background = 'var(--text-muted)';
-    });
-    resetBtn.addEventListener('pointerleave', () => {
-      resetBtn.style.background = 'var(--border-secondary)';
-    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
-    this.panel.appendChild(header);
+    panelEl.appendChild(header);
 
-    // Enabled checkbox
     const enabledRow = createCheckboxRow(
       'Enabled',
       this.params.enabled,
@@ -163,17 +111,15 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     );
     enabledRow.checkbox.dataset.testid = 'deinterlace-enabled-checkbox';
     this.enabledCheckbox = enabledRow.checkbox;
-    this.panel.appendChild(enabledRow.container);
+    panelEl.appendChild(enabledRow.container);
 
-    // Method dropdown
     const methodRow = this.createSelectRow('Method', Object.entries(METHOD_LABELS), this.params.method, (value) => {
       this.params.method = value as DeinterlaceMethod;
       this.emitChange();
     });
     this.methodSelect = methodRow.select;
-    this.panel.appendChild(methodRow.container);
+    panelEl.appendChild(methodRow.container);
 
-    // Field order dropdown
     const fieldOrderRow = this.createSelectRow(
       'Field Order',
       Object.entries(FIELD_ORDER_LABELS),
@@ -184,7 +130,7 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
       },
     );
     this.fieldOrderSelect = fieldOrderRow.select;
-    this.panel.appendChild(fieldOrderRow.container);
+    panelEl.appendChild(fieldOrderRow.container);
   }
 
   private createSelectRow(
@@ -235,23 +181,11 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   }
 
   private updateButtonState(): void {
-    if (this.params.enabled) {
-      this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      this.button.style.borderColor = 'var(--accent-primary)';
-      this.button.style.color = 'var(--accent-primary)';
-    } else if (this.isPanelOpen) {
-      this.button.style.background = 'var(--bg-hover)';
-      this.button.style.borderColor = 'var(--border-primary)';
-      this.button.style.color = 'var(--text-primary)';
-    } else {
-      this.button.style.background = 'transparent';
-      this.button.style.borderColor = 'transparent';
-      this.button.style.color = 'var(--text-muted)';
-    }
+    setButtonActive(this.button, this.params.enabled || this.panel.isVisible(), 'icon');
   }
 
   toggle(): void {
-    if (this.isPanelOpen) {
+    if (this.panel.isVisible()) {
       this.hide();
     } else {
       this.show();
@@ -259,36 +193,16 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   }
 
   show(): void {
-    if (!document.body.contains(this.panel)) {
-      document.body.appendChild(this.panel);
-    }
-    const rect = this.button.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
-    this.isPanelOpen = true;
-    this.panel.style.display = 'block';
+    this.panel.show(this.button);
     this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
-    this.deregisterDismiss = outsideClickRegistry.register({
-      elements: [this.container, this.panel],
-      onDismiss: () => this.hide(),
-      dismissOn: 'click',
-      dismissOnEscape: true,
-    });
-
-    // Move focus to the first interactive element in the panel
     this.enabledCheckbox?.focus();
   }
 
   hide(): void {
-    this.isPanelOpen = false;
-    this.panel.style.display = 'none';
+    this.panel.hide();
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
-    this.deregisterDismiss?.();
-    this.deregisterDismiss = null;
-
-    // Return focus to the toggle button
     this.button.focus();
   }
 
@@ -313,7 +227,7 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   }
 
   get isOpen(): boolean {
-    return this.isPanelOpen;
+    return this.panel.isVisible();
   }
 
   render(): HTMLElement {
@@ -321,10 +235,6 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   }
 
   dispose(): void {
-    this.deregisterDismiss?.();
-    this.deregisterDismiss = null;
-    if (this.panel.parentNode) {
-      this.panel.parentNode.removeChild(this.panel);
-    }
+    this.panel.dispose();
   }
 }

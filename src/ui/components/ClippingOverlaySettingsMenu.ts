@@ -6,6 +6,12 @@
 
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
+import {
+  createCheckableMenuItem,
+  createSectionHeader,
+  createSliderControl,
+  setMenuItemChecked,
+} from './shared/FormElements';
 import type { ClippingOverlay } from './ClippingOverlay';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
@@ -44,25 +50,54 @@ export class ClippingOverlaySettingsMenu {
 
     const state = this.overlay.getState();
 
-    menu.appendChild(this.createSectionHeader('Display'));
+    menu.appendChild(createSectionHeader('Display', { menu: true }));
 
-    const highlightItem = this.createCheckableItem('Show Highlights', state.showHighlights, () => {
-      const next = !this.overlay.getState().showHighlights;
-      this.overlay.setShowHighlights(next);
-      this.updateCheckbox(highlightItem, next);
-    });
+    const highlightItem = createCheckableMenuItem(
+      {
+        label: 'Show Highlights',
+        checked: state.showHighlights,
+        role: 'menuitemcheckbox',
+        onClick: () => {
+          const next = !this.overlay.getState().showHighlights;
+          this.overlay.setShowHighlights(next);
+          setMenuItemChecked(highlightItem, next);
+        },
+      },
+      applyHoverEffect,
+    );
     highlightItem.dataset.setting = 'show-highlights';
     menu.appendChild(highlightItem);
 
-    const shadowItem = this.createCheckableItem('Show Shadows', state.showShadows, () => {
-      const next = !this.overlay.getState().showShadows;
-      this.overlay.setShowShadows(next);
-      this.updateCheckbox(shadowItem, next);
-    });
+    const shadowItem = createCheckableMenuItem(
+      {
+        label: 'Show Shadows',
+        checked: state.showShadows,
+        role: 'menuitemcheckbox',
+        onClick: () => {
+          const next = !this.overlay.getState().showShadows;
+          this.overlay.setShowShadows(next);
+          setMenuItemChecked(shadowItem, next);
+        },
+      },
+      applyHoverEffect,
+    );
     shadowItem.dataset.setting = 'show-shadows';
     menu.appendChild(shadowItem);
 
-    menu.appendChild(this.createOpacityControl(state.opacity));
+    menu.appendChild(
+      createSliderControl({
+        label: 'Opacity',
+        id: 'clipping-opacity',
+        value: state.opacity * 100,
+        min: 0,
+        max: 100,
+        suffix: '%',
+        onInput: (value) => {
+          this.overlay.setOpacity(value / 100);
+          return this.overlay.getState().opacity * 100;
+        },
+      }).container,
+    );
 
     this.menuEl = menu;
     document.body.appendChild(menu);
@@ -107,119 +142,5 @@ export class ClippingOverlaySettingsMenu {
 
   dispose(): void {
     this.hide();
-  }
-
-  private createSectionHeader(text: string): HTMLDivElement {
-    const header = document.createElement('div');
-    header.setAttribute('role', 'none');
-    header.textContent = text;
-    header.style.cssText = `
-      padding: 6px 12px 2px;
-      font-size: 10px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      pointer-events: none;
-    `;
-    return header;
-  }
-
-  private createCheckableItem(label: string, checked: boolean, onClick: () => void): HTMLDivElement {
-    const item = document.createElement('div');
-    item.setAttribute('role', 'menuitemcheckbox');
-    item.setAttribute('aria-checked', String(checked));
-    item.tabIndex = -1;
-    item.style.cssText = `
-      padding: 6px 12px;
-      font-size: 12px;
-      color: var(--text-primary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      outline: none;
-      white-space: nowrap;
-    `;
-
-    const checkSpan = document.createElement('span');
-    checkSpan.className = 'menu-check';
-    checkSpan.textContent = checked ? '\u2713' : '';
-    checkSpan.style.cssText = `
-      width: 14px;
-      font-size: 12px;
-      text-align: center;
-      flex-shrink: 0;
-    `;
-    item.appendChild(checkSpan);
-
-    const labelSpan = document.createElement('span');
-    labelSpan.textContent = label;
-    item.appendChild(labelSpan);
-
-    applyHoverEffect(item);
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      onClick();
-    });
-
-    return item;
-  }
-
-  private createOpacityControl(initialOpacity: number): HTMLDivElement {
-    const wrapper = document.createElement('div');
-    wrapper.setAttribute('role', 'none');
-    wrapper.style.cssText = `
-      padding: 8px 12px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    `;
-
-    const labelRow = document.createElement('div');
-    labelRow.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--text-primary);
-    `;
-
-    const label = document.createElement('span');
-    label.textContent = 'Opacity';
-    labelRow.appendChild(label);
-
-    const value = document.createElement('span');
-    value.dataset.testid = 'clipping-opacity-value';
-    value.textContent = `${Math.round(initialOpacity * 100)}%`;
-    labelRow.appendChild(value);
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0';
-    slider.max = '100';
-    slider.step = '1';
-    slider.value = String(Math.round(initialOpacity * 100));
-    slider.dataset.testid = 'clipping-opacity-slider';
-    slider.style.cssText = 'width: 100%;';
-    slider.addEventListener('input', () => {
-      const opacity = Number.parseInt(slider.value, 10) / 100;
-      this.overlay.setOpacity(opacity);
-      const appliedOpacity = this.overlay.getState().opacity;
-      slider.value = String(Math.round(appliedOpacity * 100));
-      value.textContent = `${Math.round(appliedOpacity * 100)}%`;
-    });
-
-    wrapper.appendChild(labelRow);
-    wrapper.appendChild(slider);
-    return wrapper;
-  }
-
-  private updateCheckbox(item: HTMLDivElement, checked: boolean): void {
-    item.setAttribute('aria-checked', String(checked));
-    const check = item.querySelector<HTMLElement>('.menu-check');
-    if (check) {
-      check.textContent = checked ? '\u2713' : '';
-    }
   }
 }

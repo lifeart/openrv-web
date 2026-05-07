@@ -1,8 +1,9 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { createButton, setButtonActive } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
 import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 import { DEFAULT_PERSPECTIVE_PARAMS, isPerspectiveActive } from '../../transform/PerspectiveCorrection';
-import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface PerspectiveCorrectionControlEvents extends EventMap {
   perspectiveChanged: PerspectiveCorrectionParams;
@@ -18,15 +19,12 @@ const CORNER_LABELS: { key: 'topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft
 export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrectionControlEvents> {
   private container: HTMLElement;
   private button: HTMLButtonElement;
-  private panel: HTMLElement;
-  private isPanelOpen = false;
+  private panel: Panel;
   private params: PerspectiveCorrectionParams;
 
   private enabledCheckbox: HTMLInputElement | null = null;
   private qualitySelect: HTMLSelectElement | null = null;
   private cornerInputs: Map<string, HTMLInputElement> = new Map();
-
-  private deregisterDismiss: OutsideClickDeregister | null = null;
 
   constructor() {
     super();
@@ -47,67 +45,28 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       position: relative;
     `;
 
-    this.button = document.createElement('button');
-    this.button.innerHTML = `${getIconSvg('grid', 'sm')}<span style="margin-left: 6px;">Perspective</span>`;
+    this.button = createButton('Perspective', () => this.toggle(), {
+      variant: 'icon',
+      icon: getIconSvg('grid', 'sm'),
+      title: 'Perspective correction',
+    });
     this.button.dataset.testid = 'perspective-control-button';
-    this.button.title = 'Perspective correction';
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-expanded', 'false');
-    this.button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    `;
 
-    this.button.addEventListener('click', () => this.toggle());
-    this.button.addEventListener('pointerenter', () => {
-      if (!this.isPanelOpen) {
-        this.button.style.background = 'var(--bg-hover)';
-        this.button.style.borderColor = 'var(--border-primary)';
-        this.button.style.color = 'var(--text-primary)';
-      }
-    });
-    this.button.addEventListener('pointerleave', () => {
-      if (!this.isPanelOpen) {
-        if (!isPerspectiveActive(this.params)) {
-          this.button.style.background = 'transparent';
-          this.button.style.borderColor = 'transparent';
-          this.button.style.color = 'var(--text-muted)';
-        }
-      }
-    });
-
-    this.panel = document.createElement('div');
-    this.panel.className = 'perspective-panel';
-    this.panel.dataset.testid = 'perspective-panel';
-    this.panel.setAttribute('role', 'dialog');
-    this.panel.setAttribute('aria-label', 'Perspective Correction Settings');
-    this.panel.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      padding: 12px;
-      min-width: 260px;
-      z-index: 9999;
-      display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    `;
+    this.panel = createPanel({ width: '260px', align: 'right' });
+    this.panel.element.classList.add('perspective-panel');
+    this.panel.element.dataset.testid = 'perspective-panel';
+    this.panel.element.setAttribute('role', 'dialog');
+    this.panel.element.setAttribute('aria-label', 'Perspective Correction Settings');
 
     this.createPanelContent();
     this.container.appendChild(this.button);
   }
 
   private createPanelContent(): void {
-    // Header
+    const panelEl = this.panel.element;
+
     const header = document.createElement('div');
     header.style.cssText = `
       display: flex;
@@ -135,18 +94,11 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => {
-      resetBtn.style.background = 'var(--text-muted)';
-    });
-    resetBtn.addEventListener('pointerleave', () => {
-      resetBtn.style.background = 'var(--border-secondary)';
-    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
-    this.panel.appendChild(header);
+    panelEl.appendChild(header);
 
-    // Enabled checkbox
     const enabledRow = document.createElement('div');
     enabledRow.style.cssText = 'margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
 
@@ -168,9 +120,8 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
 
     enabledRow.appendChild(this.enabledCheckbox);
     enabledRow.appendChild(enabledLabel);
-    this.panel.appendChild(enabledRow);
+    panelEl.appendChild(enabledRow);
 
-    // Corner inputs
     for (const { key, label } of CORNER_LABELS) {
       const section = document.createElement('div');
       section.style.cssText = 'margin-bottom: 8px;';
@@ -199,10 +150,9 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       inputRow.appendChild(yInput.container);
       section.appendChild(sectionLabel);
       section.appendChild(inputRow);
-      this.panel.appendChild(section);
+      panelEl.appendChild(section);
     }
 
-    // Quality dropdown
     const qualityRow = document.createElement('div');
     qualityRow.style.cssText = 'margin-top: 12px; border-top: 1px solid var(--border-primary); padding-top: 8px;';
 
@@ -241,7 +191,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
 
     qualityRow.appendChild(qualityLabel);
     qualityRow.appendChild(this.qualitySelect);
-    this.panel.appendChild(qualityRow);
+    panelEl.appendChild(qualityRow);
   }
 
   private createNumberInput(
@@ -292,19 +242,12 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
   }
 
   private updateButtonState(): void {
-    if (isPerspectiveActive(this.params) || this.isPanelOpen) {
-      this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      this.button.style.borderColor = 'var(--accent-primary)';
-      this.button.style.color = 'var(--accent-primary)';
-    } else {
-      this.button.style.background = 'transparent';
-      this.button.style.borderColor = 'transparent';
-      this.button.style.color = 'var(--text-muted)';
-    }
+    const active = isPerspectiveActive(this.params) || this.panel.isVisible();
+    setButtonActive(this.button, active, 'icon');
   }
 
   toggle(): void {
-    if (this.isPanelOpen) {
+    if (this.panel.isVisible()) {
       this.hide();
     } else {
       this.show();
@@ -312,37 +255,16 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
   }
 
   show(): void {
-    if (!document.body.contains(this.panel)) {
-      document.body.appendChild(this.panel);
-    }
-    const rect = this.button.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 280)}px`;
-    this.isPanelOpen = true;
-    this.panel.style.display = 'block';
+    this.panel.show(this.button);
     this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
-    // Outside-click + Escape dismiss owned by OutsideClickRegistry.
-    this.deregisterDismiss = outsideClickRegistry.register({
-      elements: [this.container, this.panel],
-      onDismiss: () => this.hide(),
-      dismissOn: 'click',
-      dismissOnEscape: true,
-    });
-
-    // Move focus to the first interactive element in the panel
     this.enabledCheckbox?.focus();
   }
 
   hide(): void {
-    this.isPanelOpen = false;
-    this.panel.style.display = 'none';
+    this.panel.hide();
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
-    this.deregisterDismiss?.();
-    this.deregisterDismiss = null;
-
-    // Return focus to the toggle button
     this.button.focus();
   }
 
@@ -356,7 +278,6 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     };
     if (this.enabledCheckbox) this.enabledCheckbox.checked = false;
     if (this.qualitySelect) this.qualitySelect.value = 'bilinear';
-    // Update all corner inputs
     for (const { key } of CORNER_LABELS) {
       const xInput = this.cornerInputs.get(`${key}-x`);
       const yInput = this.cornerInputs.get(`${key}-y`);
@@ -386,7 +307,6 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     };
     if (this.enabledCheckbox) this.enabledCheckbox.checked = params.enabled;
     if (this.qualitySelect) this.qualitySelect.value = params.quality;
-    // Update all corner inputs
     for (const { key } of CORNER_LABELS) {
       const xInput = this.cornerInputs.get(`${key}-x`);
       const yInput = this.cornerInputs.get(`${key}-y`);
@@ -397,7 +317,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
   }
 
   get isOpen(): boolean {
-    return this.isPanelOpen;
+    return this.panel.isVisible();
   }
 
   render(): HTMLElement {
@@ -405,10 +325,6 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
   }
 
   dispose(): void {
-    this.deregisterDismiss?.();
-    this.deregisterDismiss = null;
-    if (this.panel.parentNode) {
-      this.panel.parentNode.removeChild(this.panel);
-    }
+    this.panel.dispose();
   }
 }

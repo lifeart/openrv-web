@@ -7,6 +7,12 @@
 
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
+import {
+  createCheckableMenuItem,
+  createSectionHeader,
+  createSeparator,
+  setMenuItemChecked,
+} from './shared/FormElements';
 import type { InfoPanel, InfoPanelPosition, InfoPanelFields } from './InfoPanel';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
@@ -65,37 +71,44 @@ export class InfoPanelSettingsMenu {
       visibility: hidden;
     `;
 
-    // Section header: Position
-    menu.appendChild(this.createSectionHeader('Position'));
+    menu.appendChild(createSectionHeader('Position', { menu: true }));
 
-    // Position radio items
     const currentPosition = this.infoPanel.getPosition();
     const positions: InfoPanelPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     for (const pos of positions) {
-      const isChecked = pos === currentPosition;
-      const item = this.createCheckableItem(POSITION_LABELS[pos], isChecked, 'menuitemradio', () => {
-        this.infoPanel.setPosition(pos);
-        this.hide();
-      });
+      const item = createCheckableMenuItem(
+        {
+          label: POSITION_LABELS[pos],
+          checked: pos === currentPosition,
+          role: 'menuitemradio',
+          onClick: () => {
+            this.infoPanel.setPosition(pos);
+            this.hide();
+          },
+        },
+        applyHoverEffect,
+      );
       menu.appendChild(item);
     }
 
-    // Separator
-    menu.appendChild(this.createSeparator());
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
+    menu.appendChild(createSectionHeader('Fields', { menu: true }));
 
-    // Section header: Fields
-    menu.appendChild(this.createSectionHeader('Fields'));
-
-    // Field toggle items
     const currentFields = this.infoPanel.getFields();
     const fieldKeys = Object.keys(FIELD_LABELS) as (keyof InfoPanelFields)[];
     for (const field of fieldKeys) {
-      const isChecked = currentFields[field];
-      const item = this.createCheckableItem(FIELD_LABELS[field], isChecked, 'menuitemcheckbox', () => {
-        this.infoPanel.toggleField(field);
-        // Update the checkmark in-place without closing the menu
-        this.updateFieldCheckmarks(menu);
-      });
+      const item = createCheckableMenuItem(
+        {
+          label: FIELD_LABELS[field],
+          checked: currentFields[field],
+          role: 'menuitemcheckbox',
+          onClick: () => {
+            this.infoPanel.toggleField(field);
+            this.updateFieldCheckmarks(menu);
+          },
+        },
+        applyHoverEffect,
+      );
       item.dataset.field = field;
       menu.appendChild(item);
     }
@@ -103,7 +116,6 @@ export class InfoPanelSettingsMenu {
     this.menuEl = menu;
     document.body.appendChild(menu);
 
-    // Position: render hidden, measure, clamp, then show
     const rect = menu.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -137,9 +149,6 @@ export class InfoPanelSettingsMenu {
     });
   }
 
-  /**
-   * Hide and remove the context menu.
-   */
   hide(): void {
     if (this.menuEl) {
       this.menuEl.remove();
@@ -152,80 +161,12 @@ export class InfoPanelSettingsMenu {
     }
   }
 
-  /**
-   * Whether the context menu is currently visible.
-   */
   isVisible(): boolean {
     return this._isVisible;
   }
 
-  /**
-   * Dispose the context menu and clean up all resources.
-   */
   dispose(): void {
     this.hide();
-  }
-
-  private createSectionHeader(text: string): HTMLDivElement {
-    const header = document.createElement('div');
-    header.setAttribute('role', 'none');
-    header.textContent = text;
-    header.style.cssText = `
-      padding: 6px 12px 2px;
-      font-size: 10px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      pointer-events: none;
-    `;
-    return header;
-  }
-
-  private createCheckableItem(
-    label: string,
-    checked: boolean,
-    role: 'menuitemradio' | 'menuitemcheckbox',
-    onClick: () => void,
-  ): HTMLDivElement {
-    const item = document.createElement('div');
-    item.setAttribute('role', role);
-    item.setAttribute('aria-checked', String(checked));
-    item.tabIndex = -1;
-    item.style.cssText = `
-      padding: 6px 12px;
-      font-size: 12px;
-      color: var(--text-primary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      outline: none;
-      white-space: nowrap;
-    `;
-
-    const checkSpan = document.createElement('span');
-    checkSpan.className = 'menu-check';
-    checkSpan.textContent = checked ? '\u2713' : '';
-    checkSpan.style.cssText = `
-      width: 14px;
-      font-size: 12px;
-      text-align: center;
-      flex-shrink: 0;
-    `;
-    item.appendChild(checkSpan);
-
-    const labelSpan = document.createElement('span');
-    labelSpan.textContent = label;
-    item.appendChild(labelSpan);
-
-    applyHoverEffect(item);
-
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      onClick();
-    });
-
-    return item;
   }
 
   private updateFieldCheckmarks(menu: HTMLDivElement): void {
@@ -234,25 +175,8 @@ export class InfoPanelSettingsMenu {
     for (const item of items) {
       const field = item.dataset.field as keyof InfoPanelFields | undefined;
       if (field && field in currentFields) {
-        const checked = currentFields[field];
-        item.setAttribute('aria-checked', String(checked));
-        const checkSpan = item.querySelector('.menu-check');
-        if (checkSpan) {
-          checkSpan.textContent = checked ? '\u2713' : '';
-        }
+        setMenuItemChecked(item, currentFields[field]);
       }
     }
-  }
-
-  private createSeparator(): HTMLDivElement {
-    const sep = document.createElement('div');
-    sep.setAttribute('role', 'separator');
-    sep.style.cssText = `
-      height: 1px;
-      margin: 4px 0;
-      background: var(--border-secondary);
-      opacity: 0.5;
-    `;
-    return sep;
   }
 }

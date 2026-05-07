@@ -8,6 +8,7 @@
 
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
+import type { ViewerAccessor } from './core/viewer/ViewerAccessor';
 import type { PaintEngine } from './paint/PaintEngine';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { SessionGTOExporter } from './core/session/SessionGTOExporter';
@@ -111,7 +112,7 @@ export class AppPersistenceManager {
    */
   private getSessionLabel(): string {
     const { session } = this.ctx;
-    const displayName = (session as any).metadata?.displayName;
+    const displayName = session.metadata?.displayName;
     if (displayName) return displayName;
     return session.currentSource?.name || 'Untitled';
   }
@@ -330,41 +331,27 @@ export class AppPersistenceManager {
 
   /**
    * Detect active serialization gaps and return warning messages.
+   *
+   * Reads only the persistence-relevant slice of viewer state via the
+   * `ViewerAccessor` contract. The Viewer class implements this interface,
+   * so the methods are guaranteed to exist with matching signatures.
    */
   private getSerializationGapWarnings(): string[] {
-    const { viewer } = this.ctx;
+    const viewer: ViewerAccessor = this.ctx.viewer;
     const warnings: string[] = [];
 
-    try {
-      const toneMapping = (viewer as any).getToneMappingState?.();
-      if (toneMapping && toneMapping.enabled && toneMapping.operator !== 'off') {
-        warnings.push('Tone mapping settings are active but may not be fully preserved in the saved project.');
-      }
-    } catch {
-      // ignore
+    const toneMapping = viewer.getToneMappingState();
+    if (toneMapping.enabled && toneMapping.operator !== 'off') {
+      warnings.push('Tone mapping settings are active but may not be fully preserved in the saved project.');
     }
 
-    try {
-      const ocio = (viewer as any).isOCIOEnabled?.();
-      if (ocio) {
-        warnings.push('OCIO color management is active but cannot be serialized.');
-      }
-    } catch {
-      // ignore
+    if (viewer.isOCIOEnabled()) {
+      warnings.push('OCIO color management is active but cannot be serialized.');
     }
 
-    try {
-      const displayColor = (viewer as any).getDisplayColorState?.();
-      if (
-        displayColor &&
-        displayColor.transferFunction &&
-        displayColor.transferFunction !== 'srgb' &&
-        displayColor.transferFunction !== 'sRGB'
-      ) {
-        warnings.push('Custom display color settings may not be fully preserved.');
-      }
-    } catch {
-      // ignore
+    const displayColor = viewer.getDisplayColorState();
+    if (displayColor.transferFunction && displayColor.transferFunction !== 'srgb') {
+      warnings.push('Custom display color settings may not be fully preserved.');
     }
 
     return warnings;
@@ -376,7 +363,7 @@ export class AppPersistenceManager {
   async saveProject(): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     try {
-      const displayName = (session as any).metadata?.displayName;
+      const displayName = session.metadata?.displayName;
       const name = displayName || 'project';
       const state = SessionSerializer.toJSON(
         {
@@ -410,7 +397,7 @@ export class AppPersistenceManager {
   async saveRvSession(format: 'rv' | 'gto'): Promise<void> {
     const { session, paintEngine } = this.ctx;
     try {
-      const displayName = (session as any).metadata?.displayName;
+      const displayName = session.metadata?.displayName;
       const sourceName = session.currentSource?.name;
       const base = displayName || sourceName || 'session';
       const filename = `${base}.${format}`;
@@ -545,9 +532,7 @@ export class AppPersistenceManager {
         `Auto-save could not be initialized: ${errorMessage}. Your work will not be automatically saved. Use the Save button in the toolbar to save manually.`,
         { type: 'warning', title: 'Auto-Save Unavailable' },
       );
-      if (typeof (autoSaveIndicator as any).setStatus === 'function') {
-        (autoSaveIndicator as any).setStatus('disabled');
-      }
+      autoSaveIndicator.setStatus('disabled');
     }
   }
 

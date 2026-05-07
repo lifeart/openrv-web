@@ -5,6 +5,7 @@
  */
 
 import { SHADOWS, Z_INDEX } from './shared/theme';
+import { createSectionHeader, createSeparator, createSliderControl } from './shared/FormElements';
 import type { MatteOverlay } from './MatteOverlay';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
@@ -43,30 +44,54 @@ export class MatteOverlaySettingsMenu {
 
     const settings = this.overlay.getSettings();
 
-    menu.appendChild(this.createSectionHeader('Aspect Ratio'));
+    menu.appendChild(createSectionHeader('Aspect Ratio', { menu: true }));
     menu.appendChild(this.createAspectControl(settings.aspect));
-    menu.appendChild(this.createSeparator());
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
 
-    menu.appendChild(this.createSectionHeader('Appearance'));
+    menu.appendChild(createSectionHeader('Appearance', { menu: true }));
     menu.appendChild(
-      this.createSliderControl('Opacity', 'matte-opacity', settings.opacity * 100, 0, 100, '%', (value) => {
-        this.overlay.setOpacity(value / 100);
-        return this.overlay.getSettings().opacity * 100;
-      }),
+      createSliderControl({
+        label: 'Opacity',
+        id: 'matte-opacity',
+        value: settings.opacity * 100,
+        min: 0,
+        max: 100,
+        suffix: '%',
+        onInput: (value) => {
+          this.overlay.setOpacity(value / 100);
+          return this.overlay.getSettings().opacity * 100;
+        },
+      }).container,
     );
     menu.appendChild(
-      this.createSliderControl('Center X', 'matte-center-x', settings.centerPoint[0] * 100, -100, 100, '%', (value) => {
-        const [, y] = this.overlay.getSettings().centerPoint;
-        this.overlay.setCenterPoint(value / 100, y);
-        return this.overlay.getSettings().centerPoint[0] * 100;
-      }),
+      createSliderControl({
+        label: 'Center X',
+        id: 'matte-center-x',
+        value: settings.centerPoint[0] * 100,
+        min: -100,
+        max: 100,
+        suffix: '%',
+        onInput: (value) => {
+          const [, y] = this.overlay.getSettings().centerPoint;
+          this.overlay.setCenterPoint(value / 100, y);
+          return this.overlay.getSettings().centerPoint[0] * 100;
+        },
+      }).container,
     );
     menu.appendChild(
-      this.createSliderControl('Center Y', 'matte-center-y', settings.centerPoint[1] * 100, -100, 100, '%', (value) => {
-        const [x] = this.overlay.getSettings().centerPoint;
-        this.overlay.setCenterPoint(x, value / 100);
-        return this.overlay.getSettings().centerPoint[1] * 100;
-      }),
+      createSliderControl({
+        label: 'Center Y',
+        id: 'matte-center-y',
+        value: settings.centerPoint[1] * 100,
+        min: -100,
+        max: 100,
+        suffix: '%',
+        onInput: (value) => {
+          const [x] = this.overlay.getSettings().centerPoint;
+          this.overlay.setCenterPoint(x, value / 100);
+          return this.overlay.getSettings().centerPoint[1] * 100;
+        },
+      }).container,
     );
 
     this.menuEl = menu;
@@ -114,21 +139,6 @@ export class MatteOverlaySettingsMenu {
     this.hide();
   }
 
-  private createSectionHeader(text: string): HTMLDivElement {
-    const header = document.createElement('div');
-    header.setAttribute('role', 'none');
-    header.textContent = text;
-    header.style.cssText = `
-      padding: 6px 12px 2px;
-      font-size: 10px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      pointer-events: none;
-    `;
-    return header;
-  }
-
   private createAspectControl(initialAspect: number): HTMLDivElement {
     const wrapper = document.createElement('div');
     wrapper.setAttribute('role', 'none');
@@ -169,7 +179,6 @@ export class MatteOverlaySettingsMenu {
       input.value = this.overlay.getSettings().aspect.toFixed(2);
     });
 
-    // Preset aspect ratio buttons
     const presets = [
       { label: '2.39:1', value: 2.39 },
       { label: '1.85:1', value: 1.85 },
@@ -234,77 +243,8 @@ export class MatteOverlaySettingsMenu {
     wrapper.appendChild(presetsRow);
     wrapper.appendChild(input);
 
-    // Apply initial highlight
     updatePresetHighlights();
 
     return wrapper;
-  }
-
-  private createSliderControl(
-    labelText: string,
-    id: string,
-    initialValue: number,
-    min: number,
-    max: number,
-    suffix: string,
-    onInputValue: (value: number) => number,
-  ): HTMLDivElement {
-    const wrapper = document.createElement('div');
-    wrapper.setAttribute('role', 'none');
-    wrapper.style.cssText = `
-      padding: 8px 12px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    `;
-
-    const labelRow = document.createElement('div');
-    labelRow.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--text-primary);
-    `;
-
-    const label = document.createElement('span');
-    label.textContent = labelText;
-    labelRow.appendChild(label);
-
-    const value = document.createElement('span');
-    value.dataset.testid = `${id}-value`;
-    value.textContent = `${Math.round(initialValue)}${suffix}`;
-    labelRow.appendChild(value);
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(min);
-    slider.max = String(max);
-    slider.step = '1';
-    slider.value = String(Math.round(initialValue));
-    slider.dataset.testid = `${id}-slider`;
-    slider.style.cssText = 'width: 100%;';
-    slider.addEventListener('input', () => {
-      const appliedValue = onInputValue(Number.parseInt(slider.value, 10));
-      slider.value = String(Math.round(appliedValue));
-      value.textContent = `${Math.round(appliedValue)}${suffix}`;
-    });
-
-    wrapper.appendChild(labelRow);
-    wrapper.appendChild(slider);
-    return wrapper;
-  }
-
-  private createSeparator(): HTMLDivElement {
-    const separator = document.createElement('div');
-    separator.setAttribute('role', 'separator');
-    separator.style.cssText = `
-      height: 1px;
-      margin: 4px 0;
-      background: var(--border-secondary);
-      opacity: 0.5;
-    `;
-    return separator;
   }
 }

@@ -765,7 +765,7 @@ const avifDecoder: FormatDecoder = {
   formatName: 'avif',
   canDecode: isPlainAVIF,
   async decode(buffer: ArrayBuffer) {
-    const { decodeAvif } = await import('./avif');
+    const { decodeAvif } = await import('./AVIFDecoder');
     const result = await decodeAvif(buffer);
     return {
       width: result.width,

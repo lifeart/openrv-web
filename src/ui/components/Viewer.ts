@@ -1,4 +1,5 @@
 import { type Session, type MatteSettings } from '../../core/session/Session';
+import type { ViewerAccessor } from '../../core/viewer/ViewerAccessor';
 import { type PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { PerfTrace } from '../../utils/PerfTrace';
@@ -190,7 +191,7 @@ const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv-prefs-missing-frame-mode';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
-export class Viewer {
+export class Viewer implements ViewerAccessor {
   private container: HTMLElement;
   private canvasContainer: HTMLElement;
   private imageCanvas: HTMLCanvasElement;

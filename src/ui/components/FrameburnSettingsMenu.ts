@@ -8,6 +8,7 @@ import {
 } from './FrameburnCompositor';
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
+import { createSectionHeader, createSeparator } from './shared/FormElements';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
 const VIEWPORT_MARGIN = 8;
@@ -119,7 +120,7 @@ export class FrameburnSettingsMenu {
     const config = sanitizeFrameburnConfig(defaults.frameburnConfig) ?? { ...DEFAULT_FRAMEBURN_CONFIG };
     config.enabled = defaults.frameburnEnabled;
 
-    menu.appendChild(this.createSectionHeader('Advanced Frameburn'));
+    menu.appendChild(createSectionHeader('Advanced Frameburn', { menu: true }));
     menu.appendChild(
       this.createCheckboxRow('Enable advanced frameburn', 'frameburn-enabled', defaults.frameburnEnabled, (checked) => {
         this.persistConfig({ ...config, enabled: checked });
@@ -136,8 +137,8 @@ export class FrameburnSettingsMenu {
       }),
     );
 
-    menu.appendChild(this.createSeparator());
-    menu.appendChild(this.createSectionHeader('Fields'));
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
+    menu.appendChild(createSectionHeader('Fields', { menu: true }));
 
     const fieldsContainer = document.createElement('div');
     fieldsContainer.dataset.testid = 'frameburn-fields';
@@ -283,21 +284,6 @@ export class FrameburnSettingsMenu {
     this.renderMenuContents();
   }
 
-  private createSectionHeader(text: string): HTMLDivElement {
-    const header = document.createElement('div');
-    header.setAttribute('role', 'none');
-    header.textContent = text;
-    header.style.cssText = `
-      padding: 6px 12px 2px;
-      font-size: 10px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      pointer-events: none;
-    `;
-    return header;
-  }
-
   private createCheckboxRow(
     labelText: string,
     testId: string,
@@ -384,18 +370,6 @@ export class FrameburnSettingsMenu {
     wrapper.appendChild(label);
     wrapper.appendChild(input);
     return wrapper;
-  }
-
-  private createSeparator(): HTMLDivElement {
-    const separator = document.createElement('div');
-    separator.setAttribute('role', 'separator');
-    separator.style.cssText = `
-      height: 1px;
-      margin: 4px 0;
-      background: var(--border-secondary);
-      opacity: 0.5;
-    `;
-    return separator;
   }
 
   private inputStyle(): string {

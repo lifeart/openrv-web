@@ -1,5 +1,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { createButton, setButtonActive } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { CropRegion, CropState } from '../../core/types/transform';
@@ -65,6 +67,7 @@ function clampPadding(value: number): number {
 export class CropControl extends EventEmitter<CropControlEvents> {
   private container: HTMLElement;
   private cropButton: HTMLButtonElement;
+  private panelHandle: Panel;
   private panel: HTMLElement;
   private isPanelOpen = false;
   private state: CropState = { ...DEFAULT_CROP_STATE };
@@ -104,57 +107,24 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       margin-left: 8px;
     `;
 
-    // Create crop button
-    this.cropButton = document.createElement('button');
-    this.cropButton.innerHTML = `${getIconSvg('crop', 'sm')}<span style="margin-left: 6px;">Crop</span>`;
+    // Create crop button via shared createButton (icon variant).
+    this.cropButton = createButton('Crop', () => this.togglePanel(), {
+      variant: 'icon',
+      icon: getIconSvg('crop', 'sm'),
+      title: 'Crop image (Shift+K)',
+    });
     this.cropButton.dataset.testid = 'crop-control-button';
-    this.cropButton.title = 'Crop image (Shift+K)';
-    this.cropButton.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    `;
 
-    this.cropButton.addEventListener('click', () => this.togglePanel());
-    this.cropButton.addEventListener('pointerenter', () => {
-      if (!this.isPanelOpen && !this.state.enabled) {
-        this.cropButton.style.background = 'var(--bg-hover)';
-        this.cropButton.style.borderColor = 'var(--border-primary)';
-        this.cropButton.style.color = 'var(--text-primary)';
-      }
-    });
-    this.cropButton.addEventListener('pointerleave', () => {
-      if (!this.isPanelOpen && !this.state.enabled) {
-        this.cropButton.style.background = 'transparent';
-        this.cropButton.style.borderColor = 'transparent';
-        this.cropButton.style.color = 'var(--text-muted)';
-      }
-    });
-
-    // Create panel (rendered at body level to avoid z-index issues)
-    this.panel = document.createElement('div');
-    this.panel.className = 'crop-panel';
+    // Create panel via shared createPanel for consistent z-index + chrome.
+    // We don't drive show/hide through the panel handle because CropControl
+    // needs custom viewport-flip positioning and an extended outside-click
+    // element list (the viewer container is excluded so crop-handle drags
+    // do not dismiss). We just take the styled `element` and manage it.
+    this.panelHandle = createPanel({ width: '200px', align: 'right' });
+    this.panel = this.panelHandle.element;
+    this.panel.classList.add('crop-panel');
     this.panel.setAttribute('role', 'dialog');
     this.panel.setAttribute('aria-label', 'Crop Settings');
-    this.panel.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      padding: 12px;
-      min-width: 200px;
-      z-index: 9999;
-      display: none;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    `;
 
     this.createPanelContent();
 
@@ -195,12 +165,6 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       line-height: 1;
     `;
     closeButton.addEventListener('click', () => this.hidePanel());
-    closeButton.addEventListener('pointerenter', () => {
-      closeButton.style.color = 'var(--text-primary)';
-    });
-    closeButton.addEventListener('pointerleave', () => {
-      closeButton.style.color = 'var(--text-secondary)';
-    });
 
     header.appendChild(title);
     header.appendChild(closeButton);
@@ -305,13 +269,6 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       margin-top: 8px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => {
-      resetBtn.style.background = 'var(--text-muted)';
-    });
-    resetBtn.addEventListener('pointerleave', () => {
-      resetBtn.style.background = 'var(--border-secondary)';
-    });
-
     this.panel.appendChild(resetBtn);
 
     // Crop dimensions display
@@ -582,12 +539,6 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       font-size: 11px;
     `;
     resetUncropBtn.addEventListener('click', () => this.resetUncrop());
-    resetUncropBtn.addEventListener('pointerenter', () => {
-      resetUncropBtn.style.background = 'var(--text-muted)';
-    });
-    resetUncropBtn.addEventListener('pointerleave', () => {
-      resetUncropBtn.style.background = 'var(--border-secondary)';
-    });
     this.panel.appendChild(resetUncropBtn);
 
     // Initial visibility sync
@@ -767,16 +718,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   }
 
   private updateButtonState(): void {
-    const isActive = this.state.enabled || this.isPanelOpen;
-    if (isActive) {
-      this.cropButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      this.cropButton.style.borderColor = 'var(--accent-primary)';
-      this.cropButton.style.color = 'var(--accent-primary)';
-    } else {
-      this.cropButton.style.background = 'transparent';
-      this.cropButton.style.borderColor = 'transparent';
-      this.cropButton.style.color = 'var(--text-muted)';
-    }
+    setButtonActive(this.cropButton, this.state.enabled || this.isPanelOpen, 'icon');
   }
 
   togglePanel(): void {
@@ -962,9 +904,6 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   dispose(): void {
     this.deregisterDismiss?.();
     this.deregisterDismiss = null;
-    // Remove panel from body if present
-    if (document.body.contains(this.panel)) {
-      document.body.removeChild(this.panel);
-    }
+    this.panelHandle.dispose();
   }
 }

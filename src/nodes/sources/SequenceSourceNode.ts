@@ -18,6 +18,7 @@ import {
   disposeSequence,
 } from '../../utils/media/SequenceLoader';
 import { FramePreloadManager } from '../../utils/media/FramePreloadManager';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 const log = new Logger('SequenceSourceNode');
 
@@ -28,15 +29,17 @@ export class SequenceSourceNode extends BaseSourceNode {
   private preloadManager: FramePreloadManager<ImageBitmap> | null = null;
   private playbackDirection: number = 1;
   private isPlaybackActive: boolean = false;
+  declare pattern: string;
+  declare startFrame: number;
+  declare endFrame: number;
+  declare fps: number;
 
   constructor(name?: string) {
     super('RVSequenceSource', name ?? 'Sequence Source');
-
-    // Properties
-    this.properties.add({ name: 'pattern', defaultValue: '' });
-    this.properties.add({ name: 'startFrame', defaultValue: 1 });
-    this.properties.add({ name: 'endFrame', defaultValue: 1 });
-    this.properties.add({ name: 'fps', defaultValue: 24 });
+    defineNodeProperty(this, 'pattern', { defaultValue: '' });
+    defineNodeProperty(this, 'startFrame', { defaultValue: 1 });
+    defineNodeProperty(this, 'endFrame', { defaultValue: 1 });
+    defineNodeProperty(this, 'fps', { defaultValue: 24 });
   }
 
   /**
@@ -47,10 +50,8 @@ export class SequenceSourceNode extends BaseSourceNode {
     if (!info) {
       throw new Error('No valid image sequence found');
     }
-
     this.sequenceInfo = info;
     this.frames = info.frames;
-
     this.metadata = {
       name: info.name,
       width: info.width,
@@ -58,14 +59,11 @@ export class SequenceSourceNode extends BaseSourceNode {
       duration: info.frames.length,
       fps: info.fps,
     };
-
-    this.properties.setValue('pattern', info.pattern);
-    this.properties.setValue('startFrame', info.startFrame);
-    this.properties.setValue('endFrame', info.endFrame);
-    this.properties.setValue('fps', info.fps);
-
+    this.pattern = info.pattern;
+    this.startFrame = info.startFrame;
+    this.endFrame = info.endFrame;
+    this.fps = info.fps;
     this.initPreloadManager();
-
     this.markDirty();
   }
 
