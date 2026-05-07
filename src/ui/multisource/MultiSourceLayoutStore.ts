@@ -15,6 +15,10 @@ import {
   createDefaultLayoutState,
 } from './MultiSourceLayoutTypes';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('MultiSourceLayoutStore');
 export interface MultiSourceLayoutStoreEvents extends EventMap {
   layoutChanged: MultiSourceLayoutState;
   tileAdded: TileState;
@@ -152,7 +156,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
    */
   addSource(sourceIndex: number, label?: string): string | null {
     if (this.state.tiles.length >= MAX_TILE_COUNT) {
-      console.warn(`MultiSourceLayoutStore: cannot add source, already at maximum tile count (${MAX_TILE_COUNT})`);
+      logger.warn(`MultiSourceLayoutStore: cannot add source, already at maximum tile count (${MAX_TILE_COUNT})`);
       return null;
     }
 

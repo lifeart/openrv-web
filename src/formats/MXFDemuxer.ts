@@ -19,6 +19,10 @@ import { DecoderError } from '../core/errors';
 // Constants -- SMPTE Universal Labels
 // ---------------------------------------------------------------------------
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MXFDemuxer');
 /**
  * Partition Pack UL prefix (bytes 0-12).
  * Byte 13 distinguishes header (0x02), body (0x03), footer (0x04).
@@ -766,7 +770,7 @@ export function parseMXFHeader(buffer: ArrayBuffer): MXFMetadata {
 
     // Indefinite BER length -- skip forward to the next recognisable key
     if (klv.length === -1) {
-      console.warn(`MXF: Skipping KLV with indefinite BER length at offset ${offset}`);
+      logger.warn(`MXF: Skipping KLV with indefinite BER length at offset ${offset}`);
       const next = scanForNextUL(view, klv.valueOffset);
       if (next === -1 || next <= offset) break;
       offset = next;
@@ -906,7 +910,7 @@ export function parseMXFHeader(buffer: ArrayBuffer): MXFMetadata {
             metadata.startTimecode = framesToTimecode(startTC, fps);
           }
         } else {
-          console.warn(`MXF: Cannot resolve start timecode (frame ${startTC}) — edit rate is missing or invalid`);
+          logger.warn(`MXF: Cannot resolve start timecode (frame ${startTC}) — edit rate is missing or invalid`);
         }
       }
     }
@@ -990,7 +994,7 @@ export function demuxMXF(buffer: ArrayBuffer): MXFDemuxResult {
 
     // Indefinite BER length -- skip forward to the next recognisable key
     if (klv.length === -1) {
-      console.warn(`MXF: Skipping KLV with indefinite BER length at offset ${offset}`);
+      logger.warn(`MXF: Skipping KLV with indefinite BER length at offset ${offset}`);
       const next = scanForNextUL(view, klv.valueOffset);
       if (next === -1 || next <= offset) break;
       offset = next;

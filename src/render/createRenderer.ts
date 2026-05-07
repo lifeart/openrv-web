@@ -18,6 +18,10 @@ import { Renderer } from './Renderer';
 import { WebGPUBackend } from './WebGPUBackend';
 import { isWebGPUEnabled } from './webgpu/featureFlag';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('createRenderer');
 /**
  * Create the best available rendering backend based on display capabilities
  * and the WebGPU stage pipeline feature flag.
@@ -47,7 +51,7 @@ export function createRenderer(caps: DisplayCapabilities): RendererBackend {
     try {
       return new WebGPUBackend();
     } catch (err) {
-      console.warn(
+      logger.warn(
         '[createRenderer] WebGPU forced via backendOverride but construction failed; falling back to WebGL2:',
         err,
       );
@@ -62,7 +66,7 @@ export function createRenderer(caps: DisplayCapabilities): RendererBackend {
     try {
       return new WebGPUBackend();
     } catch (err) {
-      console.warn('[createRenderer] WebGPU construction failed, falling back to WebGL2:', err);
+      logger.warn('[createRenderer] WebGPU construction failed, falling back to WebGL2:', err);
     }
   }
 

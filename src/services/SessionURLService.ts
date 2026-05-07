@@ -20,6 +20,10 @@ import type { AddRepresentationConfig, MediaRepresentation } from '../core/types
 // Dependency interfaces (structural typing)
 // ---------------------------------------------------------------------------
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('SessionURLService');
 /** Subset of Session used by URL state management. */
 export interface URLSession {
   readonly currentFrame: number;
@@ -223,22 +227,22 @@ export class SessionURLService {
     for (const url of urls) {
       // Skip if already loaded
       if (this.findSourceIndexByUrl(url) >= 0) {
-        console.info(`[SessionURLService] Source already loaded, skipping: ${url}`);
+        logger.info(`[SessionURLService] Source already loaded, skipping: ${url}`);
         continue;
       }
 
       try {
-        console.info(`[SessionURLService] Loading source from share link: ${url}`);
+        logger.info(`[SessionURLService] Loading source from share link: ${url}`);
         if (session.sourceCount === 0 && session.loadSourceFromUrl) {
           await session.loadSourceFromUrl(url);
         } else if (this.deps.loadSourceFromUrl) {
           await this.deps.loadSourceFromUrl(url);
         } else {
-          console.warn(`[SessionURLService] No loader available for source: ${url}`);
+          logger.warn(`[SessionURLService] No loader available for source: ${url}`);
         }
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
-        console.warn(`[SessionURLService] Failed to load source: ${url}`, err);
+        logger.warn(`[SessionURLService] Failed to load source: ${url}`, err);
         this.deps.networkControl.showInfo(`Failed to load shared media: ${reason}`);
       }
     }
@@ -266,11 +270,11 @@ export class SessionURLService {
       if (existingIndex >= 0) {
         // Already loaded — just navigate to it
         resolvedSourceIndex = existingIndex;
-        console.info(`[SessionURLService] Shared media already loaded at index ${existingIndex}`);
+        logger.info(`[SessionURLService] Shared media already loaded at index ${existingIndex}`);
       } else {
         // Not loaded yet — attempt to load it
         try {
-          console.info(`[SessionURLService] Loading media from share link: ${state.sourceUrl}`);
+          logger.info(`[SessionURLService] Loading media from share link: ${state.sourceUrl}`);
           if (session.sourceCount === 0 && session.loadSourceFromUrl) {
             // Empty session: use session's own loadSourceFromUrl
             await session.loadSourceFromUrl(state.sourceUrl);
@@ -282,12 +286,12 @@ export class SessionURLService {
             if (newIndex >= 0) {
               resolvedSourceIndex = newIndex;
             } else {
-              console.warn('[SessionURLService] loadSourceFromUrl returned -1, using original sourceIndex');
+              logger.warn('[SessionURLService] loadSourceFromUrl returned -1, using original sourceIndex');
             }
           }
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
-          console.warn(
+          logger.warn(
             '[SessionURLService] Failed to load media from share link sourceUrl, continuing with view state:',
             err,
           );
@@ -411,7 +415,7 @@ export class SessionURLService {
               await session.activateRepresentation(repState.sourceIndex, rep.id);
             }
           } catch (err) {
-            console.warn(
+            logger.warn(
               `[SessionURLService] Failed to restore representation "${repState.label}" for source ${repState.sourceIndex}:`,
               err,
             );

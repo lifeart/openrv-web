@@ -18,6 +18,10 @@ import { isRAWExtension } from '../../formats/RAWPreviewDecoder';
 import { basename } from '../../utils/path';
 import type { RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('FileSourceNode');
 /**
  * Check if a filename has an EXR extension
  */
@@ -719,7 +723,7 @@ export class FileSourceNode extends BaseSourceNode {
         }
         // Fetch failed - fall through to standard image loading
       } catch (err) {
-        console.warn('[FileSource] JPEG gainmap loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] JPEG gainmap loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -787,7 +791,7 @@ export class FileSourceNode extends BaseSourceNode {
           });
         }
       } catch (err) {
-        console.warn('[FileSource] AVIF loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] AVIF loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -820,7 +824,7 @@ export class FileSourceNode extends BaseSourceNode {
           }
         }
       } catch (err) {
-        console.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -860,7 +864,7 @@ export class FileSourceNode extends BaseSourceNode {
           }
         }
       } catch (err) {
-        console.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -875,7 +879,7 @@ export class FileSourceNode extends BaseSourceNode {
           return;
         }
       } catch (err) {
-        console.warn('[FileSource] JP2 loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] JP2 loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -891,7 +895,7 @@ export class FileSourceNode extends BaseSourceNode {
           if (loaded) return;
         }
       } catch (err) {
-        console.warn('[FileSource] RAW preview loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] RAW preview loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -1956,7 +1960,7 @@ export class FileSourceNode extends BaseSourceNode {
           }
         }
       } catch (err) {
-        console.warn('[FileSource] JPEG gainmap decode failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] JPEG gainmap decode failed, falling back to standard loading:', err);
         // Fall through to standard JPEG loading
       }
     }
@@ -1987,7 +1991,7 @@ export class FileSourceNode extends BaseSourceNode {
           }
         }
       } catch (err) {
-        console.warn('[FileSource] AVIF HDR loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] AVIF HDR loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -2021,7 +2025,7 @@ export class FileSourceNode extends BaseSourceNode {
         }
       } catch (err) {
         if (jxlBlobUrl) URL.revokeObjectURL(jxlBlobUrl);
-        console.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -2066,7 +2070,7 @@ export class FileSourceNode extends BaseSourceNode {
           return;
         }
       } catch (err) {
-        console.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -2081,7 +2085,7 @@ export class FileSourceNode extends BaseSourceNode {
         return;
       } catch (err) {
         if (jp2BlobUrl) URL.revokeObjectURL(jp2BlobUrl);
-        console.warn('[FileSource] JP2 loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] JP2 loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -2098,7 +2102,7 @@ export class FileSourceNode extends BaseSourceNode {
         URL.revokeObjectURL(rawBlobUrl);
       } catch (err) {
         if (rawBlobUrl) URL.revokeObjectURL(rawBlobUrl);
-        console.warn('[FileSource] RAW preview loading failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] RAW preview loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }

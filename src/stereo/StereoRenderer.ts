@@ -41,17 +41,17 @@ const MAX_STEREO_OFFSET = 50;
  */
 export function validateStereoOffset(offset: number): number {
   if (typeof offset !== 'number' || Number.isNaN(offset)) {
-    console.warn(`StereoRenderer: invalid eye offset value (NaN or non-number), defaulting to 0`);
+    logger.warn(`StereoRenderer: invalid eye offset value (NaN or non-number), defaulting to 0`);
     return 0;
   }
   if (!Number.isFinite(offset)) {
     const clamped = offset > 0 ? MAX_STEREO_OFFSET : MIN_STEREO_OFFSET;
-    console.warn(`StereoRenderer: eye offset is Infinity, clamping to ${clamped}`);
+    logger.warn(`StereoRenderer: eye offset is Infinity, clamping to ${clamped}`);
     return clamped;
   }
   if (offset < MIN_STEREO_OFFSET || offset > MAX_STEREO_OFFSET) {
     const clamped = Math.max(MIN_STEREO_OFFSET, Math.min(MAX_STEREO_OFFSET, offset));
-    console.warn(
+    logger.warn(
       `StereoRenderer: eye offset ${offset} out of range [${MIN_STEREO_OFFSET}, ${MAX_STEREO_OFFSET}], clamping to ${clamped}`,
     );
     return clamped;
@@ -79,6 +79,10 @@ export { DEFAULT_STEREO_STATE } from '../core/types/stereo';
 // Import for local use
 import type { StereoState, StereoMode, StereoInputFormat } from '../core/types/stereo';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('StereoRenderer');
 /**
  * Apply stereo rendering to source image data
  *

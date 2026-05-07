@@ -1252,7 +1252,6 @@ describe('Session', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       await session.loadFromGTO('GTOa 1.0');
       expect(warnSpy).toHaveBeenCalledWith(
-        '[SessionGraph]',
         expect.stringContaining('Failed to load node graph'),
         'graph fail',
       );

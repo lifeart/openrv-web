@@ -9,6 +9,10 @@ import type { PaintEngine } from '../../paint/PaintEngine';
 import type { Session } from '../../core/session/Session';
 import type { Annotation, PaintSnapshot } from '../../paint/types';
 
+
+import { Logger } from '../Logger';
+
+const logger = new Logger('AnnotationPDFExporter');
 /**
  * Options for PDF annotation export
  */
@@ -449,7 +453,7 @@ export async function exportAnnotationsPDF(
           thumbnails.set(frameNum, thumbCanvas.toDataURL('image/jpeg', 0.85));
         }
       } catch (err) {
-        console.warn(`Failed to render thumbnail for frame ${frameNum}:`, err);
+        logger.warn(`Failed to render thumbnail for frame ${frameNum}:`, err);
       }
     }
   }

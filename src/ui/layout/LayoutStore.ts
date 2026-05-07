@@ -11,6 +11,10 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 // Types
 // ---------------------------------------------------------------------------
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('LayoutStore');
 export type PanelId = 'left' | 'right' | 'bottom';
 
 export interface PanelState {
@@ -382,10 +386,10 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
       if (this.validateLayoutData(data)) {
         return this.migrateIfNeeded(data);
       }
-      console.warn('Invalid layout data, using defaults');
+      logger.warn('Invalid layout data, using defaults');
       return defaultLayout();
     } catch {
-      console.warn('Invalid layout data, using defaults');
+      logger.warn('Invalid layout data, using defaults');
       return defaultLayout();
     }
   }

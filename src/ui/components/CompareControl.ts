@@ -24,6 +24,10 @@ import {
 } from './ComparisonManager';
 
 // Re-export types so external consumers don't need to change imports
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('CompareControl');
 export type { WipeMode, ABSource, ComparisonBlendMode, BlendModeState, CompareState, QuadViewState };
 export { DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './ComparisonManager';
 
@@ -1227,7 +1231,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    */
   setQuadViewSource(quadrant: 0 | 1 | 2 | 3, source: ABSource): void {
     if (source === 'C' || source === 'D') {
-      console.warn(
+      logger.warn(
         `[CompareControl] Source "${source}" selected for quadrant ${quadrant}, but sources C and D have no production assignment path. Only A and B are bound to real media sources.`,
       );
     }

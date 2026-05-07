@@ -33,6 +33,10 @@ import { getAvailableConfigs as getOCIOAvailableConfigs } from '../color/OCIOCon
 import { ValidationError, APIError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('ColorAPI');
 /**
  * Subset of ColorAdjustments exposed via the public API
  * (all numeric fields, excluding internal boolean flags)
@@ -566,7 +570,7 @@ export class ColorAPI extends DisposableAPI {
   private warnOCIOOverride(method: string): void {
     if (this.ocioOverrideWarned) return;
     this.ocioOverrideWarned = true;
-    console.warn(
+    logger.warn(
       `[ColorAPI.${method}] OCIO is active for display; manual declaration is stored but will not affect rendering until OCIO is disabled.`,
     );
   }

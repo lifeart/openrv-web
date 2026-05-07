@@ -11,6 +11,10 @@ import './nodes/sources';
 import './nodes/groups';
 import './nodes/CacheLUTNode';
 
+
+import { Logger } from './utils/Logger';
+
+const logger = new Logger('Main');
 installGlobalErrorHandler();
 
 const app = new App();
@@ -79,15 +83,15 @@ if (import.meta.env.DEV) {
       if (loadSample) {
         await activateSample();
       } else {
-        // Use console.warn for the opt-out notice so it surfaces under the
+        // Use logger.warn for the opt-out notice so it surfaces under the
         // repo's `no-console` lint rule (which only permits warn/error).
-        console.warn(
+        logger.warn(
           '[main] SamplePlugin auto-load disabled (VITE_LOAD_SAMPLE_PLUGIN=0). ' +
             'Call window.__openrvDev.activateSample() to enable on demand.',
         );
       }
     } catch (err) {
-      console.warn('[main] DEV plugin hot-reload setup failed:', err);
+      logger.warn('[main] DEV plugin hot-reload setup failed:', err);
     }
   })();
 }

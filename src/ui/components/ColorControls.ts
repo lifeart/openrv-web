@@ -11,6 +11,10 @@ export { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 import type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ColorControls');
 export interface ColorControlsEvents extends EventMap {
   adjustmentsChanged: ColorAdjustments;
   visibilityChanged: boolean;
@@ -435,7 +439,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       const lut = parseLUT(file.name, content);
       this.setLUT(lut);
     } catch (err) {
-      console.error('Failed to load LUT:', err);
+      logger.error('Failed to load LUT:', err);
       showAlert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`, {
         type: 'error',
         title: 'LUT Error',

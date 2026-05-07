@@ -13,6 +13,10 @@ import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { clamp } from '../utils/math';
 import type { ManagerBase } from '../core/ManagerBase';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('AudioPlaybackManager');
 export interface AudioPlaybackEvents extends EventMap {
   error: AudioPlaybackError;
   stateChanged: AudioPlaybackState;
@@ -227,7 +231,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
         clearTimeout(timeoutId);
 
         // CORS error or network issue - fall back to video element
-        console.warn('AudioPlaybackManager: Failed to extract audio, using video element fallback:', fetchError);
+        logger.warn('AudioPlaybackManager: Failed to extract audio, using video element fallback:', fetchError);
         this.useVideoFallback = true;
         this._duration = videoElement.duration;
         this.setState('ready');
@@ -236,7 +240,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     } catch (error) {
       clearTimeout(timeoutId);
       // Decode error - fall back to video element
-      console.warn('AudioPlaybackManager: Audio decode failed, using video element fallback:', error);
+      logger.warn('AudioPlaybackManager: Audio decode failed, using video element fallback:', error);
       this.useVideoFallback = true;
       this._duration = videoElement.duration;
       this.setState('ready');
@@ -799,7 +803,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   }
 
   private handleError(type: AudioPlaybackError['type'], message: string, originalError?: Error): void {
-    console.error(`AudioPlaybackManager: ${message}`, originalError);
+    logger.error(`AudioPlaybackManager: ${message}`, originalError);
     this.setState('error');
     this.emit('error', { type, message, originalError });
   }
@@ -831,7 +835,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
     if (this.audioContext) {
       this.audioContext.close().catch((err) => {
-        console.warn('AudioPlaybackManager: Audio context close failed:', err);
+        logger.warn('AudioPlaybackManager: Audio context close failed:', err);
       });
       this.audioContext = null;
     }

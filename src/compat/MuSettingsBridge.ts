@@ -7,6 +7,10 @@
 
 import type { SettingsValue } from './types';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MuSettingsBridge');
 /** Prefix for all settings keys in localStorage */
 const SETTINGS_PREFIX = 'openrv-setting:';
 
@@ -50,7 +54,7 @@ export class MuSettingsBridge {
     try {
       localStorage.setItem(storageKey, JSON.stringify(value));
     } catch (err) {
-      console.warn(`[MuSettingsBridge] Failed to write setting "${storageKey}":`, err);
+      logger.warn(`[MuSettingsBridge] Failed to write setting "${storageKey}":`, err);
     }
   }
 

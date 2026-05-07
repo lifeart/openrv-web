@@ -34,6 +34,10 @@ import { isSequencePattern } from '../utils/media/SequenceLoader';
 // Types
 // ---------------------------------------------------------------------------
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('ShotGridIntegrationBridge');
 /**
  * Provider interface for paint annotations. Decouples the integration bridge
  * from the UI-layer PaintEngine so that annotation data can be read without
@@ -307,7 +311,7 @@ export class ShotGridIntegrationBridge {
             pushed++;
           } catch (err) {
             const message = err instanceof Error ? err.message : 'Unknown error';
-            console.warn(`[ShotGrid] Failed to push note "${note.text.slice(0, 40)}": ${message}`);
+            logger.warn(`[ShotGrid] Failed to push note "${note.text.slice(0, 40)}": ${message}`);
             failed++;
           }
         }
@@ -401,7 +405,7 @@ export class ShotGridIntegrationBridge {
       } catch (err) {
         // Log but continue with remaining versions
         const message = err instanceof Error ? err.message : 'Failed to load version';
-        console.warn(`[ShotGrid] Skipping version ${version.code}: ${message}`);
+        logger.warn(`[ShotGrid] Skipping version ${version.code}: ${message}`);
       }
     }
 
@@ -435,7 +439,7 @@ export class ShotGridIntegrationBridge {
       );
 
     if (isFrameSequencePath && isSequencePattern(mediaUrl)) {
-      console.info(`[ShotGrid] Loading frame sequence path: ${mediaUrl}`);
+      logger.info(`[ShotGrid] Loading frame sequence path: ${mediaUrl}`);
 
       const startFrame = version.sg_first_frame ?? 1;
       const endFrame = version.sg_last_frame ?? this.parseEndFrameFromRange(version.frame_range, startFrame);

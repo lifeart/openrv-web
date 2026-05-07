@@ -12,6 +12,10 @@
 import { FileKind, MuCursor } from './types';
 import type { FileKindValue } from './types';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MuUtilsBridge');
 /**
  * Minimal event subscription interface for connecting to the real media event system.
  * Compatible with EventsAPI.on() signature.
@@ -163,7 +167,7 @@ export class MuUtilsBridge {
   openUrl(url: string): boolean {
     const win = window.open(url, '_blank', 'noopener,noreferrer');
     if (!win) {
-      console.warn('[MuUtilsBridge] Popup blocked for URL: %s', url);
+      logger.warn('[MuUtilsBridge] Popup blocked for URL: %s', url);
       return false;
     }
     return true;
@@ -177,7 +181,7 @@ export class MuUtilsBridge {
     try {
       await navigator.clipboard.writeText(url);
     } catch {
-      console.warn('[MuUtilsBridge] Failed to write to clipboard (requires secure context)');
+      logger.warn('[MuUtilsBridge] Failed to write to clipboard (requires secure context)');
     }
   }
 
@@ -284,7 +288,7 @@ export class MuUtilsBridge {
         if (this._disposed || this._loadCount >= this._loadTotal) {
           resolve();
         } else if (Date.now() - startTime >= TIMEOUT_MS) {
-          console.warn(
+          logger.warn(
             `[MuUtilsBridge] waitForProgressiveLoading timed out after ${TIMEOUT_MS / 1000}s ` +
               `(loadCount=${this._loadCount}, loadTotal=${this._loadTotal})`,
           );
@@ -387,11 +391,11 @@ export class MuUtilsBridge {
       const el = document.documentElement;
       if (el.requestFullscreen) {
         el.requestFullscreen().catch(() => {
-          console.warn('[MuUtilsBridge] Fullscreen request denied');
+          logger.warn('[MuUtilsBridge] Fullscreen request denied');
         });
       } else if ((el as any).webkitRequestFullscreen) {
         Promise.resolve((el as any).webkitRequestFullscreen()).catch(() => {
-          console.warn('[MuUtilsBridge] Fullscreen request denied (webkit)');
+          logger.warn('[MuUtilsBridge] Fullscreen request denied (webkit)');
         });
       }
     } else {

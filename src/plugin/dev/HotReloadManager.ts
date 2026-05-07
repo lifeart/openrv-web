@@ -9,6 +9,10 @@
 import type { PluginId } from '../types';
 import type { PluginRegistry } from '../PluginRegistry';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('HotReloadManager');
 export class HotReloadManager {
   /** Track URL -> pluginId for reload */
   private pluginURLs = new Map<PluginId, string>();
@@ -92,7 +96,7 @@ export class HotReloadManager {
     // structuredClone handles Maps, Sets, ArrayBuffers, typed arrays, etc.
     // If state contains non-cloneable values (functions, DOM nodes, class
     // instances), structuredClone throws DataCloneError; we fall back to the
-    // raw reference with a console.warn so dev can fix their getState().
+    // raw reference with a logger.warn so dev can fix their getState().
     const plugin = this.registry.getPlugin(pluginId);
     let savedState: unknown = undefined;
     if (plugin && 'getState' in plugin && typeof plugin.getState === 'function') {
@@ -100,7 +104,7 @@ export class HotReloadManager {
         const rawState = plugin.getState();
         savedState = deepCloneState(rawState, pluginId);
       } catch (err) {
-        console.warn(`[hot-reload:${pluginId}] getState() threw:`, err);
+        logger.warn(`[hot-reload:${pluginId}] getState() threw:`, err);
       }
     }
 
@@ -136,12 +140,12 @@ export class HotReloadManager {
       try {
         await this.registry.dispose(newId);
       } catch (rollbackErr) {
-        console.warn(`[hot-reload:${pluginId}] rollback dispose(${newId}) failed:`, rollbackErr);
+        logger.warn(`[hot-reload:${pluginId}] rollback dispose(${newId}) failed:`, rollbackErr);
       }
       try {
         this.registry.unregister(newId);
       } catch (rollbackErr) {
-        console.warn(`[hot-reload:${pluginId}] rollback unregister(${newId}) failed:`, rollbackErr);
+        logger.warn(`[hot-reload:${pluginId}] rollback unregister(${newId}) failed:`, rollbackErr);
       }
       throw err;
     }
@@ -153,7 +157,7 @@ export class HotReloadManager {
         try {
           newPlugin.restoreState(savedState);
         } catch (err) {
-          console.warn(`[hot-reload:${pluginId}] restoreState() threw:`, err);
+          logger.warn(`[hot-reload:${pluginId}] restoreState() threw:`, err);
         }
       }
     }
@@ -206,7 +210,7 @@ function deepCloneState(state: unknown, pluginId: PluginId): unknown {
   // structuredClone is available in Node 17+ and all modern browsers.
   // Guard for the unlikely case it's missing (e.g., old test runners).
   if (typeof structuredClone !== 'function') {
-    console.warn(
+    logger.warn(
       `[hot-reload:${pluginId}] structuredClone unavailable; using raw state reference. ` +
         `Plugin getState() should return a copy per contract.`,
     );
@@ -215,7 +219,7 @@ function deepCloneState(state: unknown, pluginId: PluginId): unknown {
   try {
     return structuredClone(state);
   } catch (err) {
-    console.warn(
+    logger.warn(
       `[hot-reload:${pluginId}] structuredClone failed (state contains non-cloneable values); ` +
         `falling back to raw reference. Plugin getState() should return a structurally cloneable copy.`,
       err,

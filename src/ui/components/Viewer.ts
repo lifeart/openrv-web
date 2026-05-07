@@ -947,7 +947,7 @@ export class Viewer {
     try {
       this.sharpenProcessor = new WebGLSharpenProcessor();
     } catch (e) {
-      console.warn('WebGL sharpen processor not available, falling back to CPU:', e);
+      log.warn('WebGL sharpen processor not available, falling back to CPU:', e);
       this.sharpenProcessor = null;
     }
 
@@ -955,7 +955,7 @@ export class Viewer {
     try {
       this.noiseReductionProcessor = createNoiseReductionProcessor();
     } catch (e) {
-      console.warn('WebGL noise reduction processor not available, falling back to CPU:', e);
+      log.warn('WebGL noise reduction processor not available, falling back to CPU:', e);
       this.noiseReductionProcessor = null;
     }
 
@@ -1467,7 +1467,7 @@ export class Viewer {
     try {
       this.cropManager.renderCropOverlay();
     } catch (err) {
-      console.error('Crop overlay render failed:', err);
+      log.error('Crop overlay render failed:', err);
     }
 
     // Update safe-areas overlay crop region so guides track the cropped area.
@@ -2014,7 +2014,7 @@ export class Viewer {
           try {
             this.renderGhostFrames(displayWidth, displayHeight);
           } catch (err) {
-            console.error('Ghost frame rendering failed:', err);
+            log.error('Ghost frame rendering failed:', err);
           }
         }
 
@@ -2027,7 +2027,7 @@ export class Viewer {
               this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
             }
           } catch (err) {
-            console.error('Stereo mode rendering failed:', err);
+            log.error('Stereo mode rendering failed:', err);
           }
         }
 
@@ -2036,7 +2036,7 @@ export class Viewer {
           try {
             this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('Lens distortion rendering failed:', err);
+            log.error('Lens distortion rendering failed:', err);
           }
         }
         // Apply perspective correction (after lens distortion)
@@ -2044,7 +2044,7 @@ export class Viewer {
           try {
             this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('Perspective correction rendering failed:', err);
+            log.error('Perspective correction rendering failed:', err);
           }
         }
         // Apply GPU-accelerated color effects
@@ -2052,21 +2052,21 @@ export class Viewer {
           try {
             this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('LUT application failed:', err);
+            log.error('LUT application failed:', err);
           }
         }
         if (this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT) {
           try {
             this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('OCIO application failed:', err);
+            log.error('OCIO application failed:', err);
           }
         }
         // Apply lightweight diagnostic overlays and display management
         try {
           this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
         } catch (err) {
-          console.error('Lightweight effects processing failed:', err);
+          log.error('Lightweight effects processing failed:', err);
         }
         // Apply crop clipping by clearing outside areas
         if (cropClipActive) {
@@ -2167,7 +2167,7 @@ export class Viewer {
       try {
         this.renderGhostFrames(displayWidth, displayHeight);
       } catch (err) {
-        console.error('Ghost frame rendering failed:', err);
+        log.error('Ghost frame rendering failed:', err);
       }
     }
 
@@ -2182,7 +2182,7 @@ export class Viewer {
           this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
         }
       } catch (err) {
-        console.error('Stereo mode rendering failed:', err);
+        log.error('Stereo mode rendering failed:', err);
       }
     }
 
@@ -2191,7 +2191,7 @@ export class Viewer {
       try {
         this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Lens distortion rendering failed:', err);
+        log.error('Lens distortion rendering failed:', err);
       }
     }
 
@@ -2200,7 +2200,7 @@ export class Viewer {
       try {
         this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Perspective correction rendering failed:', err);
+        log.error('Perspective correction rendering failed:', err);
       }
     }
 
@@ -2209,7 +2209,7 @@ export class Viewer {
       try {
         this.colorPipeline.gpuLUTChain.applyToCanvas(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Multi-stage LUT application failed:', err);
+        log.error('Multi-stage LUT application failed:', err);
       }
     }
 
@@ -2218,7 +2218,7 @@ export class Viewer {
       try {
         this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('LUT application failed:', err);
+        log.error('LUT application failed:', err);
       }
     }
 
@@ -2228,7 +2228,7 @@ export class Viewer {
       try {
         this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('OCIO application failed:', err);
+        log.error('OCIO application failed:', err);
       }
     }
 
@@ -2264,7 +2264,7 @@ export class Viewer {
       try {
         this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Batched pixel effects processing failed:', err);
+        log.error('Batched pixel effects processing failed:', err);
       }
     }
 
@@ -2982,7 +2982,7 @@ export class Viewer {
 
         if (needsLoad) {
           if (imageUrl.startsWith('blob:')) {
-            console.warn('[Viewer] Cannot restore watermark from blob URL. Please reload the watermark file.');
+            log.warn('[Viewer] Cannot restore watermark from blob URL. Please reload the watermark file.');
             this.watermarkOverlay.setState({ imageUrl: null, enabled: false });
           } else {
             const desiredEnabled = state.enabled ?? true;

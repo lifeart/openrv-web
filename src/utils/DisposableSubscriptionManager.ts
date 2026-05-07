@@ -10,6 +10,10 @@
  *   // Later:
  *   subs.dispose();
  */
+import { Logger } from './Logger';
+
+const logger = new Logger('DisposableSubscriptionManager');
+
 export class DisposableSubscriptionManager {
   private disposers: (() => void)[] = [];
   private children: DisposableSubscriptionManager[] = [];
@@ -104,7 +108,7 @@ export class DisposableSubscriptionManager {
       try {
         disposer();
       } catch (err) {
-        console.error('Error disposing subscription:', err);
+        logger.error('Error disposing subscription:', err);
       }
     }
     this.disposers = [];

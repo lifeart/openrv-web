@@ -11,6 +11,10 @@ import type { ViewerProvider } from './types';
 import { ValidationError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('EventsAPI');
 /**
  * Events that can be subscribed to via the public API
  */
@@ -255,7 +259,7 @@ export class EventsAPI extends DisposableAPI {
       try {
         callback(data);
       } catch (err) {
-        console.error(`[OpenRV API] Error in event listener for "${event}":`, err);
+        logger.error(`[OpenRV API] Error in event listener for "${event}":`, err);
       }
     });
   }

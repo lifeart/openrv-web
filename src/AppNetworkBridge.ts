@@ -33,6 +33,10 @@ import { decryptSessionStateWithPin, encryptSessionStateWithPin, isValidPinCode 
 import { createThrottle, type Throttled } from './utils/throttle';
 import { showConfirm } from './ui/components/shared/Modal';
 
+
+import { Logger } from './utils/Logger';
+
+const logger = new Logger('AppNetworkBridge');
 const MEDIA_CHUNK_SIZE_BYTES = 48 * 1024;
 const MEDIA_TRANSFER_TIMEOUT_MS = 30_000;
 
@@ -1147,7 +1151,7 @@ export class AppNetworkBridge {
     const timer = setTimeout(() => {
       const transfer = this.incomingMediaTransfers.get(transferId);
       if (transfer) {
-        console.warn(
+        logger.warn(
           `[AppNetworkBridge] Media transfer "${transferId}" timed out after ${MEDIA_TRANSFER_TIMEOUT_MS}ms — cleaning up leaked chunks.`,
         );
         this.incomingMediaTransfers.delete(transferId);

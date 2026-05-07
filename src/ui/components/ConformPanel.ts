@@ -11,6 +11,10 @@
 // ---------------------------------------------------------------------------
 
 /** An unresolved clip from an OTIO/EDL import. */
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ConformPanel');
+
 export interface UnresolvedClip {
   /** Unique ID for tracking */
   id: string;
@@ -381,7 +385,7 @@ export class ConformPanel {
     // Fallback: dispatch custom event for host integration
     const sources = this.manager.getAvailableSources();
 
-    console.warn(
+    logger.warn(
       `[ConformPanel] Browse for clip "${clipId}" is not yet connected to a file picker. ` +
         'A host integration listener for the "conform-browse" event is required.',
     );
@@ -429,7 +433,7 @@ export class ConformPanel {
     }
 
     // Fallback: dispatch custom event for host integration
-    console.warn(
+    logger.warn(
       '[ConformPanel] Re-link by Folder is not yet connected to a folder picker. ' +
         'A host integration listener for the "conform-browse-folder" event is required.',
     );

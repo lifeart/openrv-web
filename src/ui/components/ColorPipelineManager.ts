@@ -31,6 +31,10 @@ import { applyColorMatrix } from '../../color/LUTUtils';
 import type { LUTStageState } from '../../color/pipeline/LUTPipelineState';
 import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ColorPipelineManager');
 interface NamedLUTStage {
   label: string;
   stage: LUTStageState;
@@ -99,7 +103,7 @@ export class ColorPipelineManager {
     try {
       this._lutProcessor = new WebGLLUTProcessor();
     } catch (e) {
-      console.warn(
+      logger.warn(
         'WebGL LUT processor not available — no CPU fallback exists, LUT processing will be unavailable:',
         e,
       );
@@ -124,7 +128,7 @@ export class ColorPipelineManager {
         this._gpuLUTChain = new GPULUTChain(chainGl, parallelCompileExt);
       }
     } catch (e) {
-      console.warn('GPU LUT chain not available:', e);
+      logger.warn('GPU LUT chain not available:', e);
       this._gpuLUTChain = null;
     }
     return this._gpuLUTChain;
@@ -146,7 +150,7 @@ export class ColorPipelineManager {
     try {
       this._ocioLUTProcessor = new WebGLLUTProcessor();
     } catch (e) {
-      console.warn('WebGL OCIO LUT processor not available, OCIO will use CPU fallback:', e);
+      logger.warn('WebGL OCIO LUT processor not available, OCIO will use CPU fallback:', e);
       this._ocioLUTProcessor = null;
     }
     return this._ocioLUTProcessor;
@@ -212,7 +216,7 @@ export class ColorPipelineManager {
       this._lutProcessor.setLUT(lut);
     } else if (lut !== null) {
       // Warn when a LUT is set but no processor exists to apply it (fix #144).
-      console.warn('[ColorPipelineManager] LUT set but no GPU processor available — the LUT will have no effect.');
+      logger.warn('[ColorPipelineManager] LUT set but no GPU processor available — the LUT will have no effect.');
     }
   }
 
@@ -448,7 +452,7 @@ export class ColorPipelineManager {
       this._lutProcessor.applyToCanvas(ctx, width, height, this._lutIntensity);
     } else {
       // No CPU fallback exists — LUT processing is unavailable without GPU (fix #144).
-      console.warn(
+      logger.warn(
         '[ColorPipelineManager] LUT processing unavailable — no GPU processor and no CPU fallback. ' +
           'The LUT will have no effect on the rendered output.',
       );

@@ -10,6 +10,10 @@ import { ShaderProgram } from '../render/ShaderProgram';
 
 // Vertex shader for bar histogram - renders bars from pre-computed histogram data
 // Uses gl_VertexID to determine bar index and vertex within bar (6 vertices per bar = 2 triangles)
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('WebGLScopes');
 const HISTOGRAM_BAR_VERTEX_SHADER = `#version 300 es
 precision highp float;
 
@@ -1037,7 +1041,7 @@ export function getSharedScopesProcessor(): WebGLScopesProcessor | null {
     try {
       sharedProcessor = new WebGLScopesProcessor();
     } catch (e) {
-      console.warn('WebGL scopes processor not available:', e);
+      logger.warn('WebGL scopes processor not available:', e);
       return null;
     }
     // Apply cached HDR state to the newly created processor

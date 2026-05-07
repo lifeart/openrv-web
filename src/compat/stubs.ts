@@ -10,8 +10,12 @@ import type { CommandSupportStatus } from './types';
 
 // ── Helpers ──
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('stubs');
 function stubWarn(name: string, reason: string): void {
-  console.warn(`rv.commands.${name}() is not available in openrv-web (${reason})`);
+  logger.warn(`rv.commands.${name}() is not available in openrv-web (${reason})`);
 }
 
 // ── Support Status Registry ──

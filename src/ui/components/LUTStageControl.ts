@@ -15,6 +15,10 @@ import { parseLUT, isLUT3D, type LUT } from '../../color/ColorProcessingFacade';
 import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import { showAlert } from './shared/Modal';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('LUTStageControl');
 export interface LUTStageControlConfig {
   /** Stage identifier used for data-testid attributes */
   stageId: 'precache' | 'file' | 'look' | 'display';
@@ -543,7 +547,7 @@ export class LUTStageControl {
       this.setLUTName(file.name);
       this.callbacks.onLUTLoaded(lut, file.name);
     } catch (err) {
-      console.error(`Failed to load LUT for ${this.config.stageId}:`, err);
+      logger.error(`Failed to load LUT for ${this.config.stageId}:`, err);
       showAlert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`, {
         type: 'error',
         title: 'LUT Error',

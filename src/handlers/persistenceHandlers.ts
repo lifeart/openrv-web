@@ -8,6 +8,9 @@ import { SessionGTOStore } from '../core/session/SessionGTOStore';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import { formatSkippedNodesWarning, formatDegradedModesWarning } from '../core/session/GTOGraphLoader';
 import { showAlert } from '../ui/components/shared/Modal';
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('persistenceHandlers');
 
 /**
  * Bind all GTO persistence and session settings event handlers.
@@ -58,7 +61,7 @@ export function bindPersistenceHandlers(
   // Handle metadata changes (for future UI display)
   on(session, 'metadataChanged', (metadata) => {
     // Could update title bar, info panel, etc.
-    console.debug('Session metadata loaded:', metadata.displayName || 'Untitled');
+    logger.debug('Session metadata loaded:', metadata.displayName || 'Untitled');
   });
 
   // Settings loaded from GTO session

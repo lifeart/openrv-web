@@ -13,6 +13,10 @@ import { describeKeyCombo } from '../../utils/input/KeyBindings';
 // Minimal interface for the keybindings manager (avoids hard coupling)
 // ---------------------------------------------------------------------------
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ShortcutEditor');
 export interface ShortcutEditorManager {
   getAvailableActions(): Array<{ action: string; description: string; currentCombo: KeyCombination }>;
   getEffectiveCombo(action: string): KeyCombination;
@@ -412,7 +416,7 @@ export class ShortcutEditor {
           this.render();
           this.showImportStatus('Import successful', false);
         } catch (err) {
-          console.warn('[ShortcutEditor] Import failed:', err);
+          logger.warn('[ShortcutEditor] Import failed:', err);
           this.showImportStatus('Import failed: invalid file format', true);
         }
       };

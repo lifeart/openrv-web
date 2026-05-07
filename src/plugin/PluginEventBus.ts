@@ -15,6 +15,10 @@ import type { PluginId } from './types';
 // Plugin Event Types
 // ---------------------------------------------------------------------------
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('PluginEventBus');
 /**
  * Application event names available to plugins (prefixed with "app:").
  *
@@ -203,7 +207,7 @@ export class PluginEventBus {
 
     const subs = this.pluginSubscriptions.get(pluginId)!;
     if (subs.length >= MAX_LISTENERS_PER_PLUGIN) {
-      console.warn(`[plugin:${pluginId}] Maximum listeners (${MAX_LISTENERS_PER_PLUGIN}) reached`);
+      logger.warn(`[plugin:${pluginId}] Maximum listeners (${MAX_LISTENERS_PER_PLUGIN}) reached`);
     }
 
     subs.push(unsub);
@@ -233,7 +237,7 @@ export class PluginEventBus {
         try {
           callback(data);
         } catch (err) {
-          console.error(`[plugin:${pluginId}] Error in event listener for "${event}":`, err);
+          logger.error(`[plugin:${pluginId}] Error in event listener for "${event}":`, err);
         }
       };
 
@@ -244,11 +248,11 @@ export class PluginEventBus {
     // Application events: bridge via EventsAPI
     const apiEvent = APP_EVENT_TO_API[event];
     if (!apiEvent) {
-      console.warn(`[plugin:${pluginId}] Unknown app event "${event}"`);
+      logger.warn(`[plugin:${pluginId}] Unknown app event "${event}"`);
       return () => {};
     }
     if (!this.eventsAPI) {
-      console.warn(`[plugin:${pluginId}] Cannot subscribe to "${event}": EventsAPI not available`);
+      logger.warn(`[plugin:${pluginId}] Cannot subscribe to "${event}": EventsAPI not available`);
       return () => {};
     }
 
@@ -256,7 +260,7 @@ export class PluginEventBus {
       try {
         callback(data as AppEventDataMap[K]);
       } catch (err) {
-        console.error(`[plugin:${pluginId}] Error in event listener for "${event}":`, err);
+        logger.error(`[plugin:${pluginId}] Error in event listener for "${event}":`, err);
       }
     };
 
@@ -274,7 +278,7 @@ export class PluginEventBus {
       try {
         callback(data);
       } catch (err) {
-        console.error(`[plugin:${pluginId}] Error in custom event listener for "${event}":`, err);
+        logger.error(`[plugin:${pluginId}] Error in custom event listener for "${event}":`, err);
       }
     };
     const unsub = this.customEmitter.on(event, wrappedCb);

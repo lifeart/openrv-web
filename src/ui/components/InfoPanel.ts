@@ -12,6 +12,9 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('InfoPanel');
 
 export type InfoPanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -122,7 +125,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     this.emitStateChanged();
     if (!this._unwiredHintLogged) {
       this._unwiredHintLogged = true;
-      console.info(
+      logger.info(
         'Most fields in InfoPanel are not yet wired to live data. ' +
           'See issue #101 for the tracking list of remaining connections.',
       );

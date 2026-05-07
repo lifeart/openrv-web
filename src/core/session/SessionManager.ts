@@ -17,6 +17,10 @@ import { resetNodeIdCounter } from '../../nodes/base/IPNode';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 import { BaseGroupNode } from '../../nodes/groups/BaseGroupNode';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('SessionManager');
 export interface SessionManagerEvents extends EventMap {
   viewNodeChanged: { nodeId: string };
   graphStructureChanged: void;
@@ -435,7 +439,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
     // Log warnings
     for (const warning of warnings) {
-      console.warn(`[SessionManager] ${warning}`);
+      logger.warn(`[SessionManager] ${warning}`);
     }
 
     this._emitStructureChanged();

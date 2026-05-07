@@ -20,6 +20,10 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../../utils/preferences/PreferencesManager';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('OCIOStateManager');
 /**
  * Validation feedback message emitted by the state manager
  */
@@ -269,7 +273,7 @@ export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
   applyPreset(presetId: string): void {
     const preset = getPresetById(presetId);
     if (!preset) {
-      console.warn(`[OCIO] Unknown preset ID: "${presetId}"`);
+      logger.warn(`[OCIO] Unknown preset ID: "${presetId}"`);
       return;
     }
     this.processor.setState({ ...preset.state, enabled: true });

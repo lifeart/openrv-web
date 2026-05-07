@@ -15,6 +15,10 @@ import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
 import type { DegradedModeInfo } from '../../composite/BlendModes';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('GTOGraphLoader');
 /**
  * Information about a node that was skipped during graph construction
  */
@@ -569,7 +573,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
 
         if (Array.isArray(lhs) && Array.isArray(rhs)) {
           if (lhs.length !== rhs.length) {
-            console.warn(
+            logger.warn(
               `connections object has mismatched lhs/rhs lengths: ${lhs.length} vs ${rhs.length}, using minimum`,
             );
           }
@@ -582,7 +586,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
             }
           }
         } else {
-          console.warn('connections object has malformed evaluation: missing or invalid lhs/rhs arrays');
+          logger.warn('connections object has malformed evaluation: missing or invalid lhs/rhs arrays');
         }
       }
 
@@ -2004,7 +2008,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
           if (basename && availableFiles.has(basename)) {
             nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)![0]!;
           } else {
-            console.warn(`CDL file "${file}" not found in available files, using inline CDL values`);
+            logger.warn(`CDL file "${file}" not found in available files, using inline CDL values`);
           }
         }
       }
@@ -2173,7 +2177,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
 
     const node = NodeFactory.create(nodeType);
     if (!node) {
-      console.warn(`Failed to create node: ${nodeType}`);
+      logger.warn(`Failed to create node: ${nodeType}`);
       skippedNodes.push({ name, protocol: info.protocol, mappedType: nodeType, reason: 'creation_failed' });
       continue;
     }
@@ -2196,7 +2200,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
   const unregistered = skippedNodes.filter((s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed');
   if (unregistered.length > 0) {
     const types = [...new Set(unregistered.map((s) => s.mappedType))].join(', ');
-    console.warn(`Skipped ${unregistered.length} mapped-but-unimplemented node(s): ${types}`);
+    logger.warn(`Skipped ${unregistered.length} mapped-but-unimplemented node(s): ${types}`);
   }
 
   // Establish connections from mode.inputs (authoritative per-node source)
@@ -2213,7 +2217,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
           try {
             graph.connect(inputNode, node);
           } catch (err) {
-            console.warn(`Failed to connect ${inputName} -> ${name}:`, err);
+            logger.warn(`Failed to connect ${inputName} -> ${name}:`, err);
           }
         }
       }
@@ -2234,7 +2238,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
         try {
           graph.connect(lhsNode, rhsNode);
         } catch (err) {
-          console.warn(`Failed to connect (from connections) ${lhsName} -> ${rhsName}:`, err);
+          logger.warn(`Failed to connect (from connections) ${lhsName} -> ${rhsName}:`, err);
         }
       }
     }
@@ -2343,7 +2347,7 @@ export function resolveAvailableFile(originalPath: string, availableFiles: Map<s
   }
 
   // Multiple files with the same basename — disambiguate by path suffix matching
-  console.warn(`Duplicate basename "${basename}": ${files.length} files share this name, resolving by path suffix`);
+  logger.warn(`Duplicate basename "${basename}": ${files.length} files share this name, resolving by path suffix`);
 
   // Normalize original path to use forward slashes for comparison
   const normalizedOriginal = originalPath.replace(/\\/g, '/');

@@ -14,6 +14,10 @@ import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('SnapshotPanel');
 export interface SnapshotPanelEvents extends EventMap {
   /** Emitted when user wants to create a snapshot */
   createRequested: { name?: string; description?: string };
@@ -255,7 +259,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       this.snapshots = await this.snapshotManager.listSnapshots();
       this.renderList();
     } catch (err) {
-      console.error('Failed to load snapshots:', err);
+      logger.error('Failed to load snapshots:', err);
     }
   }
 
@@ -567,7 +571,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       try {
         await this.snapshotManager.renameSnapshot(snapshot.id, newName);
       } catch (err) {
-        console.error('Failed to rename snapshot:', err);
+        logger.error('Failed to rename snapshot:', err);
         await showAlert('Failed to rename snapshot', { type: 'error', title: 'Error' });
       }
     }
@@ -583,7 +587,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       try {
         this.emit('descriptionUpdated', { snapshotId: snapshot.id, description: newDescription });
       } catch (err) {
-        console.error('Failed to update description:', err);
+        logger.error('Failed to update description:', err);
         await showAlert('Failed to update description', { type: 'error', title: 'Error' });
       }
     }
@@ -607,7 +611,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Failed to export snapshot:', err);
+      logger.error('Failed to export snapshot:', err);
       await showAlert('Failed to export snapshot', { type: 'error', title: 'Export Error' });
     }
   }
@@ -622,7 +626,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       try {
         await this.snapshotManager.deleteSnapshot(snapshot.id);
       } catch (err) {
-        console.error('Failed to delete snapshot:', err);
+        logger.error('Failed to delete snapshot:', err);
         await showAlert('Failed to delete snapshot', { type: 'error', title: 'Error' });
       }
     }
@@ -640,7 +644,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
         await this.snapshotManager.importSnapshot(text);
         await this.loadSnapshots();
       } catch (err) {
-        console.error('Failed to import snapshot:', err);
+        logger.error('Failed to import snapshot:', err);
         const msg = err instanceof Error ? err.message : String(err);
         await showAlert(`Failed to import snapshot: ${msg}`, { type: 'error', title: 'Import Error' });
       }
@@ -658,7 +662,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       try {
         await this.snapshotManager.clearAll();
       } catch (err) {
-        console.error('Failed to clear snapshots:', err);
+        logger.error('Failed to clear snapshots:', err);
         await showAlert('Failed to clear snapshots', { type: 'error', title: 'Error' });
       }
     }

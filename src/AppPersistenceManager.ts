@@ -29,6 +29,10 @@ import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
 
+
+import { Logger } from './utils/Logger';
+
+const logger = new Logger('AppPersistenceManager');
 /**
  * Context interface for dependencies needed by the persistence manager.
  */
@@ -152,7 +156,7 @@ export class AppPersistenceManager {
       );
       autoSaveManager.saveNow(state);
     } catch (err) {
-      console.error('Failed to retry auto-save:', err);
+      logger.error('Failed to retry auto-save:', err);
     }
   }
 
@@ -177,7 +181,7 @@ export class AppPersistenceManager {
       await snapshotManager.createSnapshot(resolvedName, state, description);
       showAlert(`Snapshot "${resolvedName}" created`, { type: 'success', title: 'Snapshot Created' });
     } catch (err) {
-      console.error('Failed to create snapshot:', err);
+      logger.error('Failed to create snapshot:', err);
       showAlert(`Failed to create snapshot: ${err}`, { type: 'error', title: 'Snapshot Error' });
     }
   }
@@ -209,7 +213,7 @@ export class AppPersistenceManager {
       await snapshotManager.createAutoCheckpoint(event, state);
       return true;
     } catch (err) {
-      console.error('Failed to create auto-checkpoint:', err);
+      logger.error('Failed to create auto-checkpoint:', err);
       return false;
     }
   }
@@ -319,7 +323,7 @@ export class AppPersistenceManager {
       const metadata = await snapshotManager.getSnapshotMetadata(id);
       showAlert(`Restored "${metadata?.name || 'snapshot'}"`, { type: 'success', title: 'Snapshot Restored' });
     } catch (err) {
-      console.error('Failed to restore snapshot:', err);
+      logger.error('Failed to restore snapshot:', err);
       showAlert(`Failed to restore snapshot: ${err}`, { type: 'error', title: 'Restore Error' });
     }
   }
@@ -491,7 +495,7 @@ export class AppPersistenceManager {
     try {
       await this.ctx.snapshotManager.initialize();
     } catch (err) {
-      console.error('Snapshot manager initialization failed:', err);
+      logger.error('Snapshot manager initialization failed:', err);
     }
   }
 
@@ -535,7 +539,7 @@ export class AppPersistenceManager {
       await autoSaveManager.initialize();
       // Recovery is handled by the 'recoveryAvailable' event listener above
     } catch (err) {
-      console.error('Auto-save initialization failed:', err);
+      logger.error('Auto-save initialization failed:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       showAlert(
         `Auto-save could not be initialized: ${errorMessage}. Your work will not be automatically saved. Use the Save button in the toolbar to save manually.`,

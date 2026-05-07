@@ -290,7 +290,7 @@ export class ShaderProgram {
           gl.uniformMatrix4fv(location, false, value);
           break;
         default:
-          console.warn(`Unsupported uniform array length: ${value.length}`);
+          log.warn(`Unsupported uniform array length: ${value.length}`);
       }
     } else if (Array.isArray(value)) {
       switch (value.length) {
@@ -315,7 +315,7 @@ export class ShaderProgram {
           gl.uniformMatrix4fv(location, false, this.mat4Buffer);
           break;
         default:
-          console.warn(`Unsupported uniform array length: ${value.length}`);
+          log.warn(`Unsupported uniform array length: ${value.length}`);
       }
     } else if (value instanceof Int32Array) {
       switch (value.length) {
@@ -332,7 +332,7 @@ export class ShaderProgram {
           gl.uniform4iv(location, value);
           break;
         default:
-          console.warn(`Unsupported uniform array length: ${value.length}`);
+          log.warn(`Unsupported uniform array length: ${value.length}`);
       }
     }
   }

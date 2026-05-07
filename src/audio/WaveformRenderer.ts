@@ -10,6 +10,10 @@
 import { Input, BlobSource, ALL_FORMATS, AudioBufferSink } from 'mediabunny';
 import type { InputAudioTrack } from 'mediabunny';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('WaveformRenderer');
 export interface WaveformData {
   peaks: Float32Array; // Normalized peak values (-1 to 1)
   duration: number; // Audio duration in seconds
@@ -111,7 +115,7 @@ export async function extractAudioFromVideo(
   const { timeout = 30000, onError } = options;
 
   const handleError = (error: AudioExtractionError): null => {
-    console.warn(`Waveform extraction failed (${error.type}): ${error.message}`, error.originalError);
+    logger.warn(`Waveform extraction failed (${error.type}): ${error.message}`, error.originalError);
     onError?.(error);
     return null;
   };
@@ -236,7 +240,7 @@ export async function extractAudioFromBlob(
   const { onError } = options;
 
   const handleError = (error: AudioExtractionError): null => {
-    console.warn(`Waveform extraction from blob failed (${error.type}): ${error.message}`, error.originalError);
+    logger.warn(`Waveform extraction from blob failed (${error.type}): ${error.message}`, error.originalError);
     onError?.(error);
     return null;
   };
@@ -297,7 +301,7 @@ export async function extractAudioWithMediabunny(
   const { onError, onProgress } = options;
 
   const handleError = (error: AudioExtractionError): null => {
-    console.warn(`Mediabunny audio extraction failed (${error.type}): ${error.message}`, error.originalError);
+    logger.warn(`Mediabunny audio extraction failed (${error.type}): ${error.message}`, error.originalError);
     onError?.(error);
     return null;
   };

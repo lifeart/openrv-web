@@ -128,7 +128,7 @@ export class AudioOrchestrator {
       if (this.isSessionAudioActive) {
         if (!this._dualPipelineWarned) {
           this._dualPipelineWarned = true;
-          console.warn(
+          log.warn(
             '[AudioOrchestrator] Dual audio pipeline detected: ' +
               "SessionPlayback's AudioCoordinator is active. " +
               'Skipping legacy audio decode to prevent double-decoding. ' +

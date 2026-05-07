@@ -53,6 +53,10 @@ import { AutoExposureController } from '../../color/AutoExposureController';
 import { LuminanceAnalyzer } from '../../render/LuminanceAnalyzer';
 import { PerfTrace } from '../../utils/PerfTrace';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ViewerGLRenderer');
 /**
  * Context interface for the ViewerGLRenderer to access Viewer state
  * without tight coupling. The Viewer implements this interface.
@@ -359,7 +363,7 @@ export class ViewerGLRenderer {
         const features: string[] = [];
         if (this._autoExposureState.enabled) features.push('auto-exposure');
         if (state.toneMappingState.operator === 'drago') features.push('Drago tone mapping');
-        console.warn(
+        logger.warn(
           `ViewerGLRenderer: ${features.join(' and ')} using fallback luminance values ` +
             '(GPU does not support EXT_color_buffer_float for scene analysis)',
         );
@@ -460,13 +464,13 @@ export class ViewerGLRenderer {
               console.log(`[Viewer] Render worker initialized, HDR output: ${proxy.getHDROutputMode()}`);
             })
             .catch((err) => {
-              console.warn('[Viewer] Render worker init failed, falling back to sync:', err);
+              logger.warn('[Viewer] Render worker init failed, falling back to sync:', err);
               this.fallbackToSyncRenderer();
             });
 
           // Set up context loss/restore callbacks
           proxy.setOnContextLost(() => {
-            console.warn('[Viewer] Worker WebGL context lost');
+            logger.warn('[Viewer] Worker WebGL context lost');
             if (this._hdrRenderActive) {
               this.deactivateHDRMode();
             }
@@ -491,7 +495,7 @@ export class ViewerGLRenderer {
           return this._glRenderer;
         }
       } catch (e) {
-        console.warn('[Viewer] OffscreenCanvas worker setup failed, using sync renderer:', e);
+        logger.warn('[Viewer] OffscreenCanvas worker setup failed, using sync renderer:', e);
         // Fall through to sync renderer. Need a fresh canvas since transferControlToOffscreen
         // may have been called (irreversible). Recreate glCanvas.
         this.recreateGLCanvas();
@@ -532,12 +536,12 @@ export class ViewerGLRenderer {
         .initAsync()
         .then(() => renderer)
         .catch((err) => {
-          console.warn('[Viewer] WebGL renderer initAsync failed:', err);
+          logger.warn('[Viewer] WebGL renderer initAsync failed:', err);
           return renderer;
         });
       return renderer;
     } catch (e) {
-      console.warn('[Viewer] WebGL renderer init failed:', e);
+      logger.warn('[Viewer] WebGL renderer init failed:', e);
       return null;
     }
   }
@@ -1202,7 +1206,7 @@ export class ViewerGLRenderer {
       // through the blit path.
       this.ctx.scheduleRender();
     } catch (e) {
-      console.warn('[Viewer] WebGPU HDR blit init failed:', e);
+      logger.warn('[Viewer] WebGPU HDR blit init failed:', e);
       this._webgpuBlitFailed = true;
     } finally {
       this._webgpuBlitInitializing = false;
@@ -1241,7 +1245,7 @@ export class ViewerGLRenderer {
       // through the blit path.
       this.ctx.scheduleRender();
     } catch (e) {
-      console.warn('[Viewer] Canvas2D HDR blit init failed:', e);
+      logger.warn('[Viewer] Canvas2D HDR blit init failed:', e);
       this._canvas2dBlitFailed = true;
     } finally {
       this._canvas2dBlitInitializing = false;

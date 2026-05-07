@@ -21,6 +21,10 @@ import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { displayToSourceCoordinates } from './ViewerInteraction';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('PixelProbe');
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
   valueCopied: string;
@@ -686,7 +690,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.isRenderedFallback = wantsSource && !hasSourceData;
 
     if (this.isRenderedFallback && !this.renderedFallbackWarned) {
-      console.warn(
+      logger.warn(
         'PixelProbe: Source mode active but no source image data available. Displaying rendered values as fallback.',
       );
       this.renderedFallbackWarned = true;
@@ -768,7 +772,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.isRenderedFallback = wantsSource && !isSource;
 
     if (this.isRenderedFallback && !this.renderedFallbackWarned) {
-      console.warn(
+      logger.warn(
         'PixelProbe: Source mode active but no source image data available on HDR path. Displaying rendered values as fallback.',
       );
       this.renderedFallbackWarned = true;
@@ -983,7 +987,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         }, 200);
       }
     } catch (err) {
-      console.warn('Failed to copy to clipboard:', err);
+      logger.warn('Failed to copy to clipboard:', err);
       showAlert('Failed to copy value to clipboard. Your browser may have denied clipboard access.', {
         type: 'warning',
         title: 'Clipboard Unavailable',

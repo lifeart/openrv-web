@@ -7,6 +7,10 @@
 
 import { EventEmitter, type EventMap } from '../EventEmitter';
 
+
+import { Logger } from '../Logger';
+
+const logger = new Logger('FullscreenManager');
 /**
  * Safari vendor-prefixed fullscreen API on HTMLElement.
  */
@@ -69,7 +73,7 @@ export class FullscreenManager extends EventEmitter<FullscreenEvents> {
         await (this.container as unknown as WebkitHTMLElement).webkitRequestFullscreen!();
       }
     } catch (err) {
-      console.warn('Failed to enter fullscreen:', err);
+      logger.warn('Failed to enter fullscreen:', err);
       this.emit('fullscreenError', { action: 'enter', error: err });
       throw err;
     }
@@ -87,7 +91,7 @@ export class FullscreenManager extends EventEmitter<FullscreenEvents> {
         await (document as unknown as WebkitDocument).webkitExitFullscreen!();
       }
     } catch (err) {
-      console.warn('Failed to exit fullscreen:', err);
+      logger.warn('Failed to exit fullscreen:', err);
       this.emit('fullscreenError', { action: 'exit', error: err });
       throw err;
     }

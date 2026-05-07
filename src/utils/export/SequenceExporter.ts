@@ -5,6 +5,10 @@
 
 import { type ExportFormat } from './FrameExporter';
 
+
+import { Logger } from '../Logger';
+
+const logger = new Logger('SequenceExporter');
 export interface SequenceExportOptions {
   format: ExportFormat;
   quality: number;
@@ -112,7 +116,7 @@ export async function exportSequence(
       // Small delay to prevent browser from being overwhelmed
       await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (err) {
-      console.error(`Failed to export frame ${frame}:`, err);
+      logger.error(`Failed to export frame ${frame}:`, err);
       return {
         success: false,
         exportedFrames,
@@ -140,7 +144,7 @@ export async function exportSequenceAsZip(
   // Check if JSZip is available
   const JSZip = (window as unknown as { JSZip?: unknown }).JSZip;
   if (!JSZip) {
-    console.warn('JSZip not available, falling back to individual downloads');
+    logger.warn('JSZip not available, falling back to individual downloads');
     return exportSequence(options, renderFrame, onProgress, cancellationToken);
   }
 

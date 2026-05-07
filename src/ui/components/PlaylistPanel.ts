@@ -19,6 +19,10 @@ import { OPACITY } from './shared/theme';
 import { downloadEDL, type EDLClip, type EDLTransition } from '../../export/EDLWriter';
 import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('PlaylistPanel');
 export interface PlaylistPanelEvents extends EventMap {
   /** Emitted when user wants to add current source as clip */
   addCurrentSource: void;
@@ -759,7 +763,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
           durationLabel.textContent = `${validated.durationFrames}f (${secs}s)`;
         } else {
           // Can't apply transition, revert to cut
-          console.warn(
+          logger.warn(
             `[PlaylistPanel] Transition "${selectedType}" rejected at gap ${gapIndex}. ` +
               `Reverting to cut. Clips may be too short or from the same source.`,
           );
@@ -836,7 +840,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
             this.emit('imported', { format, importedCount, unresolvedCount });
           } catch (err) {
-            console.error('[PlaylistPanel] Failed to parse import file:', err);
+            logger.error('[PlaylistPanel] Failed to parse import file:', err);
           }
         };
         reader.readAsText(file);
@@ -896,7 +900,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
         } else {
           // Fall back to sourceName if resolver returns null
           sourceUrl = clip.sourceName;
-          console.warn(
+          logger.warn(
             `[PlaylistPanel] No source URL found for clip "${clip.sourceName}" (sourceIndex=${clip.sourceIndex}), using name as fallback`,
           );
         }
@@ -1026,7 +1030,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
         this.updateFooterInfo();
         this.emit('imported', { format: 'otio', importedCount, unresolvedCount });
       } catch (err) {
-        console.error('[PlaylistPanel] Failed to parse OTIO file:', err);
+        logger.error('[PlaylistPanel] Failed to parse OTIO file:', err);
       }
     };
     reader.readAsText(file);

@@ -12,6 +12,10 @@ import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from '../LUTUtils';
 import { ShaderProgram } from '../../render/ShaderProgram';
 
 // Vertex shader - simple fullscreen quad
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('GPULUTChain');
 const VERTEX_SHADER = `#version 300 es
 precision highp float;
 
@@ -184,7 +188,7 @@ export class GPULUTChain {
     try {
       this.shaderProgram = new ShaderProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER, this.parallelCompileExt);
     } catch (e) {
-      console.error('GPULUTChain: Failed to create shader program:', e);
+      logger.error('GPULUTChain: Failed to create shader program:', e);
       return;
     }
 

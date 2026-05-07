@@ -1,3 +1,7 @@
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('Signal');
+
 type SignalCallback<T> = (value: T, oldValue: T) => void;
 
 export class Signal<T> {
@@ -40,7 +44,7 @@ export class Signal<T> {
       try {
         callback(value, oldValue);
       } catch (err) {
-        console.error('Error in signal callback:', err);
+        logger.error('Error in signal callback:', err);
       }
     });
   }

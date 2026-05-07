@@ -18,6 +18,10 @@ import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS } from '../../filters/FilmEmulation';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ViewerPrerender');
 /**
  * Create a frame loader function for the prerender buffer.
  * This returns raw frames from the session for subsequent effect processing.
@@ -52,7 +56,7 @@ export function createFrameLoader(
       return null;
     } catch (error) {
       // Silently handle errors - frame will be rendered live instead
-      console.warn(`Prerender frame loader error for frame ${frame}:`, error);
+      logger.warn(`Prerender frame loader error for frame ${frame}:`, error);
       return null;
     }
   };

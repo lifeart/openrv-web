@@ -256,7 +256,7 @@ export class VideoSourceNode extends BaseSourceNode {
     } catch (error) {
       // Check if this is an unsupported codec error
       if (error instanceof UnsupportedCodecException) {
-        console.warn(
+        log.warn(
           `Unsupported professional codec detected: ${error.codecError.codecInfo.displayName}`,
           error.codecError.message,
         );
@@ -277,7 +277,7 @@ export class VideoSourceNode extends BaseSourceNode {
       }
 
       // Generic error - try fallback
-      console.warn('Mediabunny initialization failed, using HTML video fallback:', error);
+      log.warn('Mediabunny initialization failed, using HTML video fallback:', error);
       this.frameExtractor?.dispose();
       this.frameExtractor = null;
       this.preloadManager?.dispose();
@@ -354,7 +354,7 @@ export class VideoSourceNode extends BaseSourceNode {
       } catch (error) {
         // Log error for debugging but don't break the app
         if (!signal?.aborted) {
-          console.warn(`Frame ${frame} extraction failed:`, error);
+          log.warn(`Frame ${frame} extraction failed:`, error);
         }
         return null;
       }

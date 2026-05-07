@@ -8,6 +8,9 @@
  */
 
 import type { MuCommands } from './MuCommands';
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MuExtraCommands');
 
 /**
  * Lazily resolve the openrv API from the global scope.
@@ -68,9 +71,7 @@ export class MuExtraCommands {
    */
   displayFeedback(message: string, duration: number = 2.0, _glyph?: string | null, _position?: number[]): void {
     this._currentFeedback = message;
-    if (typeof console !== 'undefined') {
-      console.info(`[RV Feedback] ${message}`);
-    }
+    logger.info(`[RV Feedback] ${message}`);
     // Auto-clear after duration, then drain queue
     if (typeof setTimeout !== 'undefined') {
       setTimeout(

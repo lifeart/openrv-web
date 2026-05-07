@@ -33,6 +33,8 @@ export class WiringEventLog {
   }
 
   dump(): void {
+    // Developer-only debug helper; table format is intentional (invoked from devtools).
+    // eslint-disable-next-line no-console
     console.table(this.log);
   }
 }

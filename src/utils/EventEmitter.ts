@@ -1,3 +1,7 @@
+import { Logger } from './Logger';
+
+const logger = new Logger('EventEmitter');
+
 type EventCallback<T = unknown> = (data: T) => void;
 
 export interface EventMap {
@@ -26,7 +30,7 @@ export class EventEmitter<Events extends EventMap = EventMap> {
       try {
         callback(data);
       } catch (err) {
-        console.error(`Error in event listener for "${String(event)}":`, err);
+        logger.error(`Error in event listener for "${String(event)}":`, err);
       }
     });
   }

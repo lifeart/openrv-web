@@ -28,6 +28,10 @@ import type { TransitionManager } from '../../core/session/TransitionManager';
 import { CORE_PREFERENCE_STORAGE_KEYS } from '../../core/PreferencesManager';
 import { showAlert } from './shared/Modal';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('Timeline');
 export class Timeline {
   /** Radius of the playhead drag handle circle in pixels */
   static readonly PLAYHEAD_CIRCLE_RADIUS = 9;
@@ -253,7 +257,7 @@ export class Timeline {
     this.subs.add(
       this.session.on('sourceLoaded', () => {
         this.loadWaveform().catch((err) => {
-          console.warn('Failed to load waveform:', err);
+          logger.warn('Failed to load waveform:', err);
           this.waveformError = err instanceof Error ? err.message : String(err);
           this.scheduleDraw();
         });
@@ -422,7 +426,7 @@ export class Timeline {
 
     // Start loading thumbnails asynchronously
     this.thumbnailManager.loadThumbnails().catch((err) => {
-      console.warn('Failed to load thumbnails:', err);
+      logger.warn('Failed to load thumbnails:', err);
     });
   }
 

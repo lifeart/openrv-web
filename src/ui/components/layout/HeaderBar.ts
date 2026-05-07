@@ -31,6 +31,10 @@ import { RepresentationSelector } from '../RepresentationSelector';
 import type { VersionGroup } from '../../../core/session/VersionManager';
 import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
 
+
+import { Logger } from '../../../utils/Logger';
+
+const logger = new Logger('HeaderBar');
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
   showCustomKeyBindings: void;
@@ -1601,7 +1605,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           showAlert(`No valid entries found in ${edlFile.name}.`, { type: 'warning', title: 'EDL Empty' });
         }
       } catch (err) {
-        console.error('Failed to load RVEDL file:', err);
+        logger.error('Failed to load RVEDL file:', err);
         showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
       input.value = '';
@@ -1665,7 +1669,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           input.value = '';
           return;
         } catch (err) {
-          console.error('Failed to load sequence:', err);
+          logger.error('Failed to load sequence:', err);
           showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
           input.value = '';
           return;
@@ -1688,7 +1692,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           return;
         }
       } catch (err) {
-        console.error('Failed to infer sequence:', err);
+        logger.error('Failed to infer sequence:', err);
         // Fall through to single file loading
       }
     }
@@ -1699,7 +1703,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         await this.session.loadFile(file);
         this.emit('fileLoaded', undefined);
       } catch (err) {
-        console.error('Failed to load file:', err);
+        logger.error('Failed to load file:', err);
         showAlert(`Failed to load ${file.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
     }

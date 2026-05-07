@@ -19,6 +19,10 @@ import { getIconSvg } from './shared/Icons';
 import { createButton } from './shared/Button';
 import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('CurvesControl');
 interface CurvesControlEvents extends EventMap {
   curvesChanged: ColorCurvesData;
   visibilityChanged: boolean;
@@ -228,11 +232,11 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
           this.setCurves(curves);
           this.clearImportError();
         } else {
-          console.error('Invalid curves JSON file');
+          logger.error('Invalid curves JSON file');
           this.showImportError('Invalid curves JSON file');
         }
       } catch (err) {
-        console.error('Failed to import curves:', err);
+        logger.error('Failed to import curves:', err);
         this.showImportError('Failed to import curves');
       }
     });

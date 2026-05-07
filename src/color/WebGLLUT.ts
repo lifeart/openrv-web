@@ -10,6 +10,10 @@ import { type LUT, type LUT3D, type LUT1D, isLUT1D, createLUTTexture, createLUT1
 import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from './LUTUtils';
 import { ShaderProgram } from '../render/ShaderProgram';
 
+
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('WebGLLUT');
 /**
  * Convert Float32Array to Uint16Array of IEEE 754 half-float values
  * for uploading as HALF_FLOAT texture data.
@@ -865,7 +869,7 @@ export class WebGLLUTProcessor {
     const readErr = gl.getError();
     if (readErr !== gl.NO_ERROR) {
       // If float readback failed, try half-float and convert
-      console.warn('Float readPixels failed, falling back to uint8 path');
+      logger.warn('Float readPixels failed, falling back to uint8 path');
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       return data;
     }
@@ -898,7 +902,7 @@ export class WebGLLUTProcessor {
       if (!this.floatFBO) {
         this.floatFBO = gl.createFramebuffer();
         if (!this.floatFBO) {
-          console.error('Failed to create float framebuffer');
+          logger.error('Failed to create float framebuffer');
           return;
         }
       }
@@ -907,7 +911,7 @@ export class WebGLLUTProcessor {
 
       const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
       if (status !== gl.FRAMEBUFFER_COMPLETE) {
-        console.error('Float FBO incomplete, status:', status);
+        logger.error('Float FBO incomplete, status:', status);
       }
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
