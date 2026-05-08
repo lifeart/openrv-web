@@ -24,8 +24,10 @@ import {
   WORKFLOW_PRESETS,
 } from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
+import { createButton, setButtonActive } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
 import { DropdownMenu } from './shared/DropdownMenu';
-import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { OCIOStateManager } from './OCIOStateManager';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
@@ -42,6 +44,7 @@ export interface OCIOControlEvents extends EventMap {
  */
 export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   private container: HTMLElement;
+  private panelHandle: Panel;
   private panel: HTMLElement;
   private toggleButton: HTMLButtonElement;
   private isExpanded = false;
@@ -93,60 +96,35 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       position: relative;
     `;
 
-    // Create toggle button
-    this.toggleButton = document.createElement('button');
-    this.toggleButton.innerHTML = `${getIconSvg('palette', 'sm')}<span style="margin-left: 6px;">OCIO</span>`;
-    this.toggleButton.title = 'Toggle OCIO color management panel (O)';
+    // Create toggle button via shared createButton (icon variant). Override
+    // base color so its cssText still contains text-muted (matches the
+    // pre-existing visual + any consumers of the toolbar style).
+    this.toggleButton = createButton('OCIO', () => this.toggle(), {
+      variant: 'icon',
+      icon: getIconSvg('palette', 'sm'),
+      title: 'Toggle OCIO color management panel (O)',
+    });
     this.toggleButton.dataset.testid = 'ocio-panel-button';
-    this.toggleButton.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      outline: none;
-    `;
-    this.toggleButton.addEventListener('click', () => this.toggle());
-    this.toggleButton.addEventListener('pointerenter', () => {
-      if (!this.isExpanded) {
-        this.toggleButton.style.background = 'var(--bg-hover)';
-        this.toggleButton.style.borderColor = 'var(--border-primary)';
-        this.toggleButton.style.color = 'var(--text-primary)';
-      }
-    });
-    this.toggleButton.addEventListener('pointerleave', () => {
-      if (!this.isExpanded) {
-        this.updateButtonStyle();
-      }
-    });
+    this.toggleButton.style.color = 'var(--text-muted)';
+    this.toggleButton.style.padding = '6px 10px';
     this.container.appendChild(this.toggleButton);
 
-    // Create panel (rendered at body level)
-    this.panel = document.createElement('div');
-    this.panel.className = 'ocio-panel';
+    // Create panel via shared createPanel for consistent z-index. Custom
+    // viewport-flip positioning + max-height/overflow are kept here because
+    // shared/Panel doesn't replicate them yet.
+    this.panelHandle = createPanel({ width: PANEL_WIDTHS.wide });
+    this.panel = this.panelHandle.element;
+    this.panel.classList.add('ocio-panel');
     this.panel.dataset.testid = 'ocio-panel';
     this.panel.setAttribute('role', 'dialog');
     this.panel.setAttribute('aria-label', 'OCIO Color Management Settings');
     this.panel.setAttribute('aria-modal', 'false');
-    this.panel.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      padding: 12px;
-      min-width: ${PANEL_WIDTHS.wide};
-      max-height: 80vh;
-      overflow-y: auto;
-      z-index: 9999;
-      display: none;
-      box-shadow: ${SHADOWS.panel};
-    `;
+    this.panel.style.maxHeight = '80vh';
+    this.panel.style.overflowY = 'auto';
+    this.panel.style.boxShadow = SHADOWS.panel;
+    this.panel.style.zIndex = String(Z_INDEX.dropdown);
+    this.panel.style.width = '';
+    this.panel.style.minWidth = PANEL_WIDTHS.wide;
 
     // Initialize dropdowns
     this.configDropdown = new DropdownMenu({ minWidth: '200px' });
@@ -230,13 +208,13 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       display: inline-flex;
       align-items: center;
     `;
+    loadConfigButton.addEventListener('click', () => this.handleLoadConfig());
     loadConfigButton.addEventListener('pointerenter', () => {
       loadConfigButton.style.background = 'var(--bg-hover)';
     });
     loadConfigButton.addEventListener('pointerleave', () => {
       loadConfigButton.style.background = 'var(--bg-tertiary)';
     });
-    loadConfigButton.addEventListener('click', () => this.handleLoadConfig());
     loadConfigRow.appendChild(loadConfigButton);
     configSection.appendChild(loadConfigRow);
 
@@ -911,6 +889,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    */
   private updateButtonStyle(): void {
     const isEnabled = this.manager.isEnabled();
+    setButtonActive(this.toggleButton, isEnabled, 'icon');
     if (isEnabled) {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
@@ -1154,9 +1133,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     this.lookDropdown.dispose();
     this.lookDirectionDropdown.dispose();
 
-    if (document.body.contains(this.panel)) {
-      document.body.removeChild(this.panel);
-    }
+    this.panelHandle.dispose();
 
     this.container.remove();
   }

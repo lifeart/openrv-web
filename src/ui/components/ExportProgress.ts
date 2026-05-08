@@ -7,6 +7,7 @@
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { ExportProgress as ProgressData } from '../../export/VideoExporter';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +46,7 @@ export class ExportProgressDialog extends EventEmitter<ExportProgressEvents> {
     this.backdrop.style.cssText = `
       position: fixed;
       inset: 0;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       background: rgba(0, 0, 0, 0.5);
       display: none;
     `;
@@ -64,8 +65,8 @@ export class ExportProgressDialog extends EventEmitter<ExportProgressEvents> {
       border: 1px solid var(--border-color, #333);
       border-radius: 8px;
       padding: 24px;
-      min-width: 400px;
-      z-index: 10000;
+      min-width: ${PANEL_WIDTHS.dialog};
+      z-index: ${Z_INDEX.modal};
       display: none;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     `;

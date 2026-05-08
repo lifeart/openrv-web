@@ -15,9 +15,12 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { detectBrowserColorSpace, colorSpaceLabel, gamutLabel } from '../../color/BrowserColorSpace';
 import { getIconSvg } from './shared/Icons';
-import { TRANSITIONS } from './shared/theme';
+import { PANEL_WIDTHS, TRANSITIONS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('DisplayProfileControl');
 export interface DisplayProfileControlEvents extends EventMap {
   stateChanged: DisplayColorState;
 }
@@ -39,14 +42,14 @@ type SliderProperty = keyof typeof SLIDER_RANGES;
 function clampSliderValue(property: SliderProperty, value: number | undefined): number {
   const range = SLIDER_RANGES[property];
   if (value === undefined || typeof value !== 'number' || !Number.isFinite(value)) {
-    console.warn(
+    logger.warn(
       `DisplayProfileControl: Invalid value for ${property} (${value}), falling back to default ${range.default}`,
     );
     return range.default;
   }
   if (value < range.min || value > range.max) {
     const clamped = Math.max(range.min, Math.min(range.max, value));
-    console.warn(
+    logger.warn(
       `DisplayProfileControl: ${property} value ${value} out of range [${range.min}, ${range.max}], clamped to ${clamped}`,
     );
     return clamped;
@@ -138,7 +141,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.dropdown.style.cssText = `
       position: fixed; background: var(--bg-secondary);
       border: 1px solid var(--border-primary); border-radius: 4px;
-      padding: 8px; min-width: 220px; z-index: 9999;
+      padding: 8px; min-width: ${PANEL_WIDTHS.narrow}; z-index: ${Z_INDEX.dropdown};
       display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     `;
 

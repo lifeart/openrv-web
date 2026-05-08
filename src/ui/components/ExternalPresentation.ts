@@ -24,6 +24,9 @@ import type { ManagerBase } from '../../core/ManagerBase';
 // Types
 // ---------------------------------------------------------------------------
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ExternalPresentation');
 /** Message types sent over BroadcastChannel */
 export type PresentationMessageType =
   | 'syncFrame'
@@ -242,12 +245,12 @@ export function generatePresentationHTML(windowId: string, channelName: string, 
           if (msg.temperature !== undefined) colorState.temperature = msg.temperature;
           if (msg.tint !== undefined) colorState.tint = msg.tint;
           updateInfoDisplay();
-          console.warn('[OpenRV Presentation] Color settings received but cannot be applied without WebGL viewer. ' +
+          logger.warn('[OpenRV Presentation] Color settings received but cannot be applied without WebGL viewer. ' +
             'Received: ' + JSON.stringify({exposure: msg.exposure, gamma: msg.gamma, temperature: msg.temperature, tint: msg.tint}));
           break;
         default:
           if (msg.type !== 'windowReady' && msg.type !== 'windowClosed' && msg.type !== 'pong') {
-            console.warn('[OpenRV Presentation] Unhandled message type: ' + msg.type);
+            logger.warn('[OpenRV Presentation] Unhandled message type: ' + msg.type);
           }
           break;
       }
@@ -414,7 +417,7 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
 
     if (!windowRef) {
       // Popup blocker may have prevented the window from opening
-      console.warn(
+      logger.warn(
         '[ExternalPresentation] window.open() returned null — the browser likely blocked the popup. ' +
           'Check popup blocker settings.',
       );
@@ -540,8 +543,9 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
     try {
       // Attach session ID to all outbound messages
       this.channel.postMessage({ ...message, sessionId: this.sessionId });
-    } catch {
+    } catch (error) {
       // Channel may have been closed
+      logger.debug('broadcast: postMessage failed (channel likely closed)', { error });
     }
   }
 

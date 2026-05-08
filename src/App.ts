@@ -747,7 +747,7 @@ export class App {
     // Subscribe to cache error events so failures are visible to the user
     this.wiringSubscriptions.add(
       this.cacheManager.on('error', (event) => {
-        console.warn('[OpenRV] Media cache error:', event.message);
+        log.warn('[OpenRV] Media cache error:', event.message);
 
         // Surface error in the CacheIndicator UI
         this.controls.cacheIndicator.showError(event.message);

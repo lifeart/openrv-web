@@ -13,6 +13,7 @@
 
 import { parseFrameInput, getFormatLabel, type FrameInputResult } from '../../utils/media/FrameInputParser';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 /**
  * Minimal session interface used by GotoFrameOverlay.
@@ -55,12 +56,12 @@ export class GotoFrameOverlay {
       bottom: 90px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 60;
+      z-index: ${Z_INDEX.viewerHud};
       display: none;
       flex-direction: column;
       gap: 8px;
       padding: 12px 16px;
-      min-width: 260px;
+      min-width: ${PANEL_WIDTHS.mediumWide};
       background: var(--bg-secondary, #1e1e2e);
       border: 1px solid var(--accent-primary, #4a7dff);
       border-radius: 8px;

@@ -1,5 +1,8 @@
 import type { IPNode, NodeConstructor } from './IPNode';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('NodeFactory');
 type NodeCreator = () => IPNode;
 
 class NodeFactoryClass {
@@ -12,7 +15,7 @@ class NodeFactoryClass {
   create(type: string): IPNode | null {
     const creator = this.registry.get(type);
     if (!creator) {
-      console.warn(`Unknown node type: ${type}`);
+      logger.warn(`Unknown node type: ${type}`);
       return null;
     }
     return creator();

@@ -14,6 +14,10 @@
  * - 'enabled-with-stages' (Phase 4b/c): full multi-pass pipeline.
  *   WebGPUBackend.initAsync() calls registerWebGPUStages() (when wired).
  */
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('webgpu/featureFlag');
+
 export type WebGPUStageFlag = 'disabled' | 'enabled-no-stages' | 'enabled-with-stages';
 
 const URL_PARAM = 'webgpu';
@@ -46,8 +50,9 @@ export function getWebGPUBackendMode(): WebGPUStageFlag {
       if (v === 'no-stages' || v === 'enabled-no-stages') return 'enabled-no-stages';
       if (v === 'off' || v === 'disabled' || v === '0') return 'disabled';
       // Any other (or null) value falls through to localStorage.
-    } catch {
+    } catch (error) {
       // URLSearchParams may throw on malformed strings in some environments
+      logger.debug('URLSearchParams parse failed; falling through', { error });
     }
   }
 
@@ -58,8 +63,9 @@ export function getWebGPUBackendMode(): WebGPUStageFlag {
       if (v === 'enabled-with-stages' || v === 'enabled-no-stages' || v === 'disabled') {
         return v;
       }
-    } catch {
+    } catch (error) {
       // localStorage may throw in some sandboxed contexts
+      logger.debug('localStorage read failed; falling back to default', { error });
     }
   }
 
@@ -97,7 +103,8 @@ export function setWebGPUBackendModeForTest(mode: WebGPUStageFlag | null): void 
     } else {
       window.localStorage.setItem(STORAGE_KEY, mode);
     }
-  } catch {
+  } catch (error) {
     // ignore — localStorage may throw in sandboxed contexts
+    logger.debug('setWebGPUBackendModeForTest: localStorage write failed', { error });
   }
 }

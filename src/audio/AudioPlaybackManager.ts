@@ -13,6 +13,9 @@ import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { clamp } from '../utils/math';
 import type { ManagerBase } from '../core/ManagerBase';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('AudioPlaybackManager');
 export interface AudioPlaybackEvents extends EventMap {
   error: AudioPlaybackError;
   stateChanged: AudioPlaybackState;
@@ -227,7 +230,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
         clearTimeout(timeoutId);
 
         // CORS error or network issue - fall back to video element
-        console.warn('AudioPlaybackManager: Failed to extract audio, using video element fallback:', fetchError);
+        logger.warn('AudioPlaybackManager: Failed to extract audio, using video element fallback:', fetchError);
         this.useVideoFallback = true;
         this._duration = videoElement.duration;
         this.setState('ready');
@@ -236,7 +239,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     } catch (error) {
       clearTimeout(timeoutId);
       // Decode error - fall back to video element
-      console.warn('AudioPlaybackManager: Audio decode failed, using video element fallback:', error);
+      logger.warn('AudioPlaybackManager: Audio decode failed, using video element fallback:', error);
       this.useVideoFallback = true;
       this._duration = videoElement.duration;
       this.setState('ready');
@@ -380,10 +383,12 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
       // If pause() / dispose() ran during the await, undo and bail.
       if (this._playEpoch !== epoch || !this._isPlaying || !this.videoElement) {
+        // Safe to swallow: pause() on a video element that was just disposed
+        // or whose state changed mid-race may throw; we are already aborting.
         try {
           this.videoElement?.pause();
-        } catch {
-          /* ignore */
+        } catch (error) {
+          logger.warn('audio:videoElementPauseDuringResumeRace failed', { error });
         }
         return false;
       }
@@ -695,10 +700,12 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     snippetNode.onended = () => {
       if (this.scrubSourceNode === snippetNode) {
         this.scrubSourceNode = null;
+        // Safe to swallow: disconnect() throws if the node is already
+        // disconnected (e.g. via stopScrubSnippet) -- idempotent cleanup.
         try {
           envelopeGain.disconnect();
-        } catch {
-          /* already disconnected */
+        } catch (error) {
+          logger.warn('audio:scrubEnvelopeDisconnectOnEnded failed', { error });
         }
         this.scrubEnvelopeNode = null;
       }
@@ -721,12 +728,15 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
         this.scrubEnvelopeNode.gain.linearRampToValueAtTime(0, now + fadeOut);
         // Schedule stop after fade completes
         this.scrubSourceNode.stop(now + fadeOut);
-      } catch {
-        // If scheduling fails, just stop immediately
+      } catch (scheduleError) {
+        // Safe to swallow: scheduling can fail if the source already ended
+        // or the context was closed; fall back to immediate stop.
+        logger.warn('audio:scrubCrossfadeSchedule failed, stopping immediately', { error: scheduleError });
+        // Safe to swallow: stop() throws on already-stopped nodes -- best-effort cleanup.
         try {
           this.scrubSourceNode.stop();
-        } catch {
-          /* ignore */
+        } catch (stopError) {
+          logger.warn('audio:scrubCrossfadeImmediateStop failed', { error: stopError });
         }
       }
 
@@ -734,10 +744,12 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       const outgoing = this.scrubSourceNode;
       const outgoingEnvelope = this.scrubEnvelopeNode;
       outgoing.onended = () => {
+        // Safe to swallow: disconnect() throws if the envelope was already
+        // disconnected by dispose() / stopScrubSnippet -- idempotent cleanup.
         try {
           outgoingEnvelope.disconnect();
-        } catch {
-          /* ignore */
+        } catch (error) {
+          logger.warn('audio:scrubCrossfadeOutgoingDisconnect failed', { error });
         }
       };
     }
@@ -748,19 +760,23 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
   private stopScrubSnippet(): void {
     if (this.scrubSourceNode) {
+      // Safe to swallow: stop()/disconnect() throw on nodes that already
+      // ended naturally or were disposed -- idempotent cleanup.
       try {
         this.scrubSourceNode.stop();
         this.scrubSourceNode.disconnect();
-      } catch {
-        // Ignore errors from already stopped nodes
+      } catch (error) {
+        logger.warn('audio:stopScrubSnippetSource failed', { error });
       }
       this.scrubSourceNode = null;
     }
     if (this.scrubEnvelopeNode) {
+      // Safe to swallow: disconnect() throws if the envelope is already
+      // detached from the graph -- idempotent cleanup.
       try {
         this.scrubEnvelopeNode.disconnect();
-      } catch {
-        // Ignore errors from already disconnected nodes
+      } catch (error) {
+        logger.warn('audio:stopScrubSnippetEnvelopeDisconnect failed', { error });
       }
       this.scrubEnvelopeNode = null;
     }
@@ -781,11 +797,13 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
   private stopSourceNode(): void {
     if (this.sourceNode) {
+      // Safe to swallow: stop()/disconnect() throw on nodes that already
+      // ended naturally (onended fired) or were disposed -- idempotent cleanup.
       try {
         this.sourceNode.stop();
         this.sourceNode.disconnect();
-      } catch {
-        // Ignore errors from already stopped nodes
+      } catch (error) {
+        logger.warn('audio:stopSourceNode failed', { error });
       }
       this.sourceNode = null;
     }
@@ -799,7 +817,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   }
 
   private handleError(type: AudioPlaybackError['type'], message: string, originalError?: Error): void {
-    console.error(`AudioPlaybackManager: ${message}`, originalError);
+    logger.error(`AudioPlaybackManager: ${message}`, originalError);
     this.setState('error');
     this.emit('error', { type, message, originalError });
   }
@@ -831,7 +849,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
     if (this.audioContext) {
       this.audioContext.close().catch((err) => {
-        console.warn('AudioPlaybackManager: Audio context close failed:', err);
+        logger.warn('AudioPlaybackManager: Audio context close failed:', err);
       });
       this.audioContext = null;
     }

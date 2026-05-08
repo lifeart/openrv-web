@@ -34,6 +34,9 @@ import { FPSIndicator } from './FPSIndicator';
 import { DisplayProfileIndicator } from './DisplayProfileIndicator';
 import { PresenceOverlay } from './PresenceOverlay';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('OverlayManager');
 /**
  * Callbacks the OverlayManager needs from the Viewer to wire up
  * overlay event listeners at construction time.
@@ -159,7 +162,7 @@ export class OverlayManager {
         this._safeAreasOverlay.setViewerDimensions(width, height, 0, 0, width, height);
         this._safeAreasOverlay.setCropRegion(this.lastCropRegion);
       } catch (err) {
-        console.error('SafeAreasOverlay setViewerDimensions failed:', err);
+        logger.error('SafeAreasOverlay setViewerDimensions failed:', err);
       }
     }
 
@@ -167,7 +170,7 @@ export class OverlayManager {
       try {
         this._matteOverlay.setViewerDimensions(width, height, 0, 0, width, height);
       } catch (err) {
-        console.error('MatteOverlay setViewerDimensions failed:', err);
+        logger.error('MatteOverlay setViewerDimensions failed:', err);
       }
     }
 
@@ -175,7 +178,7 @@ export class OverlayManager {
       try {
         this._spotlightOverlay.setViewerDimensions(width, height, 0, 0, width, height);
       } catch (err) {
-        console.error('SpotlightOverlay setViewerDimensions failed:', err);
+        logger.error('SpotlightOverlay setViewerDimensions failed:', err);
       }
     }
 
@@ -183,7 +186,7 @@ export class OverlayManager {
       try {
         this._bugOverlay.setViewerDimensions(width, height, 0, 0, width, height);
       } catch (err) {
-        console.error('BugOverlay setViewerDimensions failed:', err);
+        logger.error('BugOverlay setViewerDimensions failed:', err);
       }
     }
 
@@ -191,7 +194,7 @@ export class OverlayManager {
       try {
         this._exrWindowOverlay.setViewerDimensions(width, height, 0, 0, width, height);
       } catch (err) {
-        console.error('EXRWindowOverlay setViewerDimensions failed:', err);
+        logger.error('EXRWindowOverlay setViewerDimensions failed:', err);
       }
     }
   }

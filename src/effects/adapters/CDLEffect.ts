@@ -6,7 +6,7 @@
  *   cdlValues: CDLValues   (the slope/offset/power/saturation object)
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import { applyCDLToImageData, isDefaultCDL } from '../../color/CDL';
 import type { CDLValues } from '../../color/CDL';
 
@@ -15,14 +15,14 @@ export const cdlEffect: ImageEffect = {
   label: 'ASC CDL',
   category: 'color',
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     const cdl = params['cdlValues'] as CDLValues | undefined;
     if (cdl) {
       applyCDLToImageData(imageData, cdl);
     }
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     const cdl = params['cdlValues'] as CDLValues | undefined;
     return cdl !== undefined && !isDefaultCDL(cdl);
   },

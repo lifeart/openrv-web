@@ -14,6 +14,7 @@
 import type { EventMap } from '../../utils/EventEmitter';
 import type { EXRBox2i } from '../../formats/EXRDecoder';
 import { CanvasOverlay } from './CanvasOverlay';
+import { Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,7 +63,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   private displayWindow: EXRBox2i | null = null;
 
   constructor() {
-    super('exr-window-overlay', 'exr-window-overlay', 42);
+    super('exr-window-overlay', 'exr-window-overlay', Z_INDEX.viewerExrWindow);
   }
 
   // -------------------------------------------------------------------------

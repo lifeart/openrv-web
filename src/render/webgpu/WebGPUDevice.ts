@@ -6,6 +6,9 @@
  */
 
 import type { WGPUDevice, WGPUCanvasContext, WGPUNavigatorGPU } from './WebGPUTypes';
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('WebGPUDevice');
 
 export class WebGPUDeviceWrapper {
   private _device: WGPUDevice | null = null;
@@ -111,8 +114,9 @@ export class WebGPUDeviceWrapper {
     if (this._context) {
       try {
         this._context.unconfigure();
-      } catch {
+      } catch (error) {
         // Context may already be lost
+        logger.debug('dispose: context.unconfigure failed (may be lost)', { error });
       }
     }
 

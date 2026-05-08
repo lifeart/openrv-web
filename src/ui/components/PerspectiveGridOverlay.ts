@@ -1,6 +1,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { PerspectiveCorrectionParams, Point2D } from '../../transform/PerspectiveCorrection';
 import { DEFAULT_PERSPECTIVE_PARAMS, generatePerspectiveGrid } from '../../transform/PerspectiveCorrection';
+import { Z_INDEX } from './shared/theme';
 
 export interface PerspectiveGridOverlayEvents extends EventMap {
   cornersChanged: PerspectiveCorrectionParams;
@@ -89,7 +90,7 @@ export class PerspectiveGridOverlay extends EventEmitter<PerspectiveGridOverlayE
         cursor: move;
         pointer-events: auto;
         transform: translate(-50%, -50%);
-        z-index: 1;
+        z-index: ${Z_INDEX.localStack};
       `;
 
       const handleIndex = i;

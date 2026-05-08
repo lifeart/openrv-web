@@ -15,7 +15,7 @@
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { formatTimecode } from '../../utils/media/Timecode';
-import { Z_INDEX, OPACITY } from './shared/theme';
+import { OPACITY, PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import type { Session } from '../../core/session/Session';
 import type { SequenceGroupNode, EDLEntry } from '../../nodes/groups/SequenceGroupNode';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
@@ -137,7 +137,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       height: 100%;
       background: var(--accent-primary, #4a90d9);
       pointer-events: none;
-      z-index: 10;
+      z-index: ${Z_INDEX.localStackHigh};
       left: 0px;
     `;
 
@@ -153,7 +153,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       border-right: 5px solid transparent;
       border-bottom: 6px solid var(--accent-primary, #4a90d9);
       pointer-events: none;
-      z-index: 10;
+      z-index: ${Z_INDEX.localStackHigh};
       left: 0px;
       transform: translateX(-5px);
     `;
@@ -796,7 +796,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 300px;
+        min-width: ${PANEL_WIDTHS.panel};
         pointer-events: none;
       `;
       this.cutsContainer.appendChild(emptyMsg);
@@ -1093,7 +1093,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       border-radius: 4px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       z-index: ${Z_INDEX.dropdown};
-      min-width: 180px;
+      min-width: ${PANEL_WIDTHS.dropdownMenu};
     `;
 
     // Split at Playhead (no keyboard shortcut wired)

@@ -20,6 +20,9 @@ import type { ManagerBase } from '../ManagerBase';
 import type { TransitionConfig, TransitionFrameInfo } from '../types/transition';
 import type { TransitionManager } from './TransitionManager';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('PlaylistManager');
 /** Represents a single clip in the playlist */
 export interface PlaylistClip {
   /** Unique ID for the clip */
@@ -273,7 +276,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     if (clip) {
       this.clips.splice(newIndex, 0, clip);
     } else {
-      console.warn(`PlaylistManager.moveClip: Failed to remove clip at index ${currentIndex}`);
+      logger.warn(`PlaylistManager.moveClip: Failed to remove clip at index ${currentIndex}`);
       return false;
     }
     this.recalculateGlobalFrames();

@@ -7,8 +7,9 @@
 
 import { type LuminanceVisualization, type LuminanceVisMode } from './LuminanceVisualization';
 import { getIconSvg } from './shared/Icons';
-import { applyA11yFocus } from './shared/Button';
-import { SHADOWS } from './shared/theme';
+import { applyA11yFocus, createButton } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
+import { SHADOWS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 const MODE_LABELS: Record<LuminanceVisMode, string> = {
@@ -21,6 +22,7 @@ const MODE_LABELS: Record<LuminanceVisMode, string> = {
 
 export class LuminanceVisualizationControl {
   private container: HTMLElement;
+  private dropdownPanel: Panel;
   private dropdown: HTMLElement;
   private toggleButton: HTMLButtonElement;
   private subControlsContainer: HTMLElement;
@@ -92,22 +94,19 @@ export class LuminanceVisualizationControl {
 
     this.container.appendChild(this.toggleButton);
 
-    // Create dropdown panel
-    this.dropdown = document.createElement('div');
-    this.dropdown.className = 'luminance-vis-dropdown';
+    // Create dropdown via shared createPanel for consistent z-index + chrome.
+    // Custom positioning is kept (positionDropdown) so we use the bare element.
+    this.dropdownPanel = createPanel({ width: '220px' });
+    this.dropdown = this.dropdownPanel.element;
+    this.dropdown.classList.add('luminance-vis-dropdown');
     this.dropdown.setAttribute('role', 'dialog');
     this.dropdown.setAttribute('aria-label', 'Luminance Visualization Settings');
-    this.dropdown.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 4px;
-      padding: 8px;
-      min-width: 220px;
-      z-index: 9999;
-      display: none;
-      box-shadow: ${SHADOWS.dropdown};
-    `;
+    this.dropdown.style.borderRadius = '4px';
+    this.dropdown.style.padding = '8px';
+    this.dropdown.style.boxShadow = SHADOWS.dropdown;
+    this.dropdown.style.zIndex = String(Z_INDEX.dropdown);
+    this.dropdown.style.width = '';
+    this.dropdown.style.minWidth = '220px';
 
     // Sub-controls container (inside dropdown, below mode buttons)
     this.subControlsContainer = document.createElement('div');
@@ -272,22 +271,19 @@ export class LuminanceVisualizationControl {
     bandRow.appendChild(bandSlider);
     this.subControlsContainer.appendChild(bandRow);
 
-    // Reseed button
-    const reseedBtn = document.createElement('button');
-    reseedBtn.textContent = 'Reseed';
+    // Reseed button via shared createButton.
+    const reseedBtn = createButton(
+      'Reseed',
+      () => {
+        this.luminanceVis.reseedRandom();
+      },
+      {
+        variant: 'ghost',
+        size: 'xs',
+        title: 'Reseed random colors',
+      },
+    );
     reseedBtn.dataset.testid = 'random-color-reseed-btn';
-    reseedBtn.style.cssText = `
-      padding: 4px 10px;
-      border: 1px solid var(--border-secondary);
-      border-radius: 3px;
-      background: var(--bg-secondary);
-      color: var(--text-secondary);
-      font-size: 10px;
-      cursor: pointer;
-    `;
-    reseedBtn.addEventListener('click', () => {
-      this.luminanceVis.reseedRandom();
-    });
     this.subControlsContainer.appendChild(reseedBtn);
   }
 
@@ -456,7 +452,7 @@ export class LuminanceVisualizationControl {
       padding: 2px 8px;
       border-radius: 3px;
       pointer-events: none;
-      z-index: 10;
+      z-index: ${Z_INDEX.viewerOverlay};
       display: none;
     `;
 
@@ -490,9 +486,7 @@ export class LuminanceVisualizationControl {
     this.deregisterDismiss = null;
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
-    if (document.body.contains(this.dropdown)) {
-      document.body.removeChild(this.dropdown);
-    }
+    this.dropdownPanel.dispose();
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
   }

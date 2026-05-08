@@ -19,6 +19,9 @@ import { detectFloatingWindowViolations } from './stereo/FloatingWindowDetector'
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
+import { Logger } from './utils/Logger';
+
+const logger = new Logger('AppViewWiring');
 /**
  * Derive meaningful labels for A/B compare overlays from session source names.
  * Falls back to 'A'/'B' when source names are unavailable.
@@ -153,7 +156,7 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
   subs.add(
     controls.compareControl.on('quadViewChanged', (state) => {
       if (state.enabled) {
-        console.warn(
+        logger.warn(
           '[OpenRV] Quad View is not yet connected to the viewer. ' +
             'The UI reflects the selected state but the viewer will not render a quad layout.',
         );
@@ -224,7 +227,7 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
     controls.toneMappingControl.on('hdrModeChanged', ({ mode, previousMode }) => {
       const accepted = viewer.setHDROutputMode(mode);
       if (!accepted) {
-        console.warn(`HDR output mode '${mode}' was rejected by the renderer`);
+        logger.warn(`HDR output mode '${mode}' was rejected by the renderer`);
         controls.toneMappingControl.syncHDROutputMode(previousMode);
       }
     }),

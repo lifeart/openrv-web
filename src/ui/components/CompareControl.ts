@@ -13,6 +13,7 @@ import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { type DifferenceMatteState } from './DifferenceMatteControl';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import {
   ComparisonManager,
   type WipeMode,
@@ -24,6 +25,10 @@ import {
 } from './ComparisonManager';
 
 // Re-export types so external consumers don't need to change imports
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('CompareControl');
 export type { WipeMode, ABSource, ComparisonBlendMode, BlendModeState, CompareState, QuadViewState };
 export { DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './ComparisonManager';
 
@@ -130,10 +135,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 8px;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
-      min-width: 160px;
+      min-width: ${PANEL_WIDTHS.compact};
       max-height: min(75vh, 560px);
       overflow-y: auto;
       overflow-x: hidden;
@@ -1227,7 +1232,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    */
   setQuadViewSource(quadrant: 0 | 1 | 2 | 3, source: ABSource): void {
     if (source === 'C' || source === 'D') {
-      console.warn(
+      logger.warn(
         `[CompareControl] Source "${source}" selected for quadrant ${quadrant}, but sources C and D have no production assignment path. Only A and B are bound to real media sources.`,
       );
     }

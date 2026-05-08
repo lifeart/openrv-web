@@ -6,9 +6,12 @@
  */
 
 import { getIconSvg } from './shared/Icons';
-import { Z_INDEX, SHADOWS } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import type { AutoSaveManager, AutoSaveConfig } from '../../core/session/AutoSaveManager';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('AutoSaveIndicator');
 
 /** Auto-save status */
 export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'disabled';
@@ -259,7 +262,7 @@ export class AutoSaveIndicator {
       border-radius: 6px;
       box-shadow: ${SHADOWS.dropdown};
       z-index: ${Z_INDEX.dropdown};
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       max-width: calc(100vw - 16px);
       font-size: 12px;
       color: var(--text-primary, #eee);
@@ -467,8 +470,9 @@ export class AutoSaveIndicator {
           maxVersions: config.maxVersions,
         }),
       );
-    } catch {
-      // Ignore storage errors
+    } catch (error) {
+      // Ignore storage errors (private mode, quota exceeded, etc.)
+      logger.debug('saveConfigToStorage failed', { error });
     }
   }
 

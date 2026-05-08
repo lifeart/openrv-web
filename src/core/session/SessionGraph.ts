@@ -306,7 +306,7 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
     resetNodeIdCounter(maxIdSuffix);
 
     for (const warning of warnings) {
-      console.warn(`[SessionGraph] ${warning}`);
+      log.warn(`[SessionGraph] ${warning}`);
     }
 
     this.emit('graphLoaded', this._graphParseResult);

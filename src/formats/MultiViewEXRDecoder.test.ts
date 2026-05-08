@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isMultiViewEXR, getEXRViews, getEXRViewInfo, decodeEXRView, mapChannelsToViews } from './MultiViewEXR';
+import { isMultiViewEXR, getEXRViews, getEXRViewInfo, decodeEXRView, mapChannelsToViews } from './MultiViewEXRDecoder';
 import { EXRCompression, EXRPixelType } from './EXRDecoder';
 
 // EXR magic number (little-endian)

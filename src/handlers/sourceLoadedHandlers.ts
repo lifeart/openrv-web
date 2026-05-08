@@ -9,6 +9,9 @@ import { setScopesHDRAutoFit, setScopesHDRMode } from '../scopes/WebGLScopes';
 import { queryHDRHeadroom } from '../color/DisplayCapabilities';
 import { getCorePreferencesManager } from '../core/PreferencesManager';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('sourceLoadedHandlers');
 type HDRTransferPreset = 'hlg' | 'pq' | null;
 type AutoToneMappingPreset = { enabled: boolean; operator: 'off' | 'aces' };
 
@@ -393,6 +396,6 @@ export async function handleEXRLayerChange(
       scheduleUpdateScopes();
     }
   } catch (err) {
-    console.error('Failed to change EXR layer:', err);
+    logger.error('Failed to change EXR layer:', err);
   }
 }

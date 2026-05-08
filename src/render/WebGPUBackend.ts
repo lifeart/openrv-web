@@ -50,6 +50,9 @@ import { WebGPUReadback } from './webgpu/WebGPUReadback';
 // WebGPUBackend
 // ---------------------------------------------------------------------------
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('WebGPUBackend');
 export class WebGPUBackend implements RendererBackend {
   // --- GPU handles ---
   private device: WGPUDevice | null = null;
@@ -162,7 +165,7 @@ export class WebGPUBackend implements RendererBackend {
     // Register device lost handler (Phase 4)
     if ((device as unknown as { lost?: Promise<{ message: string }> }).lost) {
       (device as unknown as { lost: Promise<{ message: string }> }).lost.then((info) => {
-        console.warn(`[WebGPUBackend] GPU device lost: ${info.message}`);
+        logger.warn(`[WebGPUBackend] GPU device lost: ${info.message}`);
         this._deviceLost = true;
         this.device = null;
       });
@@ -197,7 +200,7 @@ export class WebGPUBackend implements RendererBackend {
       this.extendedToneMapping = toneMappingMode === 'extended';
     } catch {
       if (toneMappingMode === 'extended') {
-        console.warn('Extended tone mapping not supported, falling back to standard');
+        logger.warn('Extended tone mapping not supported, falling back to standard');
         this.configureContext(device, 'standard');
       } else {
         throw new Error('WebGPU canvas configuration failed');
@@ -228,8 +231,9 @@ export class WebGPUBackend implements RendererBackend {
     if (this.gpuContext) {
       try {
         this.gpuContext.unconfigure();
-      } catch {
+      } catch (error) {
         // Context may already be lost
+        logger.debug('gpuContext.unconfigure failed (context may be lost)', { error });
       }
     }
 
@@ -568,7 +572,7 @@ export class WebGPUBackend implements RendererBackend {
       }
       return await this.readbackHelper.readRegion(this.device, x, y, width, height, canvasTexture, bytesPerPixel);
     } catch (e) {
-      console.warn('WebGPU readback failed:', e);
+      logger.warn('WebGPU readback failed:', e);
       return null;
     }
   }

@@ -3,6 +3,10 @@
  * Captures and exports frames with applied color adjustments
  */
 
+import { Logger } from '../Logger';
+
+const logger = new Logger('FrameExporter');
+
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
 
 export interface ExportOptions {
@@ -78,7 +82,7 @@ export function exportMergedCanvases(
   }
 
   if (!ctx) {
-    console.error('Failed to create merge canvas context');
+    logger.error('Failed to create merge canvas context');
     return;
   }
 
@@ -105,7 +109,7 @@ export function captureVideoFrame(video: HTMLVideoElement, options: Partial<Expo
 
   const ctx = canvas.getContext('2d');
   if (!ctx) {
-    console.error('Failed to create canvas context');
+    logger.error('Failed to create canvas context');
     return;
   }
 
@@ -158,7 +162,7 @@ export async function copyCanvasToClipboard(canvas: HTMLCanvasElement): Promise<
 
     return true;
   } catch (err) {
-    console.error('Failed to copy to clipboard:', err);
+    logger.error('Failed to copy to clipboard:', err);
     return false;
   }
 }

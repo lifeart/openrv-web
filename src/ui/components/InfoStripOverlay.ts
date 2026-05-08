@@ -11,6 +11,8 @@
 
 import { type Session } from '../../core/session/Session';
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { probe } from '../../utils/probe';
+import { Z_INDEX } from './shared/theme';
 
 export interface InfoStripOverlayState {
   enabled: boolean;
@@ -35,14 +37,13 @@ export const DEFAULT_INFO_STRIP_OVERLAY_STATE: InfoStripOverlayState = {
  * - Falls back to splitting on `/` for non-URL strings.
  */
 export function extractBasename(urlOrPath: string): string {
-  try {
-    const parsed = new URL(urlOrPath);
+  // URL parsing may throw for non-URL inputs — fall back to path splitting.
+  const parsed = probe('extractBasename.parseURL', () => new URL(urlOrPath));
+  if (parsed) {
     const segments = parsed.pathname.split('/').filter(Boolean);
     if (segments.length > 0) {
       return decodeURIComponent(segments[segments.length - 1]!);
     }
-  } catch {
-    // Not a valid URL — fall back to path splitting
   }
 
   const segments = urlOrPath.split('/').filter(Boolean);
@@ -76,7 +77,7 @@ export class InfoStripOverlay extends EventEmitter<InfoStripOverlayEvents> {
       bottom: 0;
       left: 0;
       right: 0;
-      z-index: 48;
+      z-index: ${Z_INDEX.viewerStripBg};
       opacity: 0;
       transition: opacity 150ms ease;
       pointer-events: none;

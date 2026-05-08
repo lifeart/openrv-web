@@ -352,8 +352,9 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
     if (this.processorHandle !== null && this.module.isReady()) {
       try {
         this.module.destroyProcessor(this.processorHandle);
-      } catch {
+      } catch (error) {
         /* best effort */
+        log.debug('releaseProcessor: destroyProcessor failed', { error });
       }
     }
     this.processorHandle = null;
@@ -364,8 +365,9 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
     if (this.configHandle !== null && this.module.isReady()) {
       try {
         this.module.destroyConfig(this.configHandle);
-      } catch {
+      } catch (error) {
         /* best effort */
+        log.debug('releaseConfig: destroyConfig failed', { error });
       }
     }
     this.configHandle = null;

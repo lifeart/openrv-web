@@ -27,7 +27,11 @@ import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
 import { CORE_PREFERENCE_STORAGE_KEYS } from '../../core/PreferencesManager';
 import { showAlert } from './shared/Modal';
+import { Z_INDEX } from './shared/theme';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('Timeline');
 export class Timeline {
   /** Radius of the playhead drag handle circle in pixels */
   static readonly PLAYHEAD_CIRCLE_RADIUS = 9;
@@ -145,8 +149,9 @@ export class Timeline {
       if (stored && (Timeline.VALID_DISPLAY_MODES as readonly string[]).includes(stored)) {
         this._timecodeDisplayMode = stored as TimecodeDisplayMode;
       }
-    } catch {
+    } catch (error) {
       // localStorage may be unavailable (e.g. in tests or restricted contexts)
+      logger.debug('Timeline: failed to read display mode preference', { error });
     }
 
     // Create container
@@ -193,7 +198,7 @@ export class Timeline {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1;
+      z-index: ${Z_INDEX.localStack};
       transition: all 0.12s ease;
     `;
     this.magnifierToggleButton.addEventListener('pointerenter', () => {
@@ -253,7 +258,7 @@ export class Timeline {
     this.subs.add(
       this.session.on('sourceLoaded', () => {
         this.loadWaveform().catch((err) => {
-          console.warn('Failed to load waveform:', err);
+          logger.warn('Failed to load waveform:', err);
           this.waveformError = err instanceof Error ? err.message : String(err);
           this.scheduleDraw();
         });
@@ -422,7 +427,7 @@ export class Timeline {
 
     // Start loading thumbnails asynchronously
     this.thumbnailManager.loadThumbnails().catch((err) => {
-      console.warn('Failed to load thumbnails:', err);
+      logger.warn('Failed to load thumbnails:', err);
     });
   }
 
@@ -455,8 +460,9 @@ export class Timeline {
       // Persist choice to localStorage so it survives page reloads
       try {
         localStorage.setItem(Timeline.DISPLAY_MODE_STORAGE_KEY, mode);
-      } catch {
+      } catch (error) {
         // localStorage may be unavailable
+        logger.debug('Timeline: failed to persist display mode', { error });
       }
       this.scheduleDraw();
     }

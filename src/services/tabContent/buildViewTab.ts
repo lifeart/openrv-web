@@ -17,6 +17,7 @@ import { BugOverlaySettingsMenu } from '../../ui/components/BugOverlaySettingsMe
 import { MatteOverlaySettingsMenu } from '../../ui/components/MatteOverlaySettingsMenu';
 import { ReferenceComparisonSettingsMenu } from '../../ui/components/ReferenceComparisonSettingsMenu';
 import { SpotlightOverlaySettingsMenu } from '../../ui/components/SpotlightOverlaySettingsMenu';
+import { PANEL_WIDTHS, Z_INDEX } from '../../ui/components/shared/theme';
 
 export interface BuildViewTabDeps {
   registry: AppControlRegistry;
@@ -185,10 +186,10 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     border: 1px solid var(--border-primary);
     border-radius: 4px;
     padding: 4px;
-    z-index: 9999;
+    z-index: ${Z_INDEX.dropdown};
     display: none;
     flex-direction: column;
-    min-width: 140px;
+    min-width: ${PANEL_WIDTHS.extraCompact};
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   `;
 
@@ -489,10 +490,10 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     border: 1px solid var(--border-primary);
     border-radius: 4px;
     padding: 4px;
-    z-index: 9999;
+    z-index: ${Z_INDEX.dropdown};
     display: none;
     flex-direction: column;
-    min-width: 140px;
+    min-width: ${PANEL_WIDTHS.extraCompact};
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   `;
 

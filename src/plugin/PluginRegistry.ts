@@ -35,6 +35,9 @@ import type { PaintToolInterface } from '../paint/AdvancedPaintTools';
 import type { PaintEngine } from '../paint/PaintEngine';
 import type { EventsAPI } from '../api/EventsAPI';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('PluginRegistry');
 interface PluginEntry {
   plugin: Plugin;
   state: PluginState;
@@ -312,7 +315,7 @@ export class PluginRegistry {
       }
     } catch (err) {
       // Log but don't prevent disposal -- plugin must still be marked disposed
-      console.error(`[plugin:${id}] dispose() threw:`, err);
+      logger.error(`[plugin:${id}] dispose() threw:`, err);
     }
 
     entry.state = 'disposed';
@@ -482,8 +485,8 @@ export class PluginRegistry {
         : registry.settingsStore.createNoopAccessor(manifest.id),
       log: {
         info: (msg: string, ...args: unknown[]) => console.log(`[plugin:${manifest.id}]`, msg, ...args),
-        warn: (msg: string, ...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, msg, ...args),
-        error: (msg: string, ...args: unknown[]) => console.error(`[plugin:${manifest.id}]`, msg, ...args),
+        warn: (msg: string, ...args: unknown[]) => logger.warn(`[plugin:${manifest.id}]`, msg, ...args),
+        error: (msg: string, ...args: unknown[]) => logger.error(`[plugin:${manifest.id}]`, msg, ...args),
       },
     };
   }
@@ -504,7 +507,7 @@ export class PluginRegistry {
         try {
           decoderRegistry.unregisterDecoder(name);
         } catch (e) {
-          console.warn(`[plugin:${pluginId}] Failed to unregister decoder "${name}":`, e);
+          logger.warn(`[plugin:${pluginId}] Failed to unregister decoder "${name}":`, e);
         }
       }
 
@@ -513,7 +516,7 @@ export class PluginRegistry {
         try {
           NodeFactory.unregister(type);
         } catch (e) {
-          console.warn(`[plugin:${pluginId}] Failed to unregister node "${type}":`, e);
+          logger.warn(`[plugin:${pluginId}] Failed to unregister node "${type}":`, e);
         }
       }
 
@@ -523,7 +526,7 @@ export class PluginRegistry {
           try {
             this.paintEngineRef.unregisterAdvancedTool(name);
           } catch (e) {
-            console.warn(`[plugin:${pluginId}] Failed to unregister tool "${name}":`, e);
+            logger.warn(`[plugin:${pluginId}] Failed to unregister tool "${name}":`, e);
           }
         }
       }
@@ -534,7 +537,7 @@ export class PluginRegistry {
           ExporterRegistry.unregister(name);
           this.exporterUnregistered.emit({ pluginId, name }, { pluginId, name });
         } catch (e) {
-          console.warn(`[plugin:${pluginId}] Failed to unregister exporter "${name}":`, e);
+          logger.warn(`[plugin:${pluginId}] Failed to unregister exporter "${name}":`, e);
         }
       }
 
@@ -543,7 +546,7 @@ export class PluginRegistry {
         try {
           this.blendModeRegistry.delete(name);
         } catch (e) {
-          console.warn(`[plugin:${pluginId}] Failed to unregister blend mode "${name}":`, e);
+          logger.warn(`[plugin:${pluginId}] Failed to unregister blend mode "${name}":`, e);
         }
       }
 
@@ -555,7 +558,7 @@ export class PluginRegistry {
           this.uiPanelRegistry.delete(id);
           this.uiPanelUnregistered.emit({ pluginId, panelId: id }, { pluginId, panelId: id });
         } catch (e) {
-          console.warn(`[plugin:${pluginId}] Failed to unregister UI panel "${id}":`, e);
+          logger.warn(`[plugin:${pluginId}] Failed to unregister UI panel "${id}":`, e);
         }
       }
     } finally {

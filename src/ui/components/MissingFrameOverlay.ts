@@ -6,6 +6,7 @@
  */
 
 import { getIconSvg } from './shared/Icons';
+import { Z_INDEX } from './shared/theme';
 
 export interface MissingFrameOverlayState {
   visible: boolean;
@@ -36,7 +37,7 @@ export class MissingFrameOverlay {
       align-items: center;
       justify-content: center;
       background: rgba(0, 0, 0, 0.75);
-      z-index: 100;
+      z-index: ${Z_INDEX.viewerOverlayHigh};
       pointer-events: none;
     `;
 

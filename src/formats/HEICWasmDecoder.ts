@@ -11,6 +11,9 @@ import { validateImageDimensions } from './shared';
 import { DecoderError } from '../core/errors';
 import { readBoxType, findBox, parsePitm, parseIinf } from './AVIFGainmapDecoder';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('HEICWasmDecoder');
 const HEIC_TOP_LEVEL_IMAGE_TYPES = new Set(['hvc1', 'grid', 'iden', 'iovl']);
 
 function inferPrimaryIndexFromMetadata(buffer: ArrayBuffer, decodedImageCount: number): number | null {
@@ -51,7 +54,7 @@ function resolvePrimaryImageIndex(buffer: ArrayBuffer, images: import('libheif-j
   if (metadataIndex !== null) return metadataIndex;
 
   if (primaryUnavailable) {
-    console.warn(
+    logger.warn(
       '[HEICWasmDecoder] is_primary() unavailable in this libheif-js build, and HEIC metadata did not identify a primary image — ' +
         'falling back to image index 0 which may not be the primary image.',
     );

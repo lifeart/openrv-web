@@ -10,7 +10,7 @@
  *   filmEmulationSeed:       number           (default 0)
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import { applyFilmEmulation, isFilmEmulationActive } from '../../filters/FilmEmulation';
 import type { FilmStockId } from '../../filters/FilmEmulation';
 
@@ -19,7 +19,7 @@ export const filmEmulationEffect: ImageEffect = {
   label: 'Film Emulation',
   category: 'color',
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     applyFilmEmulation(imageData, {
       enabled: (params['filmEmulationEnabled'] as boolean) ?? false,
       stock: (params['filmEmulationStock'] as FilmStockId) ?? 'kodak-portra-400',
@@ -29,7 +29,7 @@ export const filmEmulationEffect: ImageEffect = {
     });
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     return isFilmEmulationActive({
       enabled: (params['filmEmulationEnabled'] as boolean) ?? false,
       stock: (params['filmEmulationStock'] as FilmStockId) ?? 'kodak-portra-400',

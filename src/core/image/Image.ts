@@ -1,4 +1,5 @@
 import { ManagedVideoFrame } from './ManagedVideoFrame';
+import { probe } from '../../utils/probe';
 
 export type DataType = 'uint8' | 'uint16' | 'float32';
 
@@ -242,11 +243,8 @@ export class IPImage {
       this.managedVideoFrame = null;
     }
     if (this.imageBitmap) {
-      try {
-        this.imageBitmap.close();
-      } catch {
-        // Already closed
-      }
+      // Bitmap may already be closed; swallow.
+      probe('IPImage.imageBitmap.close', () => this.imageBitmap?.close());
       this.imageBitmap = null;
     }
     if (this.rightEyeImage) {

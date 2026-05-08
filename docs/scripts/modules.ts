@@ -162,7 +162,7 @@ export const MODULE_CONFIGS: ModuleConfig[] = [
     key: 'format-exr',
     name: 'EXR Decoder',
     template: 'user-guide',
-    sourceFiles: ['src/formats/EXRDecoder.ts', 'src/formats/MultiViewEXR.ts'],
+    sourceFiles: ['src/formats/EXRDecoder.ts', 'src/formats/MultiViewEXRDecoder.ts'],
     category: 'formats',
     outputName: 'exr',
   },

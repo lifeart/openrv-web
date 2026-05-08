@@ -22,6 +22,9 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import type { UIControl } from '../UIControl';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('CanvasOverlay');
 export abstract class CanvasOverlay<E extends EventMap = EventMap> extends EventEmitter<E> implements UIControl {
   protected canvas: HTMLCanvasElement;
   protected ctx: CanvasRenderingContext2D;
@@ -85,7 +88,7 @@ export abstract class CanvasOverlay<E extends EventMap = EventMap> extends Event
       try {
         this.render();
       } catch (err) {
-        console.error(`${this.constructor.name} render failed:`, err);
+        logger.error(`${this.constructor.name} render failed:`, err);
       }
     }
 

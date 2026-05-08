@@ -50,6 +50,9 @@ import { isDeinterlaceActive } from '../../filters/Deinterlace';
 import { isFilmEmulationActive } from '../../filters/FilmEmulation';
 import { isPerspectiveActive } from '../../transform/PerspectiveCorrection';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('SessionSerializer');
 /** Components needed for serialization */
 export interface SessionComponents {
   session: Session;
@@ -290,7 +293,7 @@ export class SessionSerializer {
     const activeGaps = gaps.filter((g) => g.isActive);
     if (activeGaps.length > 0) {
       const names = activeGaps.map((g) => g.name).join(', ');
-      console.warn(
+      logger.warn(
         `[SessionSerializer] The following active viewer states are NOT saved in the project file: ${names}. ` +
           `These will revert to defaults when the project is reloaded.`,
       );
@@ -503,8 +506,12 @@ export class SessionSerializer {
                 loadedMedia++;
                 continue;
               }
-            } catch {
+            } catch (error) {
               // Cache lookup failed – fall through to file picker
+              logger.debug('OPFS cache lookup failed; falling through to file picker', {
+                opfsCacheKey: ref.opfsCacheKey,
+                error,
+              });
             }
           }
 
@@ -537,7 +544,7 @@ export class SessionSerializer {
         // Defensive check: blob URLs should have been marked with requiresReload during save
         // If we encounter one here, it indicates a bug in serialization
         if (ref.path.startsWith('blob:')) {
-          console.warn(
+          logger.warn(
             `[SessionSerializer] Unexpected blob URL in saved project: ${ref.name}. This indicates a serialization bug.`,
           );
           warnings.push(`Cannot load blob URL: ${ref.name}`);

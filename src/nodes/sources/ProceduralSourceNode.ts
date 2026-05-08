@@ -32,6 +32,7 @@ import { BaseSourceNode } from './BaseSourceNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +69,24 @@ export interface MovieProcParams {
   colorA?: [number, number, number, number]; // checkerboard color A
   colorB?: [number, number, number, number]; // checkerboard color B
   steps?: number; // grey_ramp step count (clamped to >= 2)
+}
+
+/**
+ * Options accepted by `Session.loadProceduralSource()` / `MediaAPI.loadProceduralSource()`.
+ *
+ * Different patterns honour different fields: `solid` reads `color`, `checkerboard`
+ * reads `cellSize`, `grey_ramp` reads `steps`, etc. Unsupported keys for a given
+ * pattern are silently ignored.
+ */
+export interface ProceduralSourceOptions {
+  width?: number;
+  height?: number;
+  color?: [number, number, number, number];
+  direction?: GradientDirection;
+  cellSize?: number;
+  steps?: number;
+  fps?: number;
+  duration?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -723,15 +742,17 @@ export function parseMovieProc(url: string): MovieProcParams {
 export class ProceduralSourceNode extends BaseSourceNode {
   private cachedIPImage: IPImage | null = null;
   private patternParams: MovieProcParams | null = null;
+  declare url: string;
+  declare pattern: string;
+  declare width: number;
+  declare height: number;
 
   constructor(name?: string) {
     super('RVMovieProc', name ?? 'Procedural Source');
-
-    // Define properties
-    this.properties.add({ name: 'url', defaultValue: '' });
-    this.properties.add({ name: 'pattern', defaultValue: '' });
-    this.properties.add({ name: 'width', defaultValue: 1920 });
-    this.properties.add({ name: 'height', defaultValue: 1080 });
+    defineNodeProperty(this, 'url', { defaultValue: '' });
+    defineNodeProperty(this, 'pattern', { defaultValue: '' });
+    defineNodeProperty(this, 'width', { defaultValue: 1920 });
+    defineNodeProperty(this, 'height', { defaultValue: 1080 });
   }
 
   /**
@@ -756,12 +777,10 @@ export class ProceduralSourceNode extends BaseSourceNode {
       duration,
       fps,
     };
-
-    this.properties.setValue('url', url);
-    this.properties.setValue('pattern', params.pattern);
-    this.properties.setValue('width', width);
-    this.properties.setValue('height', height);
-
+    this.url = url;
+    this.pattern = params.pattern;
+    this.width = width;
+    this.height = height;
     // Generate the image immediately
     this.generatePattern(width, height, params);
   }
@@ -812,11 +831,9 @@ export class ProceduralSourceNode extends BaseSourceNode {
       duration,
       fps,
     };
-
-    this.properties.setValue('pattern', pattern);
-    this.properties.setValue('width', width);
-    this.properties.setValue('height', height);
-
+    this.pattern = pattern;
+    this.width = width;
+    this.height = height;
     this.generatePattern(width, height, params);
   }
 
@@ -911,7 +928,7 @@ export class ProceduralSourceNode extends BaseSourceNode {
       type: this.type,
       id: this.id,
       name: this.name,
-      url: this.properties.getValue<string>('url'),
+      url: this.url,
       pattern: this.patternParams,
       metadata: this.metadata,
       properties: this.properties.toJSON(),

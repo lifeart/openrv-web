@@ -18,7 +18,7 @@
  *   stabilizationAutoMotion:     boolean  (default false) — enable auto motion estimation
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import {
   applyStabilization,
   computeMotionVector,
@@ -35,7 +35,7 @@ export const stabilizationEffect: ImageEffect = {
   label: 'Stabilization',
   category: 'spatial',
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     applyStabilization(imageData, {
       dx: (params['stabilizationDx'] as number) ?? 0,
       dy: (params['stabilizationDy'] as number) ?? 0,
@@ -43,7 +43,7 @@ export const stabilizationEffect: ImageEffect = {
     });
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     const enabled = (params['stabilizationEnabled'] as boolean) ?? false;
     if (!enabled) return false;
     const dx = (params['stabilizationDx'] as number) ?? 0;
@@ -82,7 +82,7 @@ export class StabilizationAdapter implements ImageEffect {
   /** Index of the frame currently being processed (0-based). */
   private frameIndex = 0;
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     const autoMotion = (params['stabilizationAutoMotion'] as boolean) ?? false;
     const smoothingStrength = (params['stabilizationSmoothingStrength'] as number) ?? 50;
     const cropAmount = (params['stabilizationCropAmount'] as number) ?? 0;
@@ -124,7 +124,7 @@ export class StabilizationAdapter implements ImageEffect {
     }
   }
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     const enabled = (params['stabilizationEnabled'] as boolean) ?? false;
     if (!enabled) return false;
 

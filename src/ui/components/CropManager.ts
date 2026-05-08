@@ -26,6 +26,9 @@ import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
 import { resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
 import { type Session } from '../../core/session/Session';
 import { clamp } from '../../utils/math';
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('CropManager');
 
 /**
  * Context interface for what CropManager needs from the Viewer.
@@ -583,7 +586,7 @@ export class CropManager {
       try {
         this.context.container.releasePointerCapture(this.cropDragPointerId);
       } catch (e) {
-        if (typeof console !== 'undefined') console.debug('Pointer capture already released', e);
+        logger.debug('Pointer capture already released', e);
       }
       this.cropDragPointerId = null;
     }
@@ -618,7 +621,7 @@ export class CropManager {
       try {
         this.context.container.releasePointerCapture(this.cropDragPointerId);
       } catch (e) {
-        if (typeof console !== 'undefined') console.debug('Pointer capture already released', e);
+        logger.debug('Pointer capture already released', e);
       }
     }
     this._isDraggingCrop = false;

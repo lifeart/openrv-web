@@ -11,6 +11,8 @@ import { type LUTPipeline, type LUT } from '../../color/ColorProcessingFacade';
 import { LUTStageControl } from './LUTStageControl';
 import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { createButton } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
 import { Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
@@ -20,6 +22,7 @@ export interface LUTPipelinePanelEvents extends EventMap {
 }
 
 export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
+  private panelHandle: Panel;
   private panel: HTMLElement;
   private pipeline: LUTPipeline;
   private isVisible = false;
@@ -48,25 +51,19 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
     this.pipeline.registerSource(this.defaultSourceId);
     this.pipeline.setActiveSource(this.defaultSourceId);
 
-    // Create panel container
-    this.panel = document.createElement('div');
+    // Create panel container via shared createPanel for consistent z-index
+    // and chrome. The panel docks fixed at right:8 top:60 (no anchor) so we
+    // override position-related styles after construction.
+    this.panelHandle = createPanel({ width: '320px' });
+    this.panel = this.panelHandle.element;
     this.panel.dataset.testid = 'lut-pipeline-panel';
-    this.panel.style.cssText = `
-      position: fixed;
-      right: 8px;
-      top: 60px;
-      width: 320px;
-      max-height: 80vh;
-      overflow-y: auto;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      padding: 12px;
-      z-index: 9999;
-      display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    `;
+    this.panel.style.right = '8px';
+    this.panel.style.top = '60px';
+    this.panel.style.left = '';
+    this.panel.style.maxHeight = '80vh';
+    this.panel.style.overflowY = 'auto';
+    this.panel.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+    this.panel.style.zIndex = String(Z_INDEX.dropdown);
 
     // --- Header ---
     const header = document.createElement('div');
@@ -269,19 +266,14 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
   }
 
   private createHeaderButton(text: string, testId: string, title: string): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.textContent = text;
+    // Click handler is wired by callers via addEventListener; pass a no-op
+    // here so createButton's internal click dispatch is benign.
+    const btn = createButton(text, () => {}, {
+      variant: 'default',
+      size: 'xs',
+      title,
+    });
     btn.dataset.testid = testId;
-    btn.title = title;
-    btn.style.cssText = `
-      background: var(--border-secondary);
-      border: 1px solid var(--text-muted);
-      color: var(--text-primary);
-      padding: 2px 6px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 10px;
-    `;
     return btn;
   }
 
@@ -598,8 +590,6 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
     this.fileControl.dispose();
     this.lookControl.dispose();
     this.displayControl.dispose();
-    if (this.panel.parentNode) {
-      this.panel.parentNode.removeChild(this.panel);
-    }
+    this.panelHandle.dispose();
   }
 }

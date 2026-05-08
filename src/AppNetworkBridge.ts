@@ -33,6 +33,9 @@ import { decryptSessionStateWithPin, encryptSessionStateWithPin, isValidPinCode 
 import { createThrottle, type Throttled } from './utils/throttle';
 import { showConfirm } from './ui/components/shared/Modal';
 
+import { Logger } from './utils/Logger';
+
+const logger = new Logger('AppNetworkBridge');
 const MEDIA_CHUNK_SIZE_BYTES = 48 * 1024;
 const MEDIA_TRANSFER_TIMEOUT_MS = 30_000;
 
@@ -876,8 +879,9 @@ export class AppNetworkBridge {
       controlWithShare.setShareLinkKind?.('invite');
       controlWithShare.setResponseToken?.('');
       controlWithShare.setShareLink?.(shareLink);
-    } catch {
+    } catch (error) {
       // Keep existing share URL on preview update errors.
+      logger.debug('share link preview update failed; keeping existing URL', { error });
     }
   }
 
@@ -944,8 +948,9 @@ export class AppNetworkBridge {
     if (typeof uiWithPrompt.promptMediaSyncConfirmation === 'function') {
       try {
         return await uiWithPrompt.promptMediaSyncConfirmation({ fileCount, totalBytes });
-      } catch {
+      } catch (error) {
         // fall through to browser confirm
+        logger.warn('promptMediaSyncConfirmation failed; falling back to browser confirm', { error });
       }
     }
 
@@ -1147,7 +1152,7 @@ export class AppNetworkBridge {
     const timer = setTimeout(() => {
       const transfer = this.incomingMediaTransfers.get(transferId);
       if (transfer) {
-        console.warn(
+        logger.warn(
           `[AppNetworkBridge] Media transfer "${transferId}" timed out after ${MEDIA_TRANSFER_TIMEOUT_MS}ms — cleaning up leaked chunks.`,
         );
         this.incomingMediaTransfers.delete(transferId);

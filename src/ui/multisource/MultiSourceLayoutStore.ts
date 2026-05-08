@@ -15,6 +15,9 @@ import {
   createDefaultLayoutState,
 } from './MultiSourceLayoutTypes';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('MultiSourceLayoutStore');
 export interface MultiSourceLayoutStoreEvents extends EventMap {
   layoutChanged: MultiSourceLayoutState;
   tileAdded: TileState;
@@ -152,7 +155,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
    */
   addSource(sourceIndex: number, label?: string): string | null {
     if (this.state.tiles.length >= MAX_TILE_COUNT) {
-      console.warn(`MultiSourceLayoutStore: cannot add source, already at maximum tile count (${MAX_TILE_COUNT})`);
+      logger.warn(`MultiSourceLayoutStore: cannot add source, already at maximum tile count (${MAX_TILE_COUNT})`);
       return null;
     }
 
@@ -325,8 +328,9 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
         showBorders: this.state.showBorders,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
-    } catch {
-      // localStorage may be unavailable
+    } catch (error) {
+      // localStorage may be unavailable (private mode, quota exceeded, etc.)
+      logger.debug('saveToStorage failed; localStorage unavailable', { error });
     }
   }
 
@@ -360,8 +364,9 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
       if (typeof data.showBorders === 'boolean') {
         this.state.showBorders = data.showBorders;
       }
-    } catch {
+    } catch (error) {
       // Invalid stored data, ignore
+      logger.debug('loadFromStorage failed; invalid stored data ignored', { error });
     }
   }
 

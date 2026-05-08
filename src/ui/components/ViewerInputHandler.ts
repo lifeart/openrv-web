@@ -15,6 +15,7 @@ import { type StrokePoint, ShapeType, type Point } from '../../paint/types';
 import { type Session } from '../../core/session/Session';
 import { filterImageFiles, getBestSequence, inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
 import { showAlert } from './shared/Modal';
+import { Z_INDEX } from './shared/theme';
 import {
   type PointerState,
   getCanvasPoint as getCanvasPointUtil,
@@ -38,6 +39,10 @@ import type { Renderer } from '../../render/Renderer';
 // the input handler can read viewer state and trigger side-effects without
 // depending on the Viewer class directly.
 // ---------------------------------------------------------------------------
+
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ViewerInputHandler');
 export interface ViewerInputContext {
   // DOM elements
   getContainer(): HTMLElement;
@@ -791,7 +796,7 @@ export class ViewerInputHandler {
           showAlert(`No valid entries found in ${edlFile.name}.`, { type: 'warning', title: 'EDL Empty' });
         }
       } catch (err) {
-        console.error('Failed to load RVEDL file:', err);
+        logger.error('Failed to load RVEDL file:', err);
         showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
       // If no remaining media files, we're done
@@ -848,7 +853,7 @@ export class ViewerInputHandler {
         const content = await sessionFile.arrayBuffer();
         await session.loadFromGTO(content, availableFiles);
       } catch (err) {
-        console.error('Failed to load session file:', err);
+        logger.error('Failed to load session file:', err);
         showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
       return;
@@ -866,7 +871,7 @@ export class ViewerInputHandler {
           await session.loadSequence(bestSequence);
           return;
         } catch (err) {
-          console.error('Failed to load sequence:', err);
+          logger.error('Failed to load sequence:', err);
           showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
           return;
         }
@@ -884,7 +889,7 @@ export class ViewerInputHandler {
           return;
         }
       } catch (err) {
-        console.error('Failed to infer sequence:', err);
+        logger.error('Failed to infer sequence:', err);
         // Fall through to single file loading
       }
     }
@@ -894,7 +899,7 @@ export class ViewerInputHandler {
       try {
         await session.loadFile(file);
       } catch (err) {
-        console.error('Failed to load file:', err);
+        logger.error('Failed to load file:', err);
         showAlert(`Failed to load ${file.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
     }
@@ -940,7 +945,7 @@ export class ViewerInputHandler {
       border-radius: 3px;
       outline: none;
       resize: both;
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       white-space: pre-wrap;
       overflow: auto;
     `;

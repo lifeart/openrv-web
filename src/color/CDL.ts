@@ -8,6 +8,9 @@
 
 import { luminanceRec709 } from './PixelMath';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('CDL');
 export interface CDLValues {
   // Slope (multiplier) - default 1.0 for each channel
   slope: { r: number; g: number; b: number };
@@ -189,7 +192,7 @@ export function parseCDLXML(xml: string): CDLValues | null {
 
     return cdl;
   } catch (e) {
-    console.warn('Failed to parse CDL XML:', e);
+    logger.warn('Failed to parse CDL XML:', e);
     return null;
   }
 }

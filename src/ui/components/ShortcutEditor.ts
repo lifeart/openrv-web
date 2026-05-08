@@ -8,11 +8,15 @@
 
 import type { KeyCombination } from '../../utils/input/KeyboardManager';
 import { describeKeyCombo } from '../../utils/input/KeyBindings';
+import { showConfirm } from './shared/Modal';
 
 // ---------------------------------------------------------------------------
 // Minimal interface for the keybindings manager (avoids hard coupling)
 // ---------------------------------------------------------------------------
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ShortcutEditor');
 export interface ShortcutEditorManager {
   getAvailableActions(): Array<{ action: string; description: string; currentCombo: KeyCombination }>;
   getEffectiveCombo(action: string): KeyCombination;
@@ -361,16 +365,30 @@ export class ShortcutEditor {
       }
 
       const conflict = checkConflict(this.manager, action, combo);
-      if (conflict) {
-        const confirmMsg = `"${describeKeyCombo(combo)}" is already used by "${conflict.existingDescription}". Override?`;
-        if (!confirm(confirmMsg)) {
-          this.stopListening();
-          return;
-        }
+      if (!conflict) {
+        this.manager.setCustomBinding(action, combo, true);
+        this.stopListening();
+        return;
       }
 
-      this.manager.setCustomBinding(action, combo, true);
-      this.stopListening();
+      // Detach the keydown listener while the modal is open so further
+      // keystrokes do not get captured as additional rebind attempts.
+      if (this.keyHandler) {
+        document.removeEventListener('keydown', this.keyHandler, true);
+        this.keyHandler = null;
+      }
+
+      const confirmMsg = `"${describeKeyCombo(combo)}" is already used by "${conflict.existingDescription}". Override?`;
+      void showConfirm(confirmMsg, {
+        title: 'Override shortcut?',
+        confirmText: 'Override',
+        confirmVariant: 'danger',
+      }).then((confirmed) => {
+        if (confirmed) {
+          this.manager.setCustomBinding(action, combo, true);
+        }
+        this.stopListening();
+      });
     };
 
     document.addEventListener('keydown', this.keyHandler, true);
@@ -412,7 +430,7 @@ export class ShortcutEditor {
           this.render();
           this.showImportStatus('Import successful', false);
         } catch (err) {
-          console.warn('[ShortcutEditor] Import failed:', err);
+          logger.warn('[ShortcutEditor] Import failed:', err);
           this.showImportStatus('Import failed: invalid file format', true);
         }
       };

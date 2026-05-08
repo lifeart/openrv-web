@@ -33,6 +33,9 @@ import { getAvailableConfigs as getOCIOAvailableConfigs } from '../color/OCIOCon
 import { ValidationError, APIError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('ColorAPI');
 /**
  * Subset of ColorAdjustments exposed via the public API
  * (all numeric fields, excluding internal boolean flags)
@@ -177,7 +180,7 @@ export class ColorAPI extends DisposableAPI {
         if (typeof value !== 'number' || !Number.isFinite(value)) {
           throw new ValidationError(`setAdjustments() "${key}" must be a finite number`);
         }
-        (merged as unknown as Record<string, unknown>)[key] = value;
+        merged[key] = value;
       }
     }
 
@@ -566,7 +569,7 @@ export class ColorAPI extends DisposableAPI {
   private warnOCIOOverride(method: string): void {
     if (this.ocioOverrideWarned) return;
     this.ocioOverrideWarned = true;
-    console.warn(
+    logger.warn(
       `[ColorAPI.${method}] OCIO is active for display; manual declaration is stored but will not affect rendering until OCIO is disabled.`,
     );
   }
@@ -757,7 +760,7 @@ export class ColorAPI extends DisposableAPI {
       if (Object.prototype.hasOwnProperty.call(options, key)) {
         const value = options[key];
         if (typeof value === 'number' && Number.isFinite(value)) {
-          (merged as unknown as Record<string, unknown>)[key] = value;
+          (merged[key] as number) = value;
         }
       }
     }

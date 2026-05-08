@@ -9,6 +9,9 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('SnapshotManager');
 /** Snapshot metadata */
 export interface Snapshot {
   /** Unique ID */
@@ -84,7 +87,7 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
       await this.openDatabase();
       this.isInitialized = true;
     } catch (err) {
-      console.error('SnapshotManager initialization failed:', err);
+      logger.error('SnapshotManager initialization failed:', err);
       throw err;
     }
   }
@@ -564,7 +567,7 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
       this.emit('snapshotsChanged', { snapshots });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      console.error('Failed to notify snapshots changed:', err);
+      logger.error('Failed to notify snapshots changed:', err);
       this.emit('error', { error });
     }
   }

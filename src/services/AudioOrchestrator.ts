@@ -128,7 +128,7 @@ export class AudioOrchestrator {
       if (this.isSessionAudioActive) {
         if (!this._dualPipelineWarned) {
           this._dualPipelineWarned = true;
-          console.warn(
+          log.warn(
             '[AudioOrchestrator] Dual audio pipeline detected: ' +
               "SessionPlayback's AudioCoordinator is active. " +
               'Skipping legacy audio decode to prevent double-decoding. ' +
@@ -145,44 +145,12 @@ export class AudioOrchestrator {
 
       const trackId = `source-${source.name}`;
 
-      // Remove previous track for this source if it exists
-      if (this.audioMixer.getTrack(trackId)) {
-        this.audioMixer.removeTrack(trackId);
-      }
-
-      // Fetch and decode audio from the video source URL
-      fetch(videoSrc, { mode: 'cors', credentials: 'same-origin' })
-        .then((response) => {
-          if (!response.ok) return;
-          return response.arrayBuffer();
-        })
-        .then((arrayBuffer) => {
-          if (!arrayBuffer) return;
-          const audioCtx = new AudioContext();
-          return audioCtx
-            .decodeAudioData(arrayBuffer)
-            .then((audioBuffer) => {
-              audioCtx.close().catch((err) => {
-                log.debug('AudioContext close after decode:', err);
-              });
-              return audioBuffer;
-            })
-            .catch((err) => {
-              log.debug('Audio decode failed (video may not contain audio):', err);
-              audioCtx.close().catch((closeErr) => {
-                log.debug('AudioContext close after failed decode:', closeErr);
-              });
-              return undefined;
-            });
-        })
-        .then((audioBuffer) => {
-          if (!audioBuffer) return;
-          this.audioMixer.addTrack({ id: trackId, label: source.name });
-          this.audioMixer.loadTrackBuffer(trackId, audioBuffer);
-        })
-        .catch((err) => {
-          log.debug('Audio extraction skipped (video may lack audio track):', err);
-        });
+      // Audio fetch/decode/track-state ownership lives on AudioMixer (the
+      // Manager). The orchestrator just forwards the URL and lets the manager
+      // own the asynchronous lifecycle.
+      this.audioMixer.loadTrackFromUrl(trackId, videoSrc, source.name).catch((err) => {
+        log.debug('Audio extraction skipped (video may lack audio track):', err);
+      });
     };
 
     const playbackHandler = onPlaybackChanged as (data: unknown) => void;

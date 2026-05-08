@@ -5,6 +5,8 @@
  * split screen shows Source A on one side and Source B on the other.
  */
 
+import { Z_INDEX } from './shared/theme';
+
 export type SplitScreenMode = 'off' | 'splitscreen-h' | 'splitscreen-v';
 
 export interface SplitScreenState {
@@ -27,12 +29,9 @@ const LABEL_HIDE_THRESHOLD_LOW = 0.1;
 const LABEL_HIDE_THRESHOLD_HIGH = 0.9;
 
 // Base styles from createSplitScreenUIElements (minus display, cursor, and mode-varying properties)
-const SPLIT_LINE_BASE =
-  'position: absolute; z-index: 52; box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);';
-const SPLIT_LABEL_A_BASE =
-  'position: absolute; background: rgba(var(--accent-primary-rgb), 0.85); color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
-const SPLIT_LABEL_B_BASE =
-  'position: absolute; background: rgba(255, 180, 50, 0.9); color: var(--bg-primary); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
+const SPLIT_LINE_BASE = `position: absolute; z-index: ${Z_INDEX.viewerSplitLine}; box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);`;
+const SPLIT_LABEL_A_BASE = `position: absolute; background: rgba(var(--accent-primary-rgb), 0.85); color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: ${Z_INDEX.viewerSplitLabel}; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);`;
+const SPLIT_LABEL_B_BASE = `position: absolute; background: rgba(255, 180, 50, 0.9); color: var(--bg-primary); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: ${Z_INDEX.viewerSplitLabel}; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);`;
 
 /**
  * Batch-update split screen label styles (internal helper)
@@ -63,7 +62,7 @@ export function createSplitScreenUIElements(container: HTMLElement): SplitScreen
     position: absolute;
     background: linear-gradient(to bottom, var(--accent-primary), rgba(var(--accent-primary-rgb), 0.5));
     cursor: ew-resize;
-    z-index: 52;
+    z-index: ${Z_INDEX.viewerSplitLine};
     display: none;
     box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);
   `;
@@ -82,7 +81,7 @@ export function createSplitScreenUIElements(container: HTMLElement): SplitScreen
     border-radius: 4px;
     font-size: 13px;
     font-weight: 700;
-    z-index: 53;
+    z-index: ${Z_INDEX.viewerSplitLabel};
     display: none;
     pointer-events: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
@@ -102,7 +101,7 @@ export function createSplitScreenUIElements(container: HTMLElement): SplitScreen
     border-radius: 4px;
     font-size: 13px;
     font-weight: 700;
-    z-index: 53;
+    z-index: ${Z_INDEX.viewerSplitLabel};
     display: none;
     pointer-events: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);

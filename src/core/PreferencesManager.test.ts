@@ -264,9 +264,19 @@ describe('PreferencesManager validation', () => {
 
   it('CPRF-033: frameburnConfig accepts object', () => {
     const { manager } = createManager();
-    const config = { fontSize: 14, position: 'bottom' };
+    const config = {
+      enabled: true,
+      fields: [{ type: 'timecode' as const }],
+      fontSize: 14,
+      position: 'bottom-left' as const,
+    };
     manager.setExportDefaults({ frameburnConfig: config });
-    expect(manager.getExportDefaults().frameburnConfig).toEqual(config);
+    const stored = manager.getExportDefaults().frameburnConfig;
+    expect(stored).not.toBeNull();
+    expect(stored?.enabled).toBe(true);
+    expect(stored?.fontSize).toBe(14);
+    expect(stored?.position).toBe('bottom-left');
+    expect(stored?.fields).toEqual([{ type: 'timecode' }]);
   });
 });
 

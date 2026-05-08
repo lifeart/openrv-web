@@ -10,6 +10,9 @@
 
 import { Signal } from '../../core/graph/Signal';
 
+import { Logger } from '../Logger';
+
+const logger = new Logger('ActiveContextManager');
 /**
  * Known binding contexts.
  * - 'global': Always active; serves as a fallback for all other contexts.
@@ -66,7 +69,7 @@ export class ActiveContextManager {
    */
   popContext(): BindingContext {
     if (this._contextStack.length === 0) {
-      console.warn('ActiveContextManager: popContext() called on an empty stack, reverting to global');
+      logger.warn('ActiveContextManager: popContext() called on an empty stack, reverting to global');
     }
     const old = this._activeContext;
     this._activeContext = this._contextStack.pop() ?? 'global';

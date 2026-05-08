@@ -5,6 +5,22 @@ import { Graph, type EvalContext } from '../../core/graph/Graph';
 import type { IPImage } from '../../core/image/Image';
 
 /**
+ * Serialized form of a single effect within an EffectChain.
+ * `properties` is the effect's property bag — keys vary per effect type.
+ */
+export interface SerializedEffect {
+  type: string;
+  properties: Record<string, unknown>;
+}
+
+/**
+ * Round-trip JSON shape produced by `EffectChain.toJSON()` and consumed by `EffectChain.fromJSON()`.
+ */
+export interface SerializedEffectChain {
+  effects: SerializedEffect[];
+}
+
+/**
  * Convenience wrapper for a linear chain of EffectNodes.
  *
  * Usage:
@@ -105,7 +121,7 @@ export class EffectChain {
   }
 
   /** Serialize the chain to a portable format. */
-  toJSON(): { effects: Array<{ type: string; properties: Record<string, unknown> }> } {
+  toJSON(): SerializedEffectChain {
     return {
       effects: this.effects.map((e) => ({
         type: e.type,
@@ -125,7 +141,7 @@ export class EffectChain {
    * @param data - The output of toJSON()
    * @returns A new EffectChain with restored effects and properties
    */
-  static fromJSON(data: { effects: Array<{ type: string; properties: Record<string, unknown> }> }): EffectChain {
+  static fromJSON(data: SerializedEffectChain): EffectChain {
     const chain = new EffectChain();
     for (const entry of data.effects) {
       const node = NodeFactory.create(entry.type);

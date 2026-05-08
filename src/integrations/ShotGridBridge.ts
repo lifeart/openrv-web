@@ -154,6 +154,9 @@ export function mapStatusFromShotGrid(sgStatus: string): ShotStatus {
 
 import type { NoteStatus } from '../core/session/NoteManager';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('ShotGridBridge');
 const NOTE_LOCAL_TO_SG: Record<NoteStatus, string> = {
   open: 'opn',
   resolved: 'clsd',
@@ -405,7 +408,7 @@ export class ShotGridBridge {
       } catch (err) {
         // Attachment upload failure is non-fatal; the note was already created
         const message = err instanceof Error ? err.message : 'Unknown error';
-        console.warn(`[ShotGrid] Thumbnail upload failed for note ${sgNote.id}: ${message}`);
+        logger.warn(`[ShotGrid] Thumbnail upload failed for note ${sgNote.id}: ${message}`);
       }
     }
 

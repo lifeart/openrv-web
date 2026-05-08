@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isAvifFile } from './avif';
+import { isAvifFile } from './AVIFDecoder';
 import { DecoderRegistry, decoderRegistry } from './DecoderRegistry';
 
 /**

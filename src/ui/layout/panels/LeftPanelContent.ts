@@ -8,6 +8,7 @@
 
 import { CollapsibleSection } from './CollapsibleSection';
 import type { ColorControls } from '../../components/ColorControls';
+import { createColorSliderRow } from '../../components/shared/FormElements';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../../../core/types/color';
 import type { NumericAdjustmentKey, ColorAdjustments } from '../../../core/types/color';
 import type { HistoryManager, HistoryEntry } from '../../../utils/HistoryManager';
@@ -210,83 +211,42 @@ export class LeftPanelContent {
   }
 
   private createSliderRow(config: SliderConfig): HTMLElement {
-    const row = document.createElement('div');
-    row.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    `;
-
-    // Label (double-click to reset)
-    const label = document.createElement('label');
-    label.textContent = config.label;
-    label.title = 'Double-click to reset';
-    label.style.cssText = `
-      color: var(--text-secondary);
-      font-size: 10px;
-      width: 65px;
-      flex-shrink: 0;
-      cursor: pointer;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    `;
-    label.addEventListener('dblclick', () => {
-      const defaultValue = DEFAULT_COLOR_ADJUSTMENTS[config.key];
-      this._updating = true;
-      this.colorControls.setAdjustments({ [config.key]: defaultValue });
-      this._updating = false;
-      const slider = this.sliders.get(config.key);
-      const valueLabel = this.valueLabels.get(config.key);
-      if (slider) slider.value = String(defaultValue);
-      if (valueLabel) valueLabel.textContent = config.format(defaultValue);
+    const initial = DEFAULT_COLOR_ADJUSTMENTS[config.key];
+    const { container, slider, valueLabel } = createColorSliderRow({
+      label: config.label,
+      value: initial,
+      min: config.min,
+      max: config.max,
+      step: config.step,
+      format: config.format,
+      sliderTestId: `panel-slider-${config.key}`,
+      defaultValue: initial,
+      // Compact variant of the ColorControls row: smaller fonts/widths to fit the side panel.
+      labelWidth: '65px',
+      labelFontSize: '10px',
+      labelColorVar: '--text-secondary',
+      valueWidth: '40px',
+      valueFontSize: '10px',
+      valueColorVar: '--text-muted',
+      sliderHeight: '3px',
+      marginBottom: '0',
+      gap: '4px',
+      onInput: (value) => {
+        this._updating = true;
+        this.colorControls.setAdjustments({ [config.key]: value });
+        this._updating = false;
+      },
+      onReset: (defaultValue) => {
+        this._updating = true;
+        this.colorControls.setAdjustments({ [config.key]: defaultValue });
+        this._updating = false;
+      },
     });
-
-    // Slider
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(config.min);
-    slider.max = String(config.max);
-    slider.step = String(config.step);
-    slider.value = String(DEFAULT_COLOR_ADJUSTMENTS[config.key]);
-    slider.dataset.testid = `panel-slider-${config.key}`;
-    slider.style.cssText = `
-      flex: 1;
-      height: 3px;
-      cursor: pointer;
-      accent-color: var(--accent-primary);
-      min-width: 0;
-    `;
-
-    // Value display
-    const valueLabel = document.createElement('span');
-    valueLabel.textContent = config.format(DEFAULT_COLOR_ADJUSTMENTS[config.key]);
-    valueLabel.style.cssText = `
-      color: var(--text-muted);
-      font-size: 10px;
-      width: 40px;
-      text-align: right;
-      font-family: monospace;
-      flex-shrink: 0;
-    `;
 
     this.sliders.set(config.key, slider);
     this.valueLabels.set(config.key, valueLabel);
 
-    // Forward sync: panel slider -> ColorControls
-    slider.addEventListener('input', () => {
-      const value = parseFloat(slider.value);
-      valueLabel.textContent = config.format(value);
-      this._updating = true;
-      this.colorControls.setAdjustments({ [config.key]: value });
-      this._updating = false;
-    });
-
-    row.appendChild(label);
-    row.appendChild(slider);
-    row.appendChild(valueLabel);
-
-    return row;
+    return container;
   }
 
   private syncSlidersFromAdjustments(adj: ColorAdjustments): void {

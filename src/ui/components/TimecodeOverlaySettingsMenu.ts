@@ -5,8 +5,15 @@
  * frame-counter visibility, and background opacity.
  */
 
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
+import {
+  createCheckableMenuItem,
+  createSectionHeader,
+  createSeparator,
+  createSliderControl,
+  setMenuItemChecked,
+} from './shared/FormElements';
 import type { OverlayPosition, TimecodeOverlay, TimecodeOverlayState, TimecodeDisplayFormat } from './TimecodeOverlay';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
@@ -56,7 +63,7 @@ export class TimecodeOverlaySettingsMenu {
       box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
-      min-width: 200px;
+      min-width: ${PANEL_WIDTHS.menu};
       max-width: calc(100vw - 16px);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       visibility: hidden;
@@ -64,71 +71,98 @@ export class TimecodeOverlaySettingsMenu {
 
     const currentState = this.overlay.getState();
 
-    menu.appendChild(this.createSectionHeader('Position'));
+    menu.appendChild(createSectionHeader('Position', { menu: true }));
     for (const pos of ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as OverlayPosition[]) {
-      const item = this.createCheckableItem(
-        POSITION_LABELS[pos],
-        currentState.position === pos,
-        'menuitemradio',
-        () => {
-          this.overlay.setPosition(pos);
-          this.updateRadioGroup(menu, 'data-position', pos);
+      const item = createCheckableMenuItem(
+        {
+          label: POSITION_LABELS[pos],
+          checked: currentState.position === pos,
+          role: 'menuitemradio',
+          onClick: () => {
+            this.overlay.setPosition(pos);
+            this.updateRadioGroup(menu, 'data-position', pos);
+          },
         },
+        applyHoverEffect,
       );
       item.dataset.position = pos;
       menu.appendChild(item);
     }
 
-    menu.appendChild(this.createSeparator());
-    menu.appendChild(this.createSectionHeader('Font Size'));
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
+    menu.appendChild(createSectionHeader('Font Size', { menu: true }));
     for (const fontSize of ['small', 'medium', 'large'] as TimecodeOverlayState['fontSize'][]) {
-      const item = this.createCheckableItem(
-        FONT_SIZE_LABELS[fontSize],
-        currentState.fontSize === fontSize,
-        'menuitemradio',
-        () => {
-          this.overlay.setFontSize(fontSize);
-          this.updateRadioGroup(menu, 'data-font-size', fontSize);
+      const item = createCheckableMenuItem(
+        {
+          label: FONT_SIZE_LABELS[fontSize],
+          checked: currentState.fontSize === fontSize,
+          role: 'menuitemradio',
+          onClick: () => {
+            this.overlay.setFontSize(fontSize);
+            this.updateRadioGroup(menu, 'data-font-size', fontSize);
+          },
         },
+        applyHoverEffect,
       );
       item.dataset.fontSize = fontSize;
       menu.appendChild(item);
     }
 
-    menu.appendChild(this.createSeparator());
-    menu.appendChild(this.createSectionHeader('Display Format'));
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
+    menu.appendChild(createSectionHeader('Display Format', { menu: true }));
 
     for (const format of ['smpte', 'frame', 'both'] as TimecodeDisplayFormat[]) {
-      const item = this.createCheckableItem(
-        DISPLAY_FORMAT_LABELS[format],
-        currentState.displayFormat === format,
-        'menuitemradio',
-        () => {
-          this.overlay.setDisplayFormat(format);
-          this.updateRadioGroup(menu, 'data-display-format', format);
+      const item = createCheckableMenuItem(
+        {
+          label: DISPLAY_FORMAT_LABELS[format],
+          checked: currentState.displayFormat === format,
+          role: 'menuitemradio',
+          onClick: () => {
+            this.overlay.setDisplayFormat(format);
+            this.updateRadioGroup(menu, 'data-display-format', format);
+          },
         },
+        applyHoverEffect,
       );
       item.dataset.displayFormat = format;
       menu.appendChild(item);
     }
 
-    menu.appendChild(this.createSeparator());
-    const sourceTimecodeItem = this.createCheckableItem(
-      'Show Source Timecode',
-      currentState.showSourceTimecode,
-      'menuitemcheckbox',
-      () => {
-        const next = !this.overlay.getState().showSourceTimecode;
-        this.overlay.setShowSourceTimecode(next);
-        sourceTimecodeItem.setAttribute('aria-checked', String(next));
-        const check = sourceTimecodeItem.querySelector<HTMLElement>('.menu-check');
-        if (check) check.textContent = next ? '\u2713' : '';
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
+    const sourceTimecodeItem = createCheckableMenuItem(
+      {
+        label: 'Show Source Timecode',
+        checked: currentState.showSourceTimecode,
+        role: 'menuitemcheckbox',
+        onClick: () => {
+          const next = !this.overlay.getState().showSourceTimecode;
+          this.overlay.setShowSourceTimecode(next);
+          setMenuItemChecked(sourceTimecodeItem, next);
+        },
       },
+      applyHoverEffect,
     );
     sourceTimecodeItem.dataset.testid = 'show-source-timecode';
     menu.appendChild(sourceTimecodeItem);
 
-    menu.appendChild(this.createOpacityControl(currentState.backgroundOpacity));
+    menu.appendChild(
+      createSliderControl({
+        label: 'Background',
+        id: 'timecode-opacity',
+        value: currentState.backgroundOpacity * 100,
+        min: 0,
+        max: 100,
+        step: 5,
+        suffix: '%',
+        valueColor: 'var(--text-muted)',
+        ariaLabel: 'Timecode overlay background opacity',
+        stopPropagation: true,
+        onInput: (value) => {
+          this.overlay.setBackgroundOpacity(value / 100);
+          return value;
+        },
+      }).container,
+    );
 
     this.menuEl = menu;
     document.body.appendChild(menu);
@@ -176,132 +210,6 @@ export class TimecodeOverlaySettingsMenu {
     this.hide();
   }
 
-  private createSectionHeader(text: string): HTMLDivElement {
-    const header = document.createElement('div');
-    header.setAttribute('role', 'none');
-    header.textContent = text;
-    header.style.cssText = `
-      padding: 6px 12px 2px;
-      font-size: 10px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      pointer-events: none;
-    `;
-    return header;
-  }
-
-  private createCheckableItem(
-    label: string,
-    checked: boolean,
-    role: 'menuitemradio' | 'menuitemcheckbox',
-    onClick: () => void,
-  ): HTMLDivElement {
-    const item = document.createElement('div');
-    item.setAttribute('role', role);
-    item.setAttribute('aria-checked', String(checked));
-    item.tabIndex = -1;
-    item.style.cssText = `
-      padding: 6px 12px;
-      font-size: 12px;
-      color: var(--text-primary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      outline: none;
-      white-space: nowrap;
-    `;
-
-    const checkSpan = document.createElement('span');
-    checkSpan.className = 'menu-check';
-    checkSpan.textContent = checked ? '\u2713' : '';
-    checkSpan.style.cssText = `
-      width: 14px;
-      font-size: 12px;
-      text-align: center;
-      flex-shrink: 0;
-    `;
-    item.appendChild(checkSpan);
-
-    const labelSpan = document.createElement('span');
-    labelSpan.textContent = label;
-    item.appendChild(labelSpan);
-
-    applyHoverEffect(item);
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      onClick();
-    });
-
-    return item;
-  }
-
-  private createOpacityControl(initialOpacity: number): HTMLDivElement {
-    const wrapper = document.createElement('div');
-    wrapper.setAttribute('role', 'none');
-    wrapper.style.cssText = `
-      padding: 8px 12px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    `;
-
-    const labelRow = document.createElement('div');
-    labelRow.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--text-primary);
-    `;
-
-    const label = document.createElement('span');
-    label.textContent = 'Background';
-    labelRow.appendChild(label);
-
-    const value = document.createElement('span');
-    value.dataset.testid = 'timecode-opacity-value';
-    value.textContent = `${Math.round(initialOpacity * 100)}%`;
-    value.style.color = 'var(--text-muted)';
-    labelRow.appendChild(value);
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0';
-    slider.max = '100';
-    slider.step = '5';
-    slider.value = String(Math.round(initialOpacity * 100));
-    slider.dataset.testid = 'timecode-opacity-slider';
-    slider.setAttribute('aria-label', 'Timecode overlay background opacity');
-    slider.style.width = '100%';
-    slider.addEventListener('click', (e) => e.stopPropagation());
-    slider.addEventListener('input', (e) => {
-      e.stopPropagation();
-      const nextOpacity = Number(slider.value) / 100;
-      this.overlay.setBackgroundOpacity(nextOpacity);
-      value.textContent = `${slider.value}%`;
-    });
-
-    wrapper.appendChild(labelRow);
-    wrapper.appendChild(slider);
-
-    return wrapper;
-  }
-
-  private createSeparator(): HTMLDivElement {
-    const sep = document.createElement('div');
-    sep.setAttribute('role', 'separator');
-    sep.style.cssText = `
-      height: 1px;
-      margin: 4px 0;
-      background: var(--border-secondary);
-      opacity: 0.5;
-    `;
-    return sep;
-  }
-
   private updateRadioGroup(
     menu: HTMLDivElement,
     datasetKey: 'data-position' | 'data-font-size' | 'data-display-format',
@@ -316,10 +224,7 @@ export class TimecodeOverlaySettingsMenu {
     const selector = `[${datasetKey}]`;
     const items = menu.querySelectorAll<HTMLDivElement>(selector);
     for (const item of items) {
-      const checked = item.dataset[attr] === selectedValue;
-      item.setAttribute('aria-checked', String(checked));
-      const check = item.querySelector<HTMLElement>('.menu-check');
-      if (check) check.textContent = checked ? '\u2713' : '';
+      setMenuItemChecked(item, item.dataset[attr] === selectedValue);
     }
   }
 }

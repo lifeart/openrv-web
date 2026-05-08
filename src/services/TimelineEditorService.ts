@@ -14,6 +14,10 @@
 // ---------------------------------------------------------------------------
 
 /** Minimal EDL entry shape used by the service. */
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('TimelineEditorService');
+
 export interface TimelineEDLEntry {
   frame: number;
   source: number;
@@ -342,7 +346,7 @@ export class TimelineEditorService {
     if (rvedlEntries.length > 0) {
       const result = this.buildEDLFromRVEDLEntries(rvedlEntries);
       if (result.unresolvedPaths.length > 0) {
-        console.warn(
+        logger.warn(
           `[TimelineEditorService] ${result.unresolvedPaths.length} RVEDL source path(s) could not be matched to loaded sources and were assigned to source 0: ${result.unresolvedPaths.join(', ')}`,
         );
       }

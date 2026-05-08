@@ -12,6 +12,9 @@ import type { PluginId } from './types';
 // Schema Types
 // ---------------------------------------------------------------------------
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('PluginSettingsStore');
 export type PluginSettingType = 'string' | 'number' | 'boolean' | 'select' | 'color' | 'range';
 
 export interface PluginSetting {
@@ -89,7 +92,7 @@ export class PluginSettingsStore {
    */
   registerSchema(pluginId: PluginId, schema: PluginSettingsSchema): void {
     if (this.schemas.has(pluginId)) {
-      console.warn(`[plugin:${pluginId}] Settings schema re-registered; previous in-memory changes may be lost`);
+      logger.warn(`[plugin:${pluginId}] Settings schema re-registered; previous in-memory changes may be lost`);
     }
     this.schemas.set(pluginId, schema);
     // Load from storage or initialize with defaults
@@ -289,7 +292,7 @@ export class PluginSettingsStore {
         return undefined as T;
       },
       set(key: string, _value: unknown): boolean {
-        console.warn(`[plugin:${pluginId}] Attempted to set setting "${key}" but this plugin has no settingsSchema`);
+        logger.warn(`[plugin:${pluginId}] Attempted to set setting "${key}" but this plugin has no settingsSchema`);
         return false;
       },
       getAll(): Record<string, unknown> {
@@ -326,14 +329,23 @@ export class PluginSettingsStore {
             try {
               this.validateValue(pluginId, setting, parsed[setting.key]);
               defaults[setting.key] = parsed[setting.key];
-            } catch {
+            } catch (error) {
               // Invalid stored value — keep default
+              logger.debug('loadSettings: invalid stored value; keeping default', {
+                pluginId,
+                key: setting.key,
+                error,
+              });
             }
           }
         }
       }
-    } catch {
+    } catch (error) {
       // localStorage not available or corrupted data -- use defaults
+      logger.debug('loadSettings: localStorage unavailable or corrupted; using defaults', {
+        pluginId,
+        error,
+      });
     }
 
     this.cache.set(pluginId, defaults);
@@ -347,7 +359,7 @@ export class PluginSettingsStore {
       return true;
     } catch {
       // localStorage may be full or unavailable
-      console.warn(`[plugin:${pluginId}] Failed to persist settings to localStorage`);
+      logger.warn(`[plugin:${pluginId}] Failed to persist settings to localStorage`);
       return false;
     }
   }
@@ -402,7 +414,7 @@ export class PluginSettingsStore {
       try {
         cb(value, oldValue);
       } catch (err) {
-        console.error(`[plugin:${pluginId}] Error in settings change listener for "${key}":`, err);
+        logger.error(`[plugin:${pluginId}] Error in settings change listener for "${key}":`, err);
       }
     }
   }

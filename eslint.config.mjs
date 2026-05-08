@@ -46,7 +46,8 @@ export default tseslint.config(
     plugins: { 'import-x': importPlugin },
     rules: {
       // Style
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-console': ['error', { allow: ['log'] }],
+      'no-empty': ['error', { allowEmptyCatch: false }],
       'prefer-const': 'error',
       'no-var': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
@@ -90,14 +91,30 @@ export default tseslint.config(
     },
   },
 
+  // Logger override: Logger itself must use raw console internally
+  {
+    files: ['src/utils/Logger.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
   // Test file overrides
   {
-    files: ['**/*.test.ts', '**/*.spec.ts', '**/test-helper.ts', 'test/**/*.ts'],
+    files: [
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/*.gpu-test.ts',
+      '**/test-helper.ts',
+      'test/**/*.ts',
+      'src/**/__gpu__/**/*.ts',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': 'warn',
       'no-console': 'off',
+      'no-empty': 'off',
     },
   },
 

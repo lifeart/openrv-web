@@ -10,6 +10,9 @@
 
 import type { MinorModeDefinition, EventTable, MuEvent, MuEventCallback } from './types';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('ModeManager');
 /** Sentinel prefix for regex-bound event keys */
 const REGEX_PREFIX = '__regex__';
 
@@ -60,7 +63,7 @@ export class ModeManager {
    */
   activateMode(name: string): void {
     if (!this.modes.has(name)) {
-      console.warn(`[ModeManager] Mode "${name}" is not defined`);
+      logger.warn(`[ModeManager] Mode "${name}" is not defined`);
       return;
     }
     if (this.activeModes.includes(name)) {

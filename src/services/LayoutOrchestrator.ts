@@ -21,6 +21,9 @@ import type { ShortcutEditorManager } from '../ui/components/ShortcutEditor';
 // Dependency interfaces (structural typing — no need to import heavy classes)
 // ---------------------------------------------------------------------------
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('LayoutOrchestrator');
 export interface LayoutSession {
   readonly isSingleImage: boolean;
   readonly currentFrame: number;
@@ -755,7 +758,7 @@ export class LayoutOrchestrator {
     // Keep unmatched-selector warnings so future DOM changes don't silently
     // break client mode restrictions again.
     if (unmatchedSelectors.length > 0) {
-      console.warn(
+      logger.warn(
         `[ClientMode] ${unmatchedSelectors.length} restriction selector(s) matched zero elements. ` +
           `Client mode may not be hiding the intended UI. Unmatched selectors:\n` +
           unmatchedSelectors.map((s) => `  - ${s}`).join('\n'),

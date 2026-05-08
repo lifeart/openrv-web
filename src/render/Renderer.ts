@@ -1049,13 +1049,13 @@ export class Renderer implements RendererBackend {
           delete image.metadata.colorPrimaries;
           // Force a fresh texture to be created for the typed-array upload path.
           image.texture = null;
-          console.warn(
+          log.warn(
             '[Renderer] VideoFrame GPU upload failed — falling back to SDR (sRGB uint8). ' +
               'HDR precision has been lost.',
           );
         } else {
           // SDR fallback also failed — frame will be blank.
-          console.warn(
+          log.warn(
             '[Renderer] VideoFrame GPU upload failed and SDR fallback extraction failed — ' +
               'the frame will appear blank.',
           );

@@ -8,6 +8,7 @@
  */
 
 import type { DisplayCapabilities } from './DisplayCapabilities';
+import { probe } from '../utils/probe';
 
 /**
  * Create a 2D canvas context, optionally requesting a non-sRGB color space.
@@ -26,13 +27,12 @@ export function safeCanvasContext2D(
   colorSpace?: 'display-p3' | 'rec2100-hlg',
 ): CanvasRenderingContext2D {
   if (colorSpace) {
-    try {
-      // rec2100-hlg is not in PredefinedColorSpace yet; cast needed for HDR color spaces
-      const ctx = canvas.getContext('2d', { ...baseOptions, colorSpace } as CanvasRenderingContext2DSettings);
-      if (ctx) return ctx;
-    } catch {
-      /* fall through to sRGB fallback */
-    }
+    // rec2100-hlg is not in PredefinedColorSpace yet; cast needed for HDR color spaces.
+    // Browsers without the requested color space throw — fall through to sRGB.
+    const ctx = probe('safeCanvasContext2D.colorSpace', () =>
+      canvas.getContext('2d', { ...baseOptions, colorSpace } as CanvasRenderingContext2DSettings),
+    );
+    if (ctx) return ctx;
   }
   const ctx = canvas.getContext('2d', baseOptions);
   if (!ctx) throw new Error('Failed to create 2D canvas context');
@@ -58,30 +58,26 @@ export function createViewerCanvas(
 
   // Try HDR first (if requested and supported)
   if (hdrMode === 'hlg' && caps.canvasHLG) {
-    try {
-      // rec2100-hlg is not in PredefinedColorSpace; pixelFormat is typed via webgl-hdr.d.ts
-      const ctx = canvas.getContext('2d', {
+    // rec2100-hlg is not in PredefinedColorSpace; pixelFormat is typed via webgl-hdr.d.ts.
+    const ctx = probe('createViewerCanvas.hlg', () =>
+      canvas.getContext('2d', {
         ...baseOpts,
         colorSpace: 'rec2100-hlg',
         pixelFormat: 'float16',
-      } as unknown as CanvasRenderingContext2DSettings);
-      if (ctx) return { canvas, ctx };
-    } catch {
-      /* fall through */
-    }
+      } as unknown as CanvasRenderingContext2DSettings),
+    );
+    if (ctx) return { canvas, ctx };
   }
 
   // Try P3 (if supported)
   if (caps.canvasP3) {
-    try {
-      const ctx = canvas.getContext('2d', {
+    const ctx = probe('createViewerCanvas.p3', () =>
+      canvas.getContext('2d', {
         ...baseOpts,
         colorSpace: 'display-p3',
-      });
-      if (ctx) return { canvas, ctx };
-    } catch {
-      /* fall through */
-    }
+      }),
+    );
+    if (ctx) return { canvas, ctx };
   }
 
   // Final fallback: standard sRGB

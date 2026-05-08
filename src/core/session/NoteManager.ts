@@ -1,6 +1,10 @@
 /**
  * Note/Comment status values
  */
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('NoteManager');
+
 export type NoteStatus = 'open' | 'resolved' | 'wontfix';
 
 /**
@@ -92,8 +96,7 @@ export class NoteManager {
       try {
         callback(data);
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error(`Error in NoteManager event listener for "${String(event)}":`, err);
+        logger.error(`Error in NoteManager event listener for "${String(event)}":`, err);
       }
     });
   }

@@ -16,6 +16,7 @@
 import type { EventMap } from '../../utils/EventEmitter';
 import { CanvasOverlay } from './CanvasOverlay';
 import { clamp } from '../../utils/math';
+import { Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,7 +62,7 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
   private imageHeight = 0;
 
   constructor(initialState?: Partial<BugOverlayState>) {
-    super('bug-overlay', 'bug-overlay', 55);
+    super('bug-overlay', 'bug-overlay', Z_INDEX.viewerBugOverlay);
     if (initialState) {
       this.state = { ...this.state, ...initialState };
     }

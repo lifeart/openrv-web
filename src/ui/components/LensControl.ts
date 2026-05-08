@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams } from '../../transform/LensDistortion';
 import { getIconSvg } from './shared/Icons';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 export interface LensControlEvents extends EventMap {
   lensChanged: LensDistortionParams;
@@ -78,8 +79,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
-      min-width: 250px;
-      z-index: 9999;
+      min-width: ${PANEL_WIDTHS.medium};
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;

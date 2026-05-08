@@ -13,6 +13,9 @@
 
 import { PLAY_MODE_TO_LOOP, LOOP_TO_PLAY_MODE, FilterNearest, FilterLinear } from './constants';
 import type { BackgroundPatternState } from '../core/types/background';
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MuCommands');
 
 /**
  * Lazily resolve the openrv API from the global scope.
@@ -416,9 +419,10 @@ export class MuCommands {
           await (document as any).webkitExitFullscreen();
         }
       }
-    } catch {
+    } catch (error) {
       // Contain rejected fullscreen promises (e.g. user gesture requirement,
       // already in/out of fullscreen, or browser policy denial).
+      logger.warn('MuCommands:fullScreenMode failed', { enable, error });
     }
   }
 

@@ -1,4 +1,5 @@
 import { type Session, type MatteSettings } from '../../core/session/Session';
+import type { ViewerAccessor } from '../../core/viewer/ViewerAccessor';
 import { type PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { PerfTrace } from '../../utils/PerfTrace';
@@ -43,6 +44,7 @@ import {
 } from '../../utils/export/FrameExporter';
 import { type StackLayer } from './StackControl';
 import { getIconSvg } from './shared/Icons';
+import { Z_INDEX } from './shared/theme';
 import { type ChannelMode } from './ChannelSelect';
 import { DEFAULT_BLEND_MODE_STATE, type BlendModeState } from './ComparisonManager';
 import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
@@ -190,7 +192,7 @@ const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv-prefs-missing-frame-mode';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
-export class Viewer {
+export class Viewer implements ViewerAccessor {
   private container: HTMLElement;
   private canvasContainer: HTMLElement;
   private imageCanvas: HTMLCanvasElement;
@@ -911,7 +913,7 @@ export class Viewer {
       align-items: center;
       justify-content: center;
       pointer-events: none;
-      z-index: 100;
+      z-index: ${Z_INDEX.viewerOverlayHigh};
     `;
     this.dropOverlay.innerHTML = `
       <div style="text-align: center; color: var(--accent-primary); font-size: 18px;">
@@ -947,7 +949,7 @@ export class Viewer {
     try {
       this.sharpenProcessor = new WebGLSharpenProcessor();
     } catch (e) {
-      console.warn('WebGL sharpen processor not available, falling back to CPU:', e);
+      log.warn('WebGL sharpen processor not available, falling back to CPU:', e);
       this.sharpenProcessor = null;
     }
 
@@ -955,7 +957,7 @@ export class Viewer {
     try {
       this.noiseReductionProcessor = createNoiseReductionProcessor();
     } catch (e) {
-      console.warn('WebGL noise reduction processor not available, falling back to CPU:', e);
+      log.warn('WebGL noise reduction processor not available, falling back to CPU:', e);
       this.noiseReductionProcessor = null;
     }
 
@@ -1199,8 +1201,9 @@ export class Viewer {
         localStorage.removeItem(LEGACY_MISSING_FRAME_MODE_STORAGE_KEY);
         return legacy;
       }
-    } catch {
+    } catch (error) {
       // Ignore storage errors (private mode, disabled storage, etc.)
+      log.debug('loadMissingFrameModePreference failed', { error });
     }
     return 'show-frame';
   }
@@ -1208,8 +1211,9 @@ export class Viewer {
   private persistMissingFrameModePreference(): void {
     try {
       localStorage.setItem(MISSING_FRAME_MODE_STORAGE_KEY, this.missingFrameMode);
-    } catch {
+    } catch (error) {
       // Ignore storage errors
+      log.debug('persistMissingFrameModePreference failed', { error });
     }
   }
 
@@ -1467,7 +1471,7 @@ export class Viewer {
     try {
       this.cropManager.renderCropOverlay();
     } catch (err) {
-      console.error('Crop overlay render failed:', err);
+      log.error('Crop overlay render failed:', err);
     }
 
     // Update safe-areas overlay crop region so guides track the cropped area.
@@ -2014,7 +2018,7 @@ export class Viewer {
           try {
             this.renderGhostFrames(displayWidth, displayHeight);
           } catch (err) {
-            console.error('Ghost frame rendering failed:', err);
+            log.error('Ghost frame rendering failed:', err);
           }
         }
 
@@ -2027,7 +2031,7 @@ export class Viewer {
               this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
             }
           } catch (err) {
-            console.error('Stereo mode rendering failed:', err);
+            log.error('Stereo mode rendering failed:', err);
           }
         }
 
@@ -2036,7 +2040,7 @@ export class Viewer {
           try {
             this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('Lens distortion rendering failed:', err);
+            log.error('Lens distortion rendering failed:', err);
           }
         }
         // Apply perspective correction (after lens distortion)
@@ -2044,7 +2048,7 @@ export class Viewer {
           try {
             this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('Perspective correction rendering failed:', err);
+            log.error('Perspective correction rendering failed:', err);
           }
         }
         // Apply GPU-accelerated color effects
@@ -2052,21 +2056,21 @@ export class Viewer {
           try {
             this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('LUT application failed:', err);
+            log.error('LUT application failed:', err);
           }
         }
         if (this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT) {
           try {
             this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
           } catch (err) {
-            console.error('OCIO application failed:', err);
+            log.error('OCIO application failed:', err);
           }
         }
         // Apply lightweight diagnostic overlays and display management
         try {
           this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
         } catch (err) {
-          console.error('Lightweight effects processing failed:', err);
+          log.error('Lightweight effects processing failed:', err);
         }
         // Apply crop clipping by clearing outside areas
         if (cropClipActive) {
@@ -2167,7 +2171,7 @@ export class Viewer {
       try {
         this.renderGhostFrames(displayWidth, displayHeight);
       } catch (err) {
-        console.error('Ghost frame rendering failed:', err);
+        log.error('Ghost frame rendering failed:', err);
       }
     }
 
@@ -2182,7 +2186,7 @@ export class Viewer {
           this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
         }
       } catch (err) {
-        console.error('Stereo mode rendering failed:', err);
+        log.error('Stereo mode rendering failed:', err);
       }
     }
 
@@ -2191,7 +2195,7 @@ export class Viewer {
       try {
         this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Lens distortion rendering failed:', err);
+        log.error('Lens distortion rendering failed:', err);
       }
     }
 
@@ -2200,7 +2204,7 @@ export class Viewer {
       try {
         this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Perspective correction rendering failed:', err);
+        log.error('Perspective correction rendering failed:', err);
       }
     }
 
@@ -2209,7 +2213,7 @@ export class Viewer {
       try {
         this.colorPipeline.gpuLUTChain.applyToCanvas(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Multi-stage LUT application failed:', err);
+        log.error('Multi-stage LUT application failed:', err);
       }
     }
 
@@ -2218,7 +2222,7 @@ export class Viewer {
       try {
         this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('LUT application failed:', err);
+        log.error('LUT application failed:', err);
       }
     }
 
@@ -2228,7 +2232,7 @@ export class Viewer {
       try {
         this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('OCIO application failed:', err);
+        log.error('OCIO application failed:', err);
       }
     }
 
@@ -2264,7 +2268,7 @@ export class Viewer {
       try {
         this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
-        console.error('Batched pixel effects processing failed:', err);
+        log.error('Batched pixel effects processing failed:', err);
       }
     }
 
@@ -2982,7 +2986,7 @@ export class Viewer {
 
         if (needsLoad) {
           if (imageUrl.startsWith('blob:')) {
-            console.warn('[Viewer] Cannot restore watermark from blob URL. Please reload the watermark file.');
+            log.warn('[Viewer] Cannot restore watermark from blob URL. Please reload the watermark file.');
             this.watermarkOverlay.setState({ imageUrl: null, enabled: false });
           } else {
             const desiredEnabled = state.enabled ?? true;
@@ -4205,8 +4209,7 @@ export class Viewer {
       this._referenceCanvas = document.createElement('canvas');
       this._referenceCanvas.className = 'reference-overlay';
       this._referenceCanvas.dataset.testid = 'reference-overlay';
-      this._referenceCanvas.style.cssText =
-        'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:35;';
+      this._referenceCanvas.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:${Z_INDEX.viewerOverlayLow};`;
       this.canvasContainer.appendChild(this._referenceCanvas);
       this._referenceCtx = this._referenceCanvas.getContext('2d');
     }

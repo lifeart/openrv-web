@@ -6,7 +6,7 @@
  *   colorInversionEnabled: boolean
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import { applyColorInversion } from '../../color/Inversion';
 
 export const colorInversionEffect: ImageEffect = {
@@ -14,11 +14,11 @@ export const colorInversionEffect: ImageEffect = {
   label: 'Color Inversion',
   category: 'color',
 
-  apply(imageData: ImageData, _params: Record<string, unknown>): void {
+  apply(imageData: ImageData, _params: EffectParams): void {
     applyColorInversion(imageData);
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     return params['colorInversionEnabled'] === true;
   },
 };

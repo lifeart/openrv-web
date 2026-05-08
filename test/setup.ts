@@ -6,6 +6,26 @@
 import { vi, beforeEach, afterEach } from 'vitest';
 
 import { outsideClickRegistry } from '../src/utils/ui/OutsideClickRegistry';
+import { Logger, LogLevel } from '../src/utils/Logger';
+
+// Install a test-friendly Logger sink that calls console.{debug,info,warn,error}
+// without the "[ModuleName]" prefix argument. This preserves the long-standing
+// test contract where `console.warn`/`console.error` spies inspect args[0] as
+// the user-supplied message. Production code still emits the prefix via the
+// default sink. Logger.test.ts manages its own sink so this override doesn't
+// affect prefix-format assertions there.
+const testFriendlyLoggerSink = (level: LogLevel, _prefix: unknown, ...rest: unknown[]): void => {
+  const fn =
+    level === LogLevel.DEBUG
+      ? console.debug
+      : level === LogLevel.INFO
+        ? console.info
+        : level === LogLevel.WARN
+          ? console.warn
+          : console.error;
+  fn(...rest);
+};
+Logger.setSink(testFriendlyLoggerSink);
 
 // Workaround for jsdom 28 CSS parsing bugs (https://github.com/jsdom/jsdom/issues/4095):
 // 1. `border` shorthand with CSS var() values silently rejects entire cssText
@@ -334,10 +354,12 @@ if (typeof HTMLElement.prototype.hasPointerCapture !== 'function') {
 // Console warning suppression for expected warnings in tests
 const originalWarn = console.warn;
 console.warn = (...args: unknown[]) => {
-  // Suppress specific expected warnings
-  const message = args[0];
-  if (typeof message === 'string') {
-    if (message.includes('Failed to load')) return;
+  // Suppress specific expected warnings.
+  // Logger now prepends a "[ModuleName]" tag, so the actual message may live
+  // at args[1] when the call originated through the Logger surface. Check
+  // both indices for backward compatibility with raw console.warn callers.
+  for (const candidate of [args[0], args[1]]) {
+    if (typeof candidate === 'string' && candidate.includes('Failed to load')) return;
   }
   originalWarn.apply(console, args);
 };

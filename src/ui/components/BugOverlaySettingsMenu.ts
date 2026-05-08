@@ -5,7 +5,14 @@
  */
 
 import { applyHoverEffect } from './shared/Button';
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
+import {
+  createCheckableMenuItem,
+  createSectionHeader,
+  createSeparator,
+  createSliderControl,
+  setMenuItemChecked,
+} from './shared/FormElements';
 import type { BugOverlay, BugPosition } from './BugOverlay';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
@@ -45,7 +52,7 @@ export class BugOverlaySettingsMenu {
       box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
-      min-width: 240px;
+      min-width: ${PANEL_WIDTHS.medium};
       max-width: calc(100vw - 16px);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       visibility: hidden;
@@ -53,39 +60,71 @@ export class BugOverlaySettingsMenu {
 
     const state = this.overlay.getState();
 
-    menu.appendChild(this.createSectionHeader('Asset'));
+    menu.appendChild(createSectionHeader('Asset', { menu: true }));
     menu.appendChild(this.createAssetControls(state.imageUrl !== null));
-    menu.appendChild(this.createSeparator());
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
 
-    menu.appendChild(this.createSectionHeader('Position'));
+    menu.appendChild(createSectionHeader('Position', { menu: true }));
     for (const position of ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as BugPosition[]) {
-      const item = this.createRadioItem(POSITION_LABELS[position], state.position === position, () => {
-        this.overlay.setPosition(position);
-        this.updateRadioGroup(menu, position);
-      });
+      const item = createCheckableMenuItem(
+        {
+          label: POSITION_LABELS[position],
+          checked: state.position === position,
+          role: 'menuitemradio',
+          onClick: () => {
+            this.overlay.setPosition(position);
+            this.updateRadioGroup(menu, position);
+          },
+        },
+        applyHoverEffect,
+      );
       item.dataset.position = position;
       menu.appendChild(item);
     }
 
-    menu.appendChild(this.createSeparator());
-    menu.appendChild(this.createSectionHeader('Appearance'));
+    menu.appendChild(createSeparator('4px 0', { menu: true }));
+    menu.appendChild(createSectionHeader('Appearance', { menu: true }));
     menu.appendChild(
-      this.createSliderControl('Size', 'bug-size', state.size * 100, 2, 30, '%', (value) => {
-        this.overlay.setSize(value / 100);
-        return this.overlay.getState().size * 100;
-      }),
+      createSliderControl({
+        label: 'Size',
+        id: 'bug-size',
+        value: state.size * 100,
+        min: 2,
+        max: 30,
+        suffix: '%',
+        onInput: (value) => {
+          this.overlay.setSize(value / 100);
+          return this.overlay.getState().size * 100;
+        },
+      }).container,
     );
     menu.appendChild(
-      this.createSliderControl('Opacity', 'bug-opacity', state.opacity * 100, 0, 100, '%', (value) => {
-        this.overlay.setOpacity(value / 100);
-        return this.overlay.getState().opacity * 100;
-      }),
+      createSliderControl({
+        label: 'Opacity',
+        id: 'bug-opacity',
+        value: state.opacity * 100,
+        min: 0,
+        max: 100,
+        suffix: '%',
+        onInput: (value) => {
+          this.overlay.setOpacity(value / 100);
+          return this.overlay.getState().opacity * 100;
+        },
+      }).container,
     );
     menu.appendChild(
-      this.createSliderControl('Margin', 'bug-margin', state.margin, 0, 100, 'px', (value) => {
-        this.overlay.setMargin(value);
-        return this.overlay.getState().margin;
-      }),
+      createSliderControl({
+        label: 'Margin',
+        id: 'bug-margin',
+        value: state.margin,
+        min: 0,
+        max: 100,
+        suffix: 'px',
+        onInput: (value) => {
+          this.overlay.setMargin(value);
+          return this.overlay.getState().margin;
+        },
+      }).container,
     );
 
     this.menuEl = menu;
@@ -133,21 +172,6 @@ export class BugOverlaySettingsMenu {
 
   dispose(): void {
     this.hide();
-  }
-
-  private createSectionHeader(text: string): HTMLDivElement {
-    const header = document.createElement('div');
-    header.setAttribute('role', 'none');
-    header.textContent = text;
-    header.style.cssText = `
-      padding: 6px 12px 2px;
-      font-size: 10px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      pointer-events: none;
-    `;
-    return header;
   }
 
   private createAssetControls(hasImage: boolean): HTMLDivElement {
@@ -230,124 +254,10 @@ export class BugOverlaySettingsMenu {
     return button;
   }
 
-  private createRadioItem(label: string, checked: boolean, onClick: () => void): HTMLDivElement {
-    const item = document.createElement('div');
-    item.setAttribute('role', 'menuitemradio');
-    item.setAttribute('aria-checked', String(checked));
-    item.tabIndex = -1;
-    item.style.cssText = `
-      padding: 6px 12px;
-      font-size: 12px;
-      color: var(--text-primary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      outline: none;
-      white-space: nowrap;
-    `;
-
-    const checkSpan = document.createElement('span');
-    checkSpan.className = 'menu-check';
-    checkSpan.textContent = checked ? '\u2713' : '';
-    checkSpan.style.cssText = `
-      width: 14px;
-      font-size: 12px;
-      text-align: center;
-      flex-shrink: 0;
-    `;
-    item.appendChild(checkSpan);
-
-    const labelSpan = document.createElement('span');
-    labelSpan.textContent = label;
-    item.appendChild(labelSpan);
-
-    applyHoverEffect(item);
-    item.addEventListener('click', (event) => {
-      event.stopPropagation();
-      onClick();
-    });
-
-    return item;
-  }
-
-  private createSliderControl(
-    labelText: string,
-    id: string,
-    initialValue: number,
-    min: number,
-    max: number,
-    suffix: string,
-    onInputValue: (value: number) => number,
-  ): HTMLDivElement {
-    const wrapper = document.createElement('div');
-    wrapper.setAttribute('role', 'none');
-    wrapper.style.cssText = `
-      padding: 8px 12px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    `;
-
-    const labelRow = document.createElement('div');
-    labelRow.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--text-primary);
-    `;
-
-    const label = document.createElement('span');
-    label.textContent = labelText;
-    labelRow.appendChild(label);
-
-    const value = document.createElement('span');
-    value.dataset.testid = `${id}-value`;
-    value.textContent = `${Math.round(initialValue)}${suffix}`;
-    labelRow.appendChild(value);
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(min);
-    slider.max = String(max);
-    slider.step = '1';
-    slider.value = String(Math.round(initialValue));
-    slider.dataset.testid = `${id}-slider`;
-    slider.style.cssText = 'width: 100%;';
-    slider.addEventListener('input', () => {
-      const appliedValue = onInputValue(Number.parseInt(slider.value, 10));
-      slider.value = String(Math.round(appliedValue));
-      value.textContent = `${Math.round(appliedValue)}${suffix}`;
-    });
-
-    wrapper.appendChild(labelRow);
-    wrapper.appendChild(slider);
-    return wrapper;
-  }
-
-  private createSeparator(): HTMLDivElement {
-    const separator = document.createElement('div');
-    separator.setAttribute('role', 'separator');
-    separator.style.cssText = `
-      height: 1px;
-      margin: 4px 0;
-      background: var(--border-secondary);
-      opacity: 0.5;
-    `;
-    return separator;
-  }
-
   private updateRadioGroup(menu: HTMLDivElement, position: BugPosition): void {
     const items = menu.querySelectorAll<HTMLDivElement>('[role="menuitemradio"]');
     items.forEach((item) => {
-      const checked = item.dataset.position === position;
-      item.setAttribute('aria-checked', String(checked));
-      const check = item.querySelector<HTMLElement>('.menu-check');
-      if (check) {
-        check.textContent = checked ? '\u2713' : '';
-      }
+      setMenuItemChecked(item, item.dataset.position === position);
     });
   }
 

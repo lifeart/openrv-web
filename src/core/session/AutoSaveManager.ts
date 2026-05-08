@@ -128,7 +128,7 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
 
       return hasRecovery;
     } catch (err) {
-      console.error('AutoSaveManager initialization failed:', err);
+      log.error('AutoSaveManager initialization failed:', err);
       return false;
     }
   }
@@ -256,7 +256,7 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       const state = this.stateGetter();
       this.save(state);
     } catch (err) {
-      console.error('Failed to get state for auto-save:', err);
+      log.error('Failed to get state for auto-save:', err);
       const error = err instanceof Error ? err : new Error(String(err));
       this.emit('error', { error });
     }
@@ -284,8 +284,9 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
         const store = tx.objectStore(META_STORE_NAME);
         store.put({ key: SHUTDOWN_KEY, value: true });
       }
-    } catch {
+    } catch (error) {
       // Ignore errors during unload
+      log.debug('handleBeforeUnload: shutdown marker write failed', { error });
     }
   };
 
@@ -624,8 +625,9 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
     if (this.db && !this.isSaving) {
       try {
         await this.setCleanShutdown(true);
-      } catch {
+      } catch (error) {
         // Ignore errors during cleanup
+        log.debug('dispose: setCleanShutdown failed', { error });
       }
     }
 

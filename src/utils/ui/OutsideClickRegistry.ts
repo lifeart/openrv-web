@@ -80,8 +80,12 @@
  * ----------------
  * Dismissing a registration automatically removes it from the registry, so a
  * dismissed callback is never invoked twice. Callbacks that throw are caught
- * and reported via console.error so one buggy consumer does not break others.
+ * and reported via logger.error so one buggy consumer does not break others.
  */
+
+import { Logger } from '../Logger';
+
+const logger = new Logger('OutsideClickRegistry');
 
 export type OutsideClickEventType = 'mousedown' | 'click';
 
@@ -263,8 +267,7 @@ export class OutsideClickRegistry {
       fn();
     } catch (err) {
       // Don't let one buggy consumer break the whole registry.
-      // eslint-disable-next-line no-console
-      console.error('[OutsideClickRegistry] dismiss callback threw:', err);
+      logger.error('[OutsideClickRegistry] dismiss callback threw:', err);
     }
   }
 

@@ -18,6 +18,7 @@ import type {
   ParticipantPermission,
 } from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
+import { Z_INDEX } from './shared/theme';
 
 /**
  * Validate that a color string is a safe CSS color value.
@@ -226,7 +227,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 8px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
       overflow: hidden;
@@ -486,8 +487,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       margin-bottom: 12px;
       position: relative;
     `;
-    divider.innerHTML =
-      '<span style="background: var(--bg-secondary); padding: 0 8px; position: relative; z-index: 1;">or join a room</span>';
+    divider.innerHTML = `<span style="background: var(--bg-secondary); padding: 0 8px; position: relative; z-index: ${Z_INDEX.localStack};">or join a room</span>`;
     divider.style.background = `linear-gradient(var(--border-secondary), var(--border-secondary)) no-repeat center / calc(100% - 16px) 1px`;
     panel.appendChild(divider);
 

@@ -9,6 +9,10 @@
  * - Memory management with LRU eviction
  */
 
+import { Logger } from '../Logger';
+
+const logger = new Logger('FramePreloadManager');
+
 export interface PreloadRequest<T> {
   frame: number;
   priority: number; // Lower = higher priority
@@ -215,7 +219,7 @@ export class FramePreloadManager<T> {
       .catch((e) => {
         // Don't log abort errors as warnings
         if (e?.name !== 'AbortError' && !requestSignal.aborted) {
-          console.warn(`Failed to load frame ${frame}:`, e);
+          logger.warn(`Failed to load frame ${frame}:`, e);
         }
         return null;
       })
@@ -519,7 +523,7 @@ export class FramePreloadManager<T> {
       .catch((e) => {
         // Don't log abort errors as warnings
         if (e?.name !== 'AbortError' && !requestSignal.aborted) {
-          console.warn(`Preload failed for frame ${request.frame}:`, e);
+          logger.warn(`Preload failed for frame ${request.frame}:`, e);
         }
         // Return null instead of re-throwing to avoid unhandled promise rejections
         return null;
@@ -589,7 +593,7 @@ export class FramePreloadManager<T> {
       })
       .catch((e) => {
         if (e?.name !== 'AbortError' && !requestSignal.aborted) {
-          console.warn(`Upgrade extraction failed for frame ${frame}:`, e);
+          logger.warn(`Upgrade extraction failed for frame ${frame}:`, e);
         }
         return null;
       })

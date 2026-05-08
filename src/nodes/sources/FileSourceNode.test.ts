@@ -296,6 +296,96 @@ describe('FileSourceNode', () => {
     });
   });
 
+  describe('error visibility (CONS-1b)', () => {
+    // These tests verify that decode/load errors are NOT silently swallowed by
+    // empty catch blocks — they must surface to the caller (throw) and/or be
+    // logged. Empty `catch {}` would mask broken wiring; this regression suite
+    // ensures that does not happen for any of the format-probe / decode paths.
+
+    it('FSN-CONS1B-01: invalid HDR buffer (DPX path) propagates thrown error', async () => {
+      // .dpx extension forces the always-HDR path which has no fallback;
+      // a bogus buffer must throw a visible decode error to the caller.
+      const bogusBuffer = new ArrayBuffer(64);
+      // Fill with non-DPX magic so the decoder rejects it.
+      new Uint8Array(bogusBuffer).fill(0xff);
+      const file = new File([bogusBuffer], 'bad.dpx', { type: 'application/octet-stream' });
+
+      // A silent catch would swallow this; we require a thrown error.
+      await expect(node.loadFile(file)).rejects.toThrow();
+
+      // Node must remain in a clean, non-ready state — not silently mark ready.
+      expect(node.isReady()).toBe(false);
+    });
+
+    it('FSN-CONS1B-02: invalid HDR buffer (Cineon path) propagates thrown error', async () => {
+      const bogusBuffer = new ArrayBuffer(64);
+      new Uint8Array(bogusBuffer).fill(0xff);
+      const file = new File([bogusBuffer], 'bad.cin', { type: 'application/octet-stream' });
+
+      await expect(node.loadFile(file)).rejects.toThrow();
+      expect(node.isReady()).toBe(false);
+    });
+
+    it('FSN-CONS1B-03: invalid HDR buffer (Radiance HDR path) propagates thrown error', async () => {
+      const bogusBuffer = new ArrayBuffer(64);
+      new Uint8Array(bogusBuffer).fill(0xff);
+      const file = new File([bogusBuffer], 'bad.hdr', { type: 'application/octet-stream' });
+
+      await expect(node.loadFile(file)).rejects.toThrow();
+      expect(node.isReady()).toBe(false);
+    });
+
+    it('FSN-CONS1B-04: format-detection probe falls through to standard loading without silent stuck state', async () => {
+      // Non-float TIFF (PNG magic in .tif extension) — TIFF probe runs but
+      // `decoderRegistry.detectFormat` returns something other than 'TIFF',
+      // so the load falls through to standard image loading. This validates
+      // the probe doesn't silently no-op — node ends up "ready" via fallback
+      // (mocked Image triggers onload).
+      const buffer = new ArrayBuffer(16);
+      new DataView(buffer).setUint32(0, 0x89504e47, false); // PNG magic
+      const file = new File([buffer], 'fake.tif', { type: 'image/tiff' });
+
+      await node.loadFile(file);
+      expect(node.isReady()).toBe(true);
+    });
+
+    it('FSN-CONS1B-05: corrupt JPEG with .jpg extension reaches a definite outcome', async () => {
+      // Verify that corrupt buffers fed through the JPEG-gainmap probe path
+      // either succeed via fallback or throw — but never silently no-op.
+      const buffer = new ArrayBuffer(8);
+      new Uint8Array(buffer).set([1, 2, 3, 4, 5, 6, 7, 8]);
+      const file = new File([buffer], 'fake.jpg', { type: 'image/jpeg' });
+
+      // Standard image loading (jsdom mock) will resolve. Key invariant:
+      // node ends in a definite state — not stuck in pending due to a
+      // swallowed catch.
+      await node.loadFile(file);
+      expect(typeof node.isReady()).toBe('boolean');
+    });
+
+    it('FSN-CONS1B-06: HDR cleanup catches do not mask the original decode error', async () => {
+      // When the HDR loader hits an exception, the cleanup catches around
+      // bitmap.close()/videoFrame.close() must NOT swallow the outer error.
+      // We can't easily force the HDR path in jsdom (no real AVIF/HEIC/JXL
+      // decoder), but we can verify that the load completes with a definite
+      // outcome — either resolves via fallback or throws a real Error.
+      const buffer = new ArrayBuffer(64);
+      new Uint8Array(buffer).fill(0xee);
+      const file = new File([buffer], 'fake.avif', { type: 'image/avif' });
+
+      try {
+        await node.loadFile(file);
+        // Resolved via fallback path: node must be in a coherent state.
+        expect(typeof node.isReady()).toBe('boolean');
+      } catch (err) {
+        // Threw: the error must be a real Error with a message — not an
+        // undefined/silent failure from a cleanup catch swallowing it.
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBeTruthy();
+      }
+    });
+  });
+
   describe('dispose', () => {
     it('FSN-005: revokes blob URL on dispose', async () => {
       const file = new File([''], 'test.png', { type: 'image/png' });

@@ -10,6 +10,9 @@ import { type KeyCombination } from './KeyboardManager';
 import { DEFAULT_KEY_BINDINGS, type KeyBindingKeys } from './KeyBindings';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
+import { Logger } from '../Logger';
+
+const logger = new Logger('CustomKeyBindingsManager');
 export interface CustomKeyBinding {
   action: string;
   originalCombo: KeyCombination;
@@ -162,7 +165,7 @@ export class CustomKeyBindingsManager {
 
       // Validate that data is an array
       if (!Array.isArray(data)) {
-        console.warn('Invalid custom key bindings data: expected array');
+        logger.warn('Invalid custom key bindings data: expected array');
         return;
       }
 
@@ -171,7 +174,7 @@ export class CustomKeyBindingsManager {
         // Try to migrate old format (with 'key' instead of 'code')
         const migrated = this.migrateBindingData(item);
         if (!migrated) {
-          console.warn('Skipping invalid custom key binding:', item);
+          logger.warn('Skipping invalid custom key binding:', item);
           continue;
         }
         if (migrated !== item) {
@@ -185,7 +188,7 @@ export class CustomKeyBindingsManager {
         this.saveToStorage();
       }
     } catch (err) {
-      console.warn('Failed to load custom key bindings:', err);
+      logger.warn('Failed to load custom key bindings:', err);
     }
   }
 
@@ -293,7 +296,7 @@ export class CustomKeyBindingsManager {
   private saveToStorage(): void {
     const data = Array.from(this.customBindings.values());
     if (!this.preferences.setJSON(CustomKeyBindingsManager.STORAGE_KEY, data)) {
-      console.warn('Failed to save custom key bindings');
+      logger.warn('Failed to save custom key bindings');
     }
   }
 

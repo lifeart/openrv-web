@@ -86,6 +86,7 @@ import type { MultiSourceLayoutControl } from './ui/components/MultiSourceLayout
 import type { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { getIconSvg } from './ui/components/shared/Icons';
 import { createPanel, createPanelHeader, type Panel } from './ui/components/shared/Panel';
+import { probeAsync } from './utils/probe';
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
@@ -124,6 +125,9 @@ import { buildTransformTab } from './services/tabContent/buildTransformTab';
 import { buildAnnotateTab } from './services/tabContent/buildAnnotateTab';
 import { buildPanelToggles, type PanelTogglesResult } from './services/tabContent/buildPanelToggles';
 
+import { Logger } from './utils/Logger';
+
+const logger = new Logger('AppControlRegistry');
 /**
  * Dependencies required by AppControlRegistry to create all controls.
  */
@@ -899,11 +903,8 @@ export class AppControlRegistry {
       const file = logoFileInput.files?.[0];
       if (!file) return;
       if (this._disposed) return;
-      try {
-        await this.slateEditor.loadLogoFile(file);
-      } catch {
-        // Error emitted via logoError event
-      }
+      // Error surfaced via slateEditor's logoError event; swallow here.
+      await probeAsync('AppControlRegistry.loadLogoFile', () => this.slateEditor.loadLogoFile(file));
       // Guard: component may have been disposed while the async load was in flight
       if (this._disposed) return;
       logoFileInput.value = '';
@@ -924,7 +925,7 @@ export class AppControlRegistry {
 
     // Wire logoError to surface failures visibly (#92)
     this.slateEditor.on('logoError', (error) => {
-      console.warn('[SlateEditor] Logo upload failed:', error.message);
+      logger.warn('[SlateEditor] Logo upload failed:', error.message);
       logoInfo.textContent = `Error: ${error.message}`;
       logoInfo.style.display = 'block';
       logoInfo.style.color = 'var(--error, #ff4444)';
@@ -1115,7 +1116,7 @@ export class AppControlRegistry {
     this.panel.conformPanelElement.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch((err) => {
-      console.error('Error disposing auto-save manager:', err);
+      logger.error('Error disposing auto-save manager:', err);
     });
   }
 }

@@ -5,7 +5,7 @@
  */
 
 import type { Session } from '../core/session/Session';
-import type { PatternName, GradientDirection } from '../nodes/sources/ProceduralSourceNode';
+import type { PatternName, ProceduralSourceOptions } from '../nodes/sources/ProceduralSourceNode';
 import type { AppPersistenceManager } from '../AppPersistenceManager';
 import type { MediaRepresentation } from '../core/types/representation';
 import { DisposableAPI } from './Disposable';
@@ -212,19 +212,7 @@ export class MediaAPI extends DisposableAPI {
    * openrv.media.loadProceduralSource('checkerboard', { width: 3840, height: 2160, cellSize: 32 });
    * ```
    */
-  loadProceduralSource(
-    pattern: PatternName,
-    options?: {
-      width?: number;
-      height?: number;
-      color?: [number, number, number, number];
-      direction?: GradientDirection;
-      cellSize?: number;
-      steps?: number;
-      fps?: number;
-      duration?: number;
-    },
-  ): void {
+  loadProceduralSource(pattern: PatternName, options?: ProceduralSourceOptions): void {
     this.assertNotDisposed();
     this.session.loadProceduralSource(pattern, options);
   }

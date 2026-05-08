@@ -18,8 +18,12 @@ import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('NotePanel');
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
 import { showAlert } from './shared/Modal';
+import { Z_INDEX } from './shared/theme';
 
 export interface NotePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -90,7 +94,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 12px;
       color: var(--text-primary);
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       overflow: hidden;
     `;
@@ -984,8 +988,9 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     try {
       const name = getCorePreferencesManager().getGeneralPrefs().userName;
       if (name && name.trim()) return name.trim();
-    } catch {
+    } catch (error) {
       // PreferencesManager not wired — fall back
+      logger.debug('getAuthorName: PreferencesManager unavailable; using default', { error });
     }
     return 'User';
   }

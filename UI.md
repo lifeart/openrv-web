@@ -624,6 +624,47 @@ const { close } = showModal(contentElement, {
 });
 ```
 
+### FormElements (`src/ui/components/shared/FormElements.ts`)
+
+Shared helpers for control-panel form rows. Used by the 11 `*SettingsMenu` components and most control panels — do not re-implement section headers, separators, or slider/checkbox rows privately.
+
+```typescript
+import {
+  createSeparator,
+  createSectionHeader,
+  createCheckboxRow,
+  createSliderRow,
+  createSliderControl,        // vertical menu-style layout
+  createColorSliderRow,       // color-control style w/ throttled emit + dblclick reset
+  createCheckableMenuItem,    // role="menuitemradio|menuitemcheckbox"
+  setMenuItemChecked,
+} from './shared/FormElements';
+
+// Section header — pass { menu: true } for menu-look variant
+const header = createSectionHeader('OPACITY', { menu: true });
+
+// Separator
+const sep = createSeparator('4px 0', { menu: true });
+
+// Checkbox row
+const { container, checkbox } = createCheckboxRow('Enabled', true, (on) => apply(on));
+
+// Slider row
+const { container, slider } = createSliderRow(
+  'Opacity', 0.5, 0, 1, 0.01, (v) => setOpacity(v),
+);
+
+// Color-style slider with throttled emit and dblclick-to-reset
+const row = createColorSliderRow({
+  label: 'Exposure', value: 0, min: -2, max: 2, step: 0.01,
+  defaultValue: 0,                // dblclick on label or slider resets to this
+  onInput: (v) => emitThrottled(v),
+  onReset: (v) => emitImmediate(v),
+});
+```
+
+**Rule of thumb**: if you find yourself writing `font-size: 11px; color: var(--text-secondary)` for a label, you are reinventing one of these helpers. Extend `FormElements.ts` once instead of forking.
+
 ### Panel Component (`src/ui/components/shared/Panel.ts`)
 
 Reusable dropdown panel utility for consistent panel styling.
@@ -1227,10 +1268,36 @@ private positionDropdown(): void {
 }
 ```
 
-**Z-Index Values** (use consistently):
-- `z-index: 50-100` - Viewer overlays (waveform, histogram, vectorscope)
-- `z-index: 9999` - Dropdown panels, control panels
-- `z-index: 10000` - Modals
+**Z-Index Values** — never use literal numerics. Pull tokens from `Z_INDEX` in `src/ui/components/shared/theme.ts`:
+
+```typescript
+import { Z_INDEX } from './shared/theme';
+
+// In a CSS-in-JS string:
+el.style.cssText = `position: fixed; z-index: ${Z_INDEX.dropdown};`;
+
+// Direct .style.zIndex assignment:
+el.style.zIndex = String(Z_INDEX.modal);
+```
+
+Common tiers (see `theme.ts` for the full list):
+
+| Tier                  | Value | Use for                                              |
+|-----------------------|-------|------------------------------------------------------|
+| `localStack`          | 1     | Local stacking inside a containing block             |
+| `viewerOverlayLow`    | 35    | Reference overlay canvas                             |
+| `viewerOverlay`       | 50    | Viewer overlays (waveform, histogram, vectorscope)   |
+| `viewerHud`           | 60    | HUD-level transient indicators                       |
+| `viewerOverlayHigh`   | 100   | Higher-priority overlays (filter mode, scale ratio)  |
+| `panel`               | 500   | Anchored panels                                      |
+| `sidePanel`           | 1000  | Persistent side panels                               |
+| `pixelProbe`          | 9998  | Pixel probe magnifier                                |
+| `dropdown`            | 9999  | Dropdown panels, control panels                      |
+| `modal`               | 10000 | Modals                                               |
+| `tooltip`             | 10001 | Tooltips                                             |
+| `a11ySkipLink`        | 100000| Accessibility skip link (always on top)              |
+
+If a needed tier is missing, add it ONCE to `theme.ts` with a clear name; do not introduce a literal in feature code.
 
 ### Event Handler Cleanup
 

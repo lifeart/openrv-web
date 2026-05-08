@@ -17,6 +17,9 @@ import { EffectProcessor, type AllEffectsState, computeEffectsHash, hasActiveEff
 import { WorkerPool } from '../WorkerPool';
 import EffectWorker from '../../workers/effectProcessor.worker?worker';
 
+import { Logger } from '../Logger';
+
+const logger = new Logger('PrerenderBufferManager');
 /**
  * Cached frame entry
  */
@@ -193,7 +196,7 @@ export class PrerenderBufferManager {
       this.workersAvailable = true;
       console.log(`Prerender worker pool initialized with ${this.config.numWorkers} workers`);
     } catch (error) {
-      console.warn('Failed to initialize worker pool, falling back to main thread:', error);
+      logger.warn('Failed to initialize worker pool, falling back to main thread:', error);
       this.workerPool = null;
       this.workersAvailable = false;
     }
@@ -660,7 +663,7 @@ export class PrerenderBufferManager {
           // Validate worker result
           const expectedLength = width * height * 4;
           if (result.imageData.length !== expectedLength) {
-            console.warn(
+            logger.warn(
               `Worker returned invalid imageData: expected ${expectedLength} bytes, got ${result.imageData.length}`,
             );
             return;
@@ -697,7 +700,7 @@ export class PrerenderBufferManager {
         // stack, so logging the Error directly surfaces the full source
         // context (worker filename + line) instead of a bare message.
         const stack = error instanceof Error ? error.stack : undefined;
-        console.warn(`Worker prerender failed for frame ${request.frame}:`, error, stack ? `\nStack: ${stack}` : '');
+        logger.warn(`Worker prerender failed for frame ${request.frame}:`, error, stack ? `\nStack: ${stack}` : '');
         // Fall back to main thread
         this.prerenderOnMainThreadSync(request);
       }
@@ -732,7 +735,7 @@ export class PrerenderBufferManager {
         this.addToCache(request.frame, result);
       }
     } catch (e) {
-      console.warn(`Failed to prerender frame ${request.frame}:`, e);
+      logger.warn(`Failed to prerender frame ${request.frame}:`, e);
     }
   }
 

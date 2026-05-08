@@ -15,10 +15,13 @@ import { type TransitionManager } from '../../core/session/TransitionManager';
 import { isTransitionType, DEFAULT_TRANSITION_DURATION, type TransitionType } from '../../core/types/transition';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { OPACITY } from './shared/theme';
+import { OPACITY, Z_INDEX } from './shared/theme';
 import { downloadEDL, type EDLClip, type EDLTransition } from '../../export/EDLWriter';
 import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('PlaylistPanel');
 export interface PlaylistPanelEvents extends EventMap {
   /** Emitted when user wants to add current source as clip */
   addCurrentSource: void;
@@ -82,7 +85,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      z-index: 1000;
+      z-index: ${Z_INDEX.sidePanel};
       display: none;
       flex-direction: column;
       overflow: hidden;
@@ -759,7 +762,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
           durationLabel.textContent = `${validated.durationFrames}f (${secs}s)`;
         } else {
           // Can't apply transition, revert to cut
-          console.warn(
+          logger.warn(
             `[PlaylistPanel] Transition "${selectedType}" rejected at gap ${gapIndex}. ` +
               `Reverting to cut. Clips may be too short or from the same source.`,
           );
@@ -836,7 +839,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
             this.emit('imported', { format, importedCount, unresolvedCount });
           } catch (err) {
-            console.error('[PlaylistPanel] Failed to parse import file:', err);
+            logger.error('[PlaylistPanel] Failed to parse import file:', err);
           }
         };
         reader.readAsText(file);
@@ -896,7 +899,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
         } else {
           // Fall back to sourceName if resolver returns null
           sourceUrl = clip.sourceName;
-          console.warn(
+          logger.warn(
             `[PlaylistPanel] No source URL found for clip "${clip.sourceName}" (sourceIndex=${clip.sourceIndex}), using name as fallback`,
           );
         }
@@ -1026,7 +1029,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
         this.updateFooterInfo();
         this.emit('imported', { format: 'otio', importedCount, unresolvedCount });
       } catch (err) {
-        console.error('[PlaylistPanel] Failed to parse OTIO file:', err);
+        logger.error('[PlaylistPanel] Failed to parse OTIO file:', err);
       }
     };
     reader.readAsText(file);

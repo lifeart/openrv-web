@@ -22,6 +22,8 @@ import { HDRFrameResizer, type HDRResizeTier } from '../../utils/media/HDRFrameR
 import { LRUCache } from '../../utils/LRUCache';
 import { Logger } from '../../utils/Logger';
 import { PerfTrace } from '../../utils/PerfTrace';
+import { defineNodeProperty } from '../base/defineNodeProperty';
+import { probe } from '../../utils/probe';
 
 const log = new Logger('VideoSourceNode');
 
@@ -44,15 +46,18 @@ export interface VideoLoadResult {
 @RegisterNode('RVVideoSource')
 export class VideoSourceNode extends BaseSourceNode {
   private video: HTMLVideoElement | null = null;
-  private url: string = '';
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private file: File | null = null;
-
   // Mediabunny frame extractor for accurate frame extraction
   private frameExtractor: MediabunnyFrameExtractor | null = null;
-  private useMediabunny: boolean = false;
   private extractionMode: FrameExtractionMode = 'auto';
+  // Properties (defined via defineNodeProperty in constructor)
+  declare url: string;
+  declare duration: number;
+  declare fps: number;
+  declare useMediabunny: boolean;
+  declare codec: string;
+  declare file: File | null;
 
   // Frame preload manager for intelligent caching and preloading
   private preloadManager: FramePreloadManager<FrameResult> | null = null;
@@ -96,15 +101,12 @@ export class VideoSourceNode extends BaseSourceNode {
 
   constructor(name?: string) {
     super('RVVideoSource', name ?? 'Video Source');
-
-    // Properties
-    this.properties.add({ name: 'url', defaultValue: '' });
-    this.properties.add({ name: 'duration', defaultValue: 0 });
-    this.properties.add({ name: 'fps', defaultValue: 24 });
-    this.properties.add({ name: 'useMediabunny', defaultValue: false });
-    this.properties.add({ name: 'codec', defaultValue: '' });
-    this.properties.add({ name: 'file', defaultValue: null }); // File object for mediabunny loading
-
+    defineNodeProperty(this, 'url', { defaultValue: '' });
+    defineNodeProperty(this, 'duration', { defaultValue: 0 });
+    defineNodeProperty(this, 'fps', { defaultValue: 24 });
+    defineNodeProperty(this, 'useMediabunny', { defaultValue: false });
+    defineNodeProperty(this, 'codec', { defaultValue: '' });
+    defineNodeProperty(this, 'file', { defaultValue: null as File | null });
     // Create offscreen canvas for frame extraction
     this.canvas = document.createElement('canvas');
     this.ctx = this.canvas.getContext('2d')!;
@@ -170,7 +172,6 @@ export class VideoSourceNode extends BaseSourceNode {
         video.oncanplay = null;
 
         this.video = video;
-        this.url = url;
 
         const duration = Math.ceil(video.duration * fps);
 
@@ -184,10 +185,9 @@ export class VideoSourceNode extends BaseSourceNode {
 
         this.canvas.width = video.videoWidth;
         this.canvas.height = video.videoHeight;
-
-        this.properties.setValue('url', url);
-        this.properties.setValue('duration', duration);
-        this.properties.setValue('fps', fps);
+        this.url = url;
+        this.duration = duration;
+        this.fps = fps;
 
         this.markDirty();
         resolve();
@@ -212,7 +212,6 @@ export class VideoSourceNode extends BaseSourceNode {
     // Check if WebCodecs is supported
     if (!MediabunnyFrameExtractor.isSupported()) {
       this.useMediabunny = false;
-      this.properties.setValue('useMediabunny', false);
       return {
         success: true, // HTML video fallback is available
         useMediabunny: false,
@@ -225,15 +224,14 @@ export class VideoSourceNode extends BaseSourceNode {
       const metadata = await this.frameExtractor.load(file, fps);
 
       this.useMediabunny = true;
-      this.properties.setValue('useMediabunny', true);
-      this.properties.setValue('codec', metadata.codec ?? 'unknown');
+      this.codec = metadata.codec ?? 'unknown';
 
       // Propagate HDR metadata
       this.isHDRVideo = metadata.isHDR;
       this.videoColorSpace = metadata.colorSpace;
       // Update duration from mediabunny (more accurate)
       this.metadata.duration = metadata.frameCount;
-      this.properties.setValue('duration', metadata.frameCount);
+      this.duration = metadata.frameCount;
 
       // Initialize HDR frame resizer if HDR content detected and canvas resize available
       if (metadata.isHDR) {
@@ -256,7 +254,7 @@ export class VideoSourceNode extends BaseSourceNode {
     } catch (error) {
       // Check if this is an unsupported codec error
       if (error instanceof UnsupportedCodecException) {
-        console.warn(
+        log.warn(
           `Unsupported professional codec detected: ${error.codecError.codecInfo.displayName}`,
           error.codecError.message,
         );
@@ -264,8 +262,7 @@ export class VideoSourceNode extends BaseSourceNode {
         this.frameExtractor?.dispose();
         this.frameExtractor = null;
         this.useMediabunny = false;
-        this.properties.setValue('useMediabunny', false);
-        this.properties.setValue('codec', error.codec ?? 'unknown');
+        this.codec = error.codec ?? 'unknown';
 
         return {
           success: false,
@@ -277,13 +274,12 @@ export class VideoSourceNode extends BaseSourceNode {
       }
 
       // Generic error - try fallback
-      console.warn('Mediabunny initialization failed, using HTML video fallback:', error);
+      log.warn('Mediabunny initialization failed, using HTML video fallback:', error);
       this.frameExtractor?.dispose();
       this.frameExtractor = null;
       this.preloadManager?.dispose();
       this.preloadManager = null;
       this.useMediabunny = false;
-      this.properties.setValue('useMediabunny', false);
 
       return {
         success: true, // HTML video fallback may work
@@ -354,7 +350,7 @@ export class VideoSourceNode extends BaseSourceNode {
       } catch (error) {
         // Log error for debugging but don't break the app
         if (!signal?.aborted) {
-          console.warn(`Frame ${frame} extraction failed:`, error);
+          log.warn(`Frame ${frame} extraction failed:`, error);
         }
         return null;
       }
@@ -417,11 +413,11 @@ export class VideoSourceNode extends BaseSourceNode {
    * Set fps (recalculates duration)
    */
   setFps(fps: number): void {
-    this.properties.setValue('fps', fps);
+    this.fps = fps;
     if (this.video) {
       this.metadata.fps = fps;
       this.metadata.duration = Math.ceil(this.video.duration * fps);
-      this.properties.setValue('duration', this.metadata.duration);
+      this.duration = this.metadata.duration;
     }
 
     // Update mediabunny extractor if active
@@ -451,7 +447,7 @@ export class VideoSourceNode extends BaseSourceNode {
     // Update metadata if FPS was detected
     if (fps !== null) {
       this.metadata.fps = fps;
-      this.properties.setValue('fps', fps);
+      this.fps = fps;
     }
 
     return fps;
@@ -469,7 +465,7 @@ export class VideoSourceNode extends BaseSourceNode {
 
     // Update metadata with actual count
     this.metadata.duration = count;
-    this.properties.setValue('duration', count);
+    this.duration = count;
 
     // Update preload manager so it doesn't try to load ghost frames
     if (this.preloadManager) {
@@ -1094,21 +1090,13 @@ export class VideoSourceNode extends BaseSourceNode {
         // getFrameHDR(). VideoFrame produced via toVideoFrame() now belongs to
         // the IPImage; closing the sample only releases the sample wrapper.
         if (sample) {
-          try {
-            sample.close();
-          } catch {
-            /* already closed */
-          }
+          probe('VideoSourceNode.sample.close', () => sample!.close());
         }
         // If we still hold the IPImage (didn't transfer to cache), release it.
         // This covers: error during cache.set, dispose race after creation,
         // and any unexpected exit path.
         if (ipImage) {
-          try {
-            ipImage.close();
-          } catch {
-            /* already closed */
-          }
+          probe('VideoSourceNode.ipImage.close', () => ipImage!.close());
         }
       }
     })();

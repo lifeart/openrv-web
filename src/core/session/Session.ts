@@ -1,35 +1,16 @@
-import { type GTODTO, type GTOData } from 'gto-js';
+import { type GTOData } from 'gto-js';
 import { EventEmitter } from '../../utils/EventEmitter';
 import { basename } from '../../utils/path';
 import type { RVEDLEntry } from '../../formats/RVEDLParser';
-import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, ProceduralSourceOptions } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { PenStroke, TextAnnotation, PaintEffects } from '../../paint/types';
 import type { UncropState } from '../../core/types/transform';
 import type { MediaRepresentation } from '../types/representation';
-import {
-  type AnnotationStore,
-  getNumberValue as _getNumberValue,
-  getBooleanValue as _getBooleanValue,
-  getNumberArray as _getNumberArray,
-  getStringValue as _getStringValue,
-} from './AnnotationStore';
+import { type AnnotationStore } from './AnnotationStore';
 import type { LoopMode, PlaybackMode } from '../types/session';
 import type { Graph } from '../graph/Graph';
 import type { HashResolveResult, AtResolveResult, GTOHashResolveResult, GTOAtResolveResult } from './PropertyResolver';
-import {
-  parseInitialSettings as _parseInitialSettings,
-  parseColorAdjustments as _parseColorAdjustments,
-  parseCDL as _parseCDL,
-  parseTransform as _parseTransform,
-  parseLens as _parseLens,
-  parseCrop as _parseCrop,
-  parseChannelMode as _parseChannelMode,
-  parseStereo as _parseStereo,
-  parseScopes as _parseScopes,
-  parseLinearize as _parseLinearize,
-  parseNoiseReduction as _parseNoiseReduction,
-} from './GTOSettingsParser';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
@@ -62,14 +43,7 @@ export type {
   SessionEvents,
   MediaSource,
 } from './SessionTypes';
-import type {
-  GTOComponentDTO,
-  GTOViewSettings,
-  MatteSettings,
-  SessionMetadata,
-  SessionEvents,
-  MediaSource,
-} from './SessionTypes';
+import type { GTOComponentDTO, MatteSettings, SessionMetadata, SessionEvents, MediaSource } from './SessionTypes';
 
 export type { SubFramePosition };
 export type { FPSMeasurement };
@@ -1046,98 +1020,13 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._sessionGraph.loadEDL(text);
   }
 
-  // GTO value extraction helpers - delegate to standalone functions from AnnotationStore.
-  // Kept as private methods for backward compatibility (tests access via `(session as any)`).
-  // @ts-ignore TS6133 - accessed by tests via (session as any).getNumberValue()
-  private getNumberValue(value: unknown): number | undefined {
-    return _getNumberValue(value);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).getBooleanValue()
-  private getBooleanValue(value: unknown): boolean | undefined {
-    return _getBooleanValue(value);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).getNumberArray()
-  private getNumberArray(value: unknown): number[] | undefined {
-    return _getNumberArray(value);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).getStringValue()
-  private getStringValue(value: unknown): string | undefined {
-    return _getStringValue(value);
-  }
-
-  // GTO settings parsing - delegates to pure functions in GTOSettingsParser.ts.
-  // Kept as private methods for backward compatibility (tests access via `(session as any)`).
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseInitialSettings()
-  private parseInitialSettings(dto: GTODTO, sourceInfo: { width: number; height: number }): GTOViewSettings | null {
-    return _parseInitialSettings(dto, sourceInfo);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseColorAdjustments()
-  private parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | null {
-    return _parseColorAdjustments(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseCDL()
-  private parseCDL(dto: GTODTO): CDLValues | null {
-    return _parseCDL(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseTransform()
-  private parseTransform(dto: GTODTO): Transform2D | null {
-    return _parseTransform(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseLens()
-  private parseLens(dto: GTODTO): LensDistortionParams | null {
-    return _parseLens(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseCrop()
-  private parseCrop(dto: GTODTO, sourceInfo: { width: number; height: number }): CropState | null {
-    return _parseCrop(dto, sourceInfo);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseChannelMode()
-  private parseChannelMode(dto: GTODTO): ChannelMode | null {
-    return _parseChannelMode(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseStereo()
-  private parseStereo(dto: GTODTO): StereoState | null {
-    return _parseStereo(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseScopes()
-  private parseScopes(dto: GTODTO): ScopesState | null {
-    return _parseScopes(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseLinearize()
-  private parseLinearize(dto: GTODTO): LinearizeState | null {
-    return _parseLinearize(dto);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parseNoiseReduction()
-  private parseNoiseReduction(dto: GTODTO): NoiseReductionParams | null {
-    return _parseNoiseReduction(dto);
-  }
-
-  // Annotation parsing methods - delegate to AnnotationStore.
-  // Kept as methods on Session for backward compatibility (tests access via `(session as any)`).
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parsePaintAnnotations()
-  private parsePaintAnnotations(dto: GTODTO, aspectRatio: number): void {
-    this._annotations.annotationStore.parsePaintAnnotations(dto, aspectRatio);
-  }
-
-  // @ts-ignore TS6133 - accessed by tests via (session as any).parsePaintTagEffects()
-  private parsePaintTagEffects(tagValue: string): Partial<PaintEffects> | null {
-    return this._annotations.annotationStore.parsePaintTagEffects(tagValue);
-  }
+  // CONS-4: GTO value extraction (getNumberValue/getBooleanValue/getNumberArray/getStringValue),
+  // GTO settings parsing (parseInitialSettings/parseColorAdjustments/parseCDL/parseTransform/
+  // parseLens/parseCrop/parseChannelMode/parseStereo/parseScopes/parseLinearize/
+  // parseNoiseReduction), and annotation parsing (parsePaintAnnotations/parsePaintTagEffects)
+  // are exposed as standalone exports from `./AnnotationStore` and `./GTOSettingsParser` plus
+  // instance methods on `session.annotationStore`. Tests must call those public surfaces
+  // directly rather than reaching into Session via `(session as any)`.
 
   // Protected so that subclasses (e.g., CoordinateParsing.test.ts TestSession) can access them.
   protected parsePenStroke(
@@ -1159,19 +1048,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   // Procedural source loading — delegated to SessionMedia
-  loadProceduralSource(
-    pattern: PatternName,
-    options?: {
-      width?: number;
-      height?: number;
-      color?: [number, number, number, number];
-      direction?: GradientDirection;
-      cellSize?: number;
-      steps?: number;
-      fps?: number;
-      duration?: number;
-    },
-  ): void {
+  loadProceduralSource(pattern: PatternName, options?: ProceduralSourceOptions): void {
     this._media.loadProceduralSource(pattern, options);
   }
 

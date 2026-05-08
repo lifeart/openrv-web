@@ -6,7 +6,7 @@
  * Copy Timecode, Go to Frame, Set In/Out, Add/Remove Mark.
  */
 
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
 
@@ -76,7 +76,7 @@ export class TimelineContextMenu {
       box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
-      min-width: 240px;
+      min-width: ${PANEL_WIDTHS.medium};
       max-width: calc(100vw - 16px);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       visibility: hidden;

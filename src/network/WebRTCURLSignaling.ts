@@ -5,6 +5,8 @@
  * through shareable URLs without a signaling server.
  */
 
+import { probe } from '../utils/probe';
+
 export const WEBRTC_URL_SIGNAL_PARAM = 'rtc';
 
 const SIGNAL_VERSION = 1;
@@ -69,12 +71,11 @@ export function extractWebRTCSignalToken(input: string): string | null {
   if (!trimmed) return null;
 
   const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
-  try {
-    const parsed = new URL(trimmed, fallbackBase);
+  // URL parsing may throw for non-URL inputs — fall through to direct parsing.
+  const parsed = probe('extractWebRTCSignalToken.parseURL', () => new URL(trimmed, fallbackBase));
+  if (parsed) {
     const token = parsed.searchParams.get(WEBRTC_URL_SIGNAL_PARAM);
     if (token && token.trim().length > 0) return token.trim();
-  } catch {
-    // ignore and try direct parsing below
   }
 
   if (trimmed.startsWith(`${WEBRTC_URL_SIGNAL_PARAM}=`)) {

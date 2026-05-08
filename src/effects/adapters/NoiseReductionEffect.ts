@@ -9,11 +9,11 @@
  *   noiseReductionRadius:             number (1-5, default 2)
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import { applyNoiseReduction, isNoiseReductionActive } from '../../filters/NoiseReduction';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 
-function extractParams(params: Record<string, unknown>): NoiseReductionParams {
+function extractParams(params: EffectParams): NoiseReductionParams {
   return {
     strength: (params['noiseReductionStrength'] as number) ?? 0,
     luminanceStrength: (params['noiseReductionLuminanceStrength'] as number) ?? 50,
@@ -27,11 +27,11 @@ export const noiseReductionEffect: ImageEffect = {
   label: 'Noise Reduction',
   category: 'spatial',
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     applyNoiseReduction(imageData, extractParams(params));
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     return isNoiseReductionActive(extractParams(params));
   },
 };

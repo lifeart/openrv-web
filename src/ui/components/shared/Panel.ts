@@ -6,7 +6,7 @@
 
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../../utils/ui/OutsideClickRegistry';
 import { getIconSvg } from './Icons';
-import { SHADOWS } from './theme';
+import { SHADOWS, Z_INDEX } from './theme';
 
 export type PanelVisibilityListener = (visible: boolean) => void;
 
@@ -40,7 +40,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
     width: ${width};
     max-width: calc(100vw - 16px);
     max-height: ${maxHeight};
-    z-index: 9999;
+    z-index: ${Z_INDEX.dropdown};
     display: none;
     box-shadow: ${SHADOWS.panel};
     overflow-y: auto;

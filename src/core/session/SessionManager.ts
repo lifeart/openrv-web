@@ -17,6 +17,9 @@ import { resetNodeIdCounter } from '../../nodes/base/IPNode';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 import { BaseGroupNode } from '../../nodes/groups/BaseGroupNode';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('SessionManager');
 export interface SessionManagerEvents extends EventMap {
   viewNodeChanged: { nodeId: string };
   graphStructureChanged: void;
@@ -243,8 +246,13 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         for (const child of children) {
           try {
             graph.connect(child, parent);
-          } catch {
+          } catch (error) {
             // Cycle detection may prevent some re-parenting
+            logger.debug('reparent: graph.connect skipped (cycle or invalid)', {
+              childId: child.id,
+              parentId: parent.id,
+              error,
+            });
           }
         }
       }
@@ -435,7 +443,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
     // Log warnings
     for (const warning of warnings) {
-      console.warn(`[SessionManager] ${warning}`);
+      logger.warn(`[SessionManager] ${warning}`);
     }
 
     this._emitStructureChanged();

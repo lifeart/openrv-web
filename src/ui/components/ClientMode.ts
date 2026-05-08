@@ -10,6 +10,9 @@
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ClientMode');
 
 /** Source that triggered the client mode state change */
 export type ClientModeSource = 'url' | 'api';
@@ -197,8 +200,9 @@ export class ClientMode extends EventEmitter<ClientModeEvents> {
           }
         }
       }
-    } catch {
+    } catch (error) {
       // SSR or restricted environment — silently ignore
+      logger.debug('client-mode URL check skipped (SSR or restricted env)', { error });
     }
   }
 

@@ -20,7 +20,11 @@ import { rgbToHsl as rgbToHslFloat } from '../../utils/color';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { displayToSourceCoordinates } from './ViewerInteraction';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('PixelProbe');
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
   valueCopied: string;
@@ -178,12 +182,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 10px;
-      z-index: 9998;
+      z-index: ${Z_INDEX.pixelProbe};
       display: none;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 11px;
       color: var(--text-primary);
-      min-width: 200px;
+      min-width: ${PANEL_WIDTHS.menu};
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
       pointer-events: auto;
     `;
@@ -686,7 +690,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.isRenderedFallback = wantsSource && !hasSourceData;
 
     if (this.isRenderedFallback && !this.renderedFallbackWarned) {
-      console.warn(
+      logger.warn(
         'PixelProbe: Source mode active but no source image data available. Displaying rendered values as fallback.',
       );
       this.renderedFallbackWarned = true;
@@ -768,7 +772,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.isRenderedFallback = wantsSource && !isSource;
 
     if (this.isRenderedFallback && !this.renderedFallbackWarned) {
-      console.warn(
+      logger.warn(
         'PixelProbe: Source mode active but no source image data available on HDR path. Displaying rendered values as fallback.',
       );
       this.renderedFallbackWarned = true;
@@ -983,7 +987,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         }, 200);
       }
     } catch (err) {
-      console.warn('Failed to copy to clipboard:', err);
+      logger.warn('Failed to copy to clipboard:', err);
       showAlert('Failed to copy value to clipboard. Your browser may have denied clipboard access.', {
         type: 'warning',
         title: 'Clipboard Unavailable',

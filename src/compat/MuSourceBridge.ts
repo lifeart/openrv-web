@@ -26,6 +26,9 @@ import { IPNode } from '../nodes/base/IPNode';
 import type { IPImage } from '../core/image/Image';
 import type { EvalContext } from '../core/graph/Graph';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MuSourceBridge');
 /**
  * Lightweight placeholder node used to materialise media-representation
  * node names inside the graph so they are queryable via `nodeExists()` etc.
@@ -269,7 +272,8 @@ export class MuSourceBridge {
     try {
       const { width, height } = getOpenRV().media.getResolution();
       return [width, height];
-    } catch {
+    } catch (error) {
+      logger.warn('MuSourceBridge:getCurrentImageSize failed', { error });
       return [0, 0];
     }
   }
@@ -378,8 +382,7 @@ export class MuSourceBridge {
     const source = this._getSource(sourceName);
     source.mediaPaths.push(mediaPath);
     this._loadIntoSession([mediaPath]).catch((err) => {
-      // eslint-disable-next-line no-console
-      console.warn('[MuSourceBridge] addToSource session propagation failed:', err);
+      logger.warn('[MuSourceBridge] addToSource session propagation failed:', err);
     });
   }
 
@@ -394,8 +397,7 @@ export class MuSourceBridge {
     const source = this._getSource(sourceName);
     source.mediaPaths = [...paths];
     this._loadIntoSession(paths).catch((err) => {
-      // eslint-disable-next-line no-console
-      console.warn('[MuSourceBridge] setSourceMedia session propagation failed:', err);
+      logger.warn('[MuSourceBridge] setSourceMedia session propagation failed:', err);
     });
   }
 
@@ -414,8 +416,7 @@ export class MuSourceBridge {
       source.mediaPaths.push(newPath);
     }
     this._loadIntoSession([newPath]).catch((err) => {
-      // eslint-disable-next-line no-console
-      console.warn('[MuSourceBridge] relocateSource session propagation failed:', err);
+      logger.warn('[MuSourceBridge] relocateSource session propagation failed:', err);
     });
   }
 
@@ -455,8 +456,8 @@ export class MuSourceBridge {
         fps = current.fps;
         duration = current.duration;
       }
-    } catch {
-      // openrv not available — use local state
+    } catch (error) {
+      logger.warn('MuSourceBridge:sourceMediaInfo enrichment failed (openrv unavailable)', { sourceName, error });
     }
 
     const activePaths = this._getActiveMediaPaths(source);
@@ -649,9 +650,10 @@ export class MuSourceBridge {
       if (api?.media.clearSources) {
         api.media.clearSources();
       }
-    } catch {
-      // eslint-disable-next-line no-console
-      console.warn('[MuSourceBridge] clearSession: real session unavailable, clearing local state only');
+    } catch (error) {
+      logger.warn('MuSourceBridge:clearSession failed (real session unavailable, clearing local state only)', {
+        error,
+      });
     }
 
     // Remove media-rep nodes from the graph before clearing source records
@@ -719,8 +721,7 @@ export class MuSourceBridge {
     const api = tryGetOpenRV();
     if (api && paths.length > 0) {
       this._loadIntoSession(paths).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn('[MuSourceBridge] addSourceMediaRep session propagation failed:', err);
+        logger.warn('[MuSourceBridge] addSourceMediaRep session propagation failed:', err);
       });
     }
 
@@ -753,8 +754,7 @@ export class MuSourceBridge {
     // Propagate to real session — attempt to load the rep's media
     if (rep.mediaPaths.length > 0) {
       this._loadIntoSession(rep.mediaPaths).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn('[MuSourceBridge] setActiveSourceMediaRep session propagation failed:', err);
+        logger.warn('[MuSourceBridge] setActiveSourceMediaRep session propagation failed:', err);
       });
     }
   }
@@ -926,8 +926,8 @@ export class MuSourceBridge {
         }
       }
       return current;
-    } catch {
-      // openrv not available
+    } catch (error) {
+      logger.warn('MuSourceBridge:ensureFallbackSourceRegistered failed (openrv unavailable)', { error });
       return undefined;
     }
   }
@@ -1007,8 +1007,7 @@ export class MuSourceBridge {
         }
         // Local file paths cannot be loaded in the browser; shadow-only.
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn(`[MuSourceBridge] Failed to load "${path}" into session:`, err);
+        logger.warn(`[MuSourceBridge] Failed to load "${path}" into session:`, err);
       }
     }
   }

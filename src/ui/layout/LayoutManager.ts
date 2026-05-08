@@ -20,6 +20,7 @@ import {
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from '../components/shared/Icons';
 import { createIconButton } from '../components/shared/Button';
+import { Z_INDEX } from '../components/shared/theme';
 
 export interface LayoutManagerEvents extends EventMap {
   /** Emitted after layout DOM is updated so viewer can resize. */
@@ -293,7 +294,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
         opacity: 0.2;
         flex-shrink: 0;
         position: relative;
-        z-index: 10;
+        z-index: ${Z_INDEX.localStackHigh};
       `
       : `
         width: 5px;
@@ -302,7 +303,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
         opacity: 0.2;
         flex-shrink: 0;
         position: relative;
-        z-index: 10;
+        z-index: ${Z_INDEX.localStackHigh};
       `;
 
     // Visual indicator on hover

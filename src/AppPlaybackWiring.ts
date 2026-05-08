@@ -27,7 +27,9 @@ import {
 } from './export/VideoExporter';
 import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
-import { showAlert, showAnnotationImportDialog } from './ui/components/shared/Modal';
+import { showAlert, showAnnotationImportDialog, showModal } from './ui/components/shared/Modal';
+import { createButton } from './ui/components/shared/Button';
+import { PANEL_WIDTHS } from './ui/components/shared/theme';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
 import {
@@ -395,27 +397,24 @@ async function handleSequenceExport(
   const sourceName = source.name?.replace(/\.[^/.]+$/, '') || 'frame';
   const padLength = String(endFrame).length < 4 ? 4 : String(endFrame).length;
 
-  // Create progress dialog
-  const progressDialog = document.createElement('div');
-  progressDialog.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
-    border-radius: 8px;
-    padding: 24px;
-    z-index: 10000;
-    min-width: 300px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  `;
+  // Build progress dialog body. The Modal wrapper owns the backdrop, focus
+  // trap, ARIA attributes, and z-index — we only supply the content.
+  const cancellationToken = { cancelled: false };
+
+  const progressBody = document.createElement('div');
+  progressBody.style.cssText = `min-width: ${PANEL_WIDTHS.panel};`;
 
   const progressText = document.createElement('div');
+  progressText.setAttribute('role', 'status');
+  progressText.setAttribute('aria-live', 'polite');
   progressText.style.cssText = 'color: var(--text-primary); margin-bottom: 12px; font-size: 14px;';
   progressText.textContent = `Exporting frames 0/${totalFrames}...`;
 
   const progressBar = document.createElement('div');
+  progressBar.setAttribute('role', 'progressbar');
+  progressBar.setAttribute('aria-valuemin', '0');
+  progressBar.setAttribute('aria-valuemax', '100');
+  progressBar.setAttribute('aria-valuenow', '0');
   progressBar.style.cssText = `
     height: 8px;
     background: var(--border-primary);
@@ -433,29 +432,25 @@ async function handleSequenceExport(
   `;
   progressBar.appendChild(progressFill);
 
-  const cancelButton = document.createElement('button');
-  cancelButton.textContent = 'Cancel';
-  cancelButton.style.cssText = `
-    background: var(--bg-active);
-    border: 1px solid var(--border-primary);
-    color: var(--text-primary);
-    padding: 8px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    width: 100%;
-  `;
+  const cancelButton = createButton(
+    'Cancel',
+    () => {
+      cancellationToken.cancelled = true;
+      cancelButton.textContent = 'Cancelling...';
+      cancelButton.disabled = true;
+    },
+    { variant: 'default', minWidth: '100%' },
+  );
+  cancelButton.style.width = '100%';
 
-  const cancellationToken = { cancelled: false };
-  cancelButton.addEventListener('click', () => {
-    cancellationToken.cancelled = true;
-    cancelButton.textContent = 'Cancelling...';
-    cancelButton.disabled = true;
-  });
+  progressBody.appendChild(progressText);
+  progressBody.appendChild(progressBar);
+  progressBody.appendChild(cancelButton);
 
-  progressDialog.appendChild(progressText);
-  progressDialog.appendChild(progressBar);
-  progressDialog.appendChild(cancelButton);
-  document.body.appendChild(progressDialog);
+  // closable: false — only the Cancel button can dismiss the dialog. This
+  // preserves the legacy behavior where Escape did nothing during export and
+  // ensures the export task can drive teardown explicitly when it finishes.
+  const modalHandle = showModal(progressBody, { title: 'Export Frames', closable: false, width: '360px' });
 
   // Store current frame to restore later
   const originalFrame = session.currentFrame;
@@ -485,6 +480,7 @@ async function handleSequenceExport(
       (progress) => {
         progressText.textContent = `Exporting frames ${progress.currentFrame - startFrame + 1}/${totalFrames}...`;
         progressFill.style.width = `${progress.percent}%`;
+        progressBar.setAttribute('aria-valuenow', String(Math.round(progress.percent)));
       },
       cancellationToken,
     );
@@ -492,8 +488,8 @@ async function handleSequenceExport(
     // Restore original frame
     session.goToFrame(originalFrame);
 
-    // Remove progress dialog
-    document.body.removeChild(progressDialog);
+    // Close progress dialog
+    modalHandle.close();
 
     // Show result
     if (result.success) {
@@ -507,10 +503,8 @@ async function handleSequenceExport(
     // Restore original frame
     session.goToFrame(originalFrame);
 
-    // Remove progress dialog
-    if (document.body.contains(progressDialog)) {
-      document.body.removeChild(progressDialog);
-    }
+    // Close progress dialog
+    modalHandle.close();
 
     showAlert(`Export error: ${err}`, { type: 'error', title: 'Export Error' });
   }

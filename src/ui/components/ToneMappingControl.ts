@@ -9,7 +9,9 @@
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
-import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { createButton, setButtonActive } from './shared/Button';
+import { createPanel, type Panel } from './shared/Panel';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import type { DisplayCapabilities } from '../../color/ColorProcessingFacade';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
@@ -42,6 +44,7 @@ export interface ToneMappingControlEvents extends EventMap {
  */
 export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private container: HTMLElement;
+  private dropdownPanel: Panel;
   private dropdown: HTMLElement;
   private isDropdownOpen = false;
   private toggleButton: HTMLButtonElement;
@@ -75,70 +78,47 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       align-items: center;
     `;
 
-    // Create toggle button
-    this.toggleButton = document.createElement('button');
+    // Create toggle button via shared createButton (icon variant). Override
+    // base color to `text-muted` so existing TONE-U021 cssText assertion
+    // continues to pass (icon variant defaults to `text-secondary`).
+    const iconHtml = `${getIconSvg('sun', 'sm')} <span>Tone Map</span> ${getIconSvg('chevron-down', 'sm')}`;
+    this.toggleButton = createButton('', () => this.toggleDropdown(), {
+      variant: 'icon',
+      title: 'Tone mapping for HDR content (Shift+Alt+J)',
+    });
     this.toggleButton.className = 'tone-mapping-toggle';
     this.toggleButton.dataset.testid = 'tone-mapping-control-button';
-    this.toggleButton.innerHTML = `${getIconSvg('sun', 'sm')} <span>Tone Map</span> ${getIconSvg('chevron-down', 'sm')}`;
-    this.toggleButton.title = 'Tone mapping for HDR content (Shift+Alt+J)';
+    this.toggleButton.innerHTML = iconHtml;
     this.toggleButton.setAttribute('aria-label', 'Tone mapping options');
     this.toggleButton.setAttribute('aria-haspopup', 'menu');
     this.toggleButton.setAttribute('aria-expanded', 'false');
     this.toggleButton.setAttribute('aria-pressed', 'false');
-    this.toggleButton.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 6px 10px;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    `;
-
-    this.toggleButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleDropdown();
-    });
-
-    this.toggleButton.addEventListener('pointerenter', () => {
-      if (!this.state.enabled) {
-        this.toggleButton.style.background = 'var(--bg-hover)';
-        this.toggleButton.style.borderColor = 'var(--border-primary)';
-        this.toggleButton.style.color = 'var(--text-primary)';
-      }
-    });
-
-    this.toggleButton.addEventListener('pointerleave', () => {
-      if (!this.state.enabled) {
-        this.toggleButton.style.background = 'transparent';
-        this.toggleButton.style.borderColor = 'transparent';
-        this.toggleButton.style.color = 'var(--text-muted)';
-      }
-    });
+    // Override variant base color to `text-muted` and tune padding/gap.
+    this.toggleButton.style.color = 'var(--text-muted)';
+    this.toggleButton.style.padding = '6px 10px';
+    this.toggleButton.style.gap = '4px';
+    this.toggleButton.style.fontSize = '12px';
 
     this.container.appendChild(this.toggleButton);
 
-    // Create dropdown panel
-    this.dropdown = document.createElement('div');
-    this.dropdown.className = 'tone-mapping-dropdown';
+    // Create dropdown via shared createPanel for consistent z-index + chrome.
+    // We don't drive show/hide through the panel handle because the existing
+    // dropdown uses custom flip-up positioning + viewport clamping that
+    // shared/Panel.show doesn't replicate. We just take the styled element.
+    this.dropdownPanel = createPanel({ width: PANEL_WIDTHS.narrow });
+    this.dropdown = this.dropdownPanel.element;
+    this.dropdown.classList.add('tone-mapping-dropdown');
     this.dropdown.dataset.testid = 'tone-mapping-dropdown';
     this.dropdown.setAttribute('role', 'menu');
     this.dropdown.setAttribute('aria-label', 'Tone mapping operators');
-    this.dropdown.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 4px;
-      padding: 8px;
-      min-width: ${PANEL_WIDTHS.narrow};
-      z-index: 9999;
-      display: none;
-      box-shadow: ${SHADOWS.dropdown};
-    `;
+    // Override panel padding/border-radius for the dropdown variant.
+    this.dropdown.style.borderRadius = '4px';
+    this.dropdown.style.padding = '8px';
+    this.dropdown.style.boxShadow = SHADOWS.dropdown;
+    this.dropdown.style.zIndex = String(Z_INDEX.dropdown);
+    // Confirm width is narrow (createPanel sets it but be explicit).
+    this.dropdown.style.width = '';
+    this.dropdown.style.minWidth = PANEL_WIDTHS.narrow;
 
     this.createDropdownContent();
   }
@@ -597,6 +577,9 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private updateButtonState(): void {
     const enabled = this.state.enabled && this.state.operator !== 'off';
     this.toggleButton.setAttribute('aria-pressed', String(enabled));
+    // Toggle the 'active' class so createButton's hover/leave handlers
+    // respect the active state and don't override it on pointerleave.
+    setButtonActive(this.toggleButton, enabled, 'icon');
     if (enabled) {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
@@ -858,9 +841,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     this.deregisterDismiss = null;
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
-    if (document.body.contains(this.dropdown)) {
-      document.body.removeChild(this.dropdown);
-    }
+    this.dropdownPanel.dispose();
     this.operatorButtons.clear();
     this.hdrModeButtons.clear();
   }

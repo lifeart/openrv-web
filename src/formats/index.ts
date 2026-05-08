@@ -17,7 +17,7 @@ export {
   decodeEXRView,
   mapChannelsToViews,
   type EXRViewInfo,
-} from './MultiViewEXR';
+} from './MultiViewEXRDecoder';
 export { cineonLogToLinear, dpxLogToLinear, type LogLinearOptions } from './LogLinear';
 export {
   isDPXFile,
@@ -128,4 +128,4 @@ export {
   type MXFDemuxResult,
   type KLVTriplet,
 } from './MXFDemuxer';
-export { isAvifFile, decodeAvif } from './avif';
+export { isAvifFile, decodeAvif } from './AVIFDecoder';

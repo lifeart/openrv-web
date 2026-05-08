@@ -18,7 +18,11 @@ import {
 import { getIconSvg } from './shared/Icons';
 import { createButton } from './shared/Button';
 import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('CurvesControl');
 interface CurvesControlEvents extends EventMap {
   curvesChanged: ColorCurvesData;
   visibilityChanged: boolean;
@@ -39,14 +43,14 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
       id: 'curves-control',
       title: 'Color Curves',
       initialPosition: { top: '10px', left: '10px' },
-      zIndex: 100,
+      zIndex: Z_INDEX.viewerOverlayHigh,
       onClose: () => this.hide(),
       testId: 'curves-control', // Maintain backward compatibility with existing tests
     });
 
     // Style the container for curves panel
     this.draggableContainer.element.style.cssText += `
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     `;
 
@@ -228,11 +232,11 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
           this.setCurves(curves);
           this.clearImportError();
         } else {
-          console.error('Invalid curves JSON file');
+          logger.error('Invalid curves JSON file');
           this.showImportError('Invalid curves JSON file');
         }
       } catch (err) {
-        console.error('Failed to import curves:', err);
+        logger.error('Failed to import curves:', err);
         this.showImportError('Failed to import curves');
       }
     });

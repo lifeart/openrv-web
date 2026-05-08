@@ -9,6 +9,9 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { WatermarkOverlay, type WatermarkState, type WatermarkPosition } from './WatermarkOverlay';
 import { getIconSvg } from './shared/Icons';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('WatermarkControl');
 export interface WatermarkControlEvents extends EventMap {
   stateChanged: WatermarkState;
   imageLoaded: { width: number; height: number };
@@ -445,7 +448,7 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
       await this.overlay.loadImage(file);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[WatermarkControl] Failed to load watermark image: ${message}`);
+      logger.warn(`[WatermarkControl] Failed to load watermark image: ${message}`);
 
       // Show error feedback in the preview area
       this.previewContainer.style.display = 'flex';

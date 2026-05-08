@@ -27,6 +27,9 @@ import { validateImageDimensions } from './shared';
 // Constants
 // ---------------------------------------------------------------------------
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('JP2Decoder');
 /** JP2 signature box type bytes: "jP  " (0x6A, 0x50, 0x20, 0x20) */
 const JP2_SIGNATURE = [0x6a, 0x50, 0x20, 0x20] as const;
 
@@ -174,7 +177,7 @@ function findCodestreamOffset(buffer: ArrayBuffer): number {
       const hiLen = view.getUint32(offset + 8, false);
       const loLen = view.getUint32(offset + 12, false);
       if (hiLen !== 0) {
-        console.warn(
+        logger.warn(
           `JP2 box '${boxType}' has extended length with high 32 bits = ${hiLen}; >4 GB boxes are not supported by this parser`,
         );
         break;

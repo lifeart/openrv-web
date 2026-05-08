@@ -7,6 +7,9 @@
 
 import type { SettingsValue } from './types';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MuSettingsBridge');
 /** Prefix for all settings keys in localStorage */
 const SETTINGS_PREFIX = 'openrv-setting:';
 
@@ -31,7 +34,8 @@ export class MuSettingsBridge {
 
       const parsed: unknown = JSON.parse(raw);
       return this.validateSettingsValue(parsed, defaultValue);
-    } catch {
+    } catch (error) {
+      logger.warn('MuSettingsBridge:readSetting failed', { storageKey, error });
       return defaultValue;
     }
   }
@@ -50,7 +54,7 @@ export class MuSettingsBridge {
     try {
       localStorage.setItem(storageKey, JSON.stringify(value));
     } catch (err) {
-      console.warn(`[MuSettingsBridge] Failed to write setting "${storageKey}":`, err);
+      logger.warn(`[MuSettingsBridge] Failed to write setting "${storageKey}":`, err);
     }
   }
 
@@ -60,7 +64,8 @@ export class MuSettingsBridge {
   hasSetting(group: string, key: string): boolean {
     try {
       return localStorage.getItem(this.makeKey(group, key)) !== null;
-    } catch {
+    } catch (error) {
+      logger.warn('MuSettingsBridge:hasSetting failed', { group, key, error });
       return false;
     }
   }
@@ -71,8 +76,8 @@ export class MuSettingsBridge {
   removeSetting(group: string, key: string): void {
     try {
       localStorage.removeItem(this.makeKey(group, key));
-    } catch {
-      // no-op in blocked-storage environments
+    } catch (error) {
+      logger.warn('MuSettingsBridge:removeSetting failed', { group, key, error });
     }
   }
 
@@ -90,7 +95,8 @@ export class MuSettingsBridge {
           keys.push(key.slice(prefix.length));
         }
       }
-    } catch {
+    } catch (error) {
+      logger.warn('MuSettingsBridge:listSettings failed', { group, error });
       return [];
     }
 
@@ -115,8 +121,8 @@ export class MuSettingsBridge {
       for (const key of keysToRemove) {
         localStorage.removeItem(key);
       }
-    } catch {
-      // no-op in blocked-storage environments
+    } catch (error) {
+      logger.warn('MuSettingsBridge:clearGroup failed', { group, error });
     }
   }
 
@@ -137,8 +143,8 @@ export class MuSettingsBridge {
       for (const key of keysToRemove) {
         localStorage.removeItem(key);
       }
-    } catch {
-      // no-op in blocked-storage environments
+    } catch (error) {
+      logger.warn('MuSettingsBridge:clearAll failed', { error });
     }
   }
 

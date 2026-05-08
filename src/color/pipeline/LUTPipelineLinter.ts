@@ -30,6 +30,9 @@
 import type { ImageMetadata, TransferFunction } from '../../core/image/Image';
 import type { LUTPipeline, StageKind } from './LUTPipeline';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('LUTPipelineLinter');
 export type LintSeverity = 'info' | 'warn' | 'error';
 
 export interface LintReport {
@@ -170,7 +173,7 @@ export function createLUTPipelineLinter(pipeline: LUTPipeline): LUTPipelineLinte
         // Re-throwing would break other subscribers; logging is the
         // intended behavior per the EventEmitter pattern used elsewhere
         // in this codebase. (Not a silent swallow — surfaced via console.)
-        console.error('[lutPipelineLinter] onReportsChanged callback error:', err);
+        logger.error('[lutPipelineLinter] onReportsChanged callback error:', err);
       }
     }
   };

@@ -12,7 +12,7 @@
  *   effectRegistry.applyAll(imageData, params);
  */
 
-import type { EffectCategory, ImageEffect } from './ImageEffect';
+import type { EffectCategory, ImageEffect, EffectParams } from './ImageEffect';
 
 export class EffectRegistry {
   /** Effects stored in registration order. */
@@ -72,7 +72,7 @@ export class EffectRegistry {
    * Apply every *active* effect to the ImageData buffer, in registration
    * order.  Effects whose `isActive(params)` returns false are skipped.
    */
-  applyAll(imageData: ImageData, params: Record<string, unknown>): void {
+  applyAll(imageData: ImageData, params: EffectParams): void {
     for (const effect of this.effects.values()) {
       if (effect.isActive(params)) {
         effect.apply(imageData, params);
@@ -83,7 +83,7 @@ export class EffectRegistry {
   /**
    * Apply only the active effects from a specific category.
    */
-  applyByCategory(category: EffectCategory, imageData: ImageData, params: Record<string, unknown>): void {
+  applyByCategory(category: EffectCategory, imageData: ImageData, params: EffectParams): void {
     for (const effect of this.effects.values()) {
       if (effect.category === category && effect.isActive(params)) {
         effect.apply(imageData, params);

@@ -13,6 +13,7 @@
 import { type Session } from '../../core/session/Session';
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { frameToTimecode, formatTimecode } from './TimecodeDisplay';
+import { Z_INDEX } from './shared/theme';
 
 export type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -80,7 +81,7 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
     this.container.dataset.testid = 'timecode-overlay';
     this.container.style.cssText = `
       position: absolute;
-      z-index: 50;
+      z-index: ${Z_INDEX.viewerOverlay};
       display: none;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       user-select: none;

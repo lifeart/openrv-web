@@ -8,6 +8,7 @@
 
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
+import type { ViewerAccessor } from './core/viewer/ViewerAccessor';
 import type { PaintEngine } from './paint/PaintEngine';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { SessionGTOExporter } from './core/session/SessionGTOExporter';
@@ -29,6 +30,9 @@ import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
 
+import { Logger } from './utils/Logger';
+
+const logger = new Logger('AppPersistenceManager');
 /**
  * Context interface for dependencies needed by the persistence manager.
  */
@@ -107,7 +111,7 @@ export class AppPersistenceManager {
    */
   private getSessionLabel(): string {
     const { session } = this.ctx;
-    const displayName = (session as any).metadata?.displayName;
+    const displayName = session.metadata?.displayName;
     if (displayName) return displayName;
     return session.currentSource?.name || 'Untitled';
   }
@@ -152,7 +156,7 @@ export class AppPersistenceManager {
       );
       autoSaveManager.saveNow(state);
     } catch (err) {
-      console.error('Failed to retry auto-save:', err);
+      logger.error('Failed to retry auto-save:', err);
     }
   }
 
@@ -177,7 +181,7 @@ export class AppPersistenceManager {
       await snapshotManager.createSnapshot(resolvedName, state, description);
       showAlert(`Snapshot "${resolvedName}" created`, { type: 'success', title: 'Snapshot Created' });
     } catch (err) {
-      console.error('Failed to create snapshot:', err);
+      logger.error('Failed to create snapshot:', err);
       showAlert(`Failed to create snapshot: ${err}`, { type: 'error', title: 'Snapshot Error' });
     }
   }
@@ -209,7 +213,7 @@ export class AppPersistenceManager {
       await snapshotManager.createAutoCheckpoint(event, state);
       return true;
     } catch (err) {
-      console.error('Failed to create auto-checkpoint:', err);
+      logger.error('Failed to create auto-checkpoint:', err);
       return false;
     }
   }
@@ -319,48 +323,34 @@ export class AppPersistenceManager {
       const metadata = await snapshotManager.getSnapshotMetadata(id);
       showAlert(`Restored "${metadata?.name || 'snapshot'}"`, { type: 'success', title: 'Snapshot Restored' });
     } catch (err) {
-      console.error('Failed to restore snapshot:', err);
+      logger.error('Failed to restore snapshot:', err);
       showAlert(`Failed to restore snapshot: ${err}`, { type: 'error', title: 'Restore Error' });
     }
   }
 
   /**
    * Detect active serialization gaps and return warning messages.
+   *
+   * Reads only the persistence-relevant slice of viewer state via the
+   * `ViewerAccessor` contract. The Viewer class implements this interface,
+   * so the methods are guaranteed to exist with matching signatures.
    */
   private getSerializationGapWarnings(): string[] {
-    const { viewer } = this.ctx;
+    const viewer: ViewerAccessor = this.ctx.viewer;
     const warnings: string[] = [];
 
-    try {
-      const toneMapping = (viewer as any).getToneMappingState?.();
-      if (toneMapping && toneMapping.enabled && toneMapping.operator !== 'off') {
-        warnings.push('Tone mapping settings are active but may not be fully preserved in the saved project.');
-      }
-    } catch {
-      // ignore
+    const toneMapping = viewer.getToneMappingState();
+    if (toneMapping.enabled && toneMapping.operator !== 'off') {
+      warnings.push('Tone mapping settings are active but may not be fully preserved in the saved project.');
     }
 
-    try {
-      const ocio = (viewer as any).isOCIOEnabled?.();
-      if (ocio) {
-        warnings.push('OCIO color management is active but cannot be serialized.');
-      }
-    } catch {
-      // ignore
+    if (viewer.isOCIOEnabled()) {
+      warnings.push('OCIO color management is active but cannot be serialized.');
     }
 
-    try {
-      const displayColor = (viewer as any).getDisplayColorState?.();
-      if (
-        displayColor &&
-        displayColor.transferFunction &&
-        displayColor.transferFunction !== 'srgb' &&
-        displayColor.transferFunction !== 'sRGB'
-      ) {
-        warnings.push('Custom display color settings may not be fully preserved.');
-      }
-    } catch {
-      // ignore
+    const displayColor = viewer.getDisplayColorState();
+    if (displayColor.transferFunction && displayColor.transferFunction !== 'srgb') {
+      warnings.push('Custom display color settings may not be fully preserved.');
     }
 
     return warnings;
@@ -372,7 +362,7 @@ export class AppPersistenceManager {
   async saveProject(): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     try {
-      const displayName = (session as any).metadata?.displayName;
+      const displayName = session.metadata?.displayName;
       const name = displayName || 'project';
       const state = SessionSerializer.toJSON(
         {
@@ -406,7 +396,7 @@ export class AppPersistenceManager {
   async saveRvSession(format: 'rv' | 'gto'): Promise<void> {
     const { session, paintEngine } = this.ctx;
     try {
-      const displayName = (session as any).metadata?.displayName;
+      const displayName = session.metadata?.displayName;
       const sourceName = session.currentSource?.name;
       const base = displayName || sourceName || 'session';
       const filename = `${base}.${format}`;
@@ -491,7 +481,7 @@ export class AppPersistenceManager {
     try {
       await this.ctx.snapshotManager.initialize();
     } catch (err) {
-      console.error('Snapshot manager initialization failed:', err);
+      logger.error('Snapshot manager initialization failed:', err);
     }
   }
 
@@ -535,15 +525,13 @@ export class AppPersistenceManager {
       await autoSaveManager.initialize();
       // Recovery is handled by the 'recoveryAvailable' event listener above
     } catch (err) {
-      console.error('Auto-save initialization failed:', err);
+      logger.error('Auto-save initialization failed:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       showAlert(
         `Auto-save could not be initialized: ${errorMessage}. Your work will not be automatically saved. Use the Save button in the toolbar to save manually.`,
         { type: 'warning', title: 'Auto-Save Unavailable' },
       );
-      if (typeof (autoSaveIndicator as any).setStatus === 'function') {
-        (autoSaveIndicator as any).setStatus('disabled');
-      }
+      autoSaveIndicator.setStatus('disabled');
     }
   }
 

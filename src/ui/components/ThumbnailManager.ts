@@ -11,6 +11,9 @@
 import { type Session } from '../../core/session/Session';
 import { LRUCache } from '../../utils/LRUCache';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ThumbnailManager');
 export interface ThumbnailSlot {
   frame: number;
   x: number;
@@ -89,7 +92,7 @@ export class ThumbnailManager {
     // Restart loading for visible range
     if (this.slots.length > 0 && this.sourceId) {
       this.loadThumbnails().catch((err) => {
-        console.warn('Failed to resume thumbnail loading:', err);
+        logger.warn('Failed to resume thumbnail loading:', err);
       });
     }
   }
@@ -301,7 +304,7 @@ export class ThumbnailManager {
       }
     } catch (error) {
       if (!signal.aborted) {
-        console.warn(`Failed to load thumbnail for frame ${frame}:`, error);
+        logger.warn(`Failed to load thumbnail for frame ${frame}:`, error);
       }
     }
   }

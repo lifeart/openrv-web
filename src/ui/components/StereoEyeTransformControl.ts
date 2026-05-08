@@ -16,6 +16,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import {
   type StereoEyeTransformState,
   DEFAULT_EYE_TRANSFORM,
@@ -109,10 +110,10 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
       border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 0;
-      z-index: 9999;
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
-      min-width: 420px;
+      min-width: ${PANEL_WIDTHS.dialogWide};
       max-height: 80vh;
       overflow-y: auto;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);

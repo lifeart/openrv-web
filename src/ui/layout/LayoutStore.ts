@@ -11,6 +11,9 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 // Types
 // ---------------------------------------------------------------------------
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('LayoutStore');
 export type PanelId = 'left' | 'right' | 'bottom';
 
 export interface PanelState {
@@ -329,8 +332,9 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
         list.push(name);
         localStorage.setItem(LAYOUT_CUSTOM_LIST_KEY, JSON.stringify(list));
       }
-    } catch {
+    } catch (error) {
       // localStorage unavailable
+      logger.debug('saveCustomLayout failed; localStorage unavailable', { error });
     }
   }
 
@@ -345,8 +349,9 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
         this.notifyAndSave();
         return true;
       }
-    } catch {
+    } catch (error) {
       // Invalid data
+      logger.debug('loadCustomLayout failed; invalid data', { name, error });
     }
     return false;
   }
@@ -357,8 +362,9 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
       localStorage.removeItem(key);
       const list = this.getCustomLayoutNames().filter((n) => n !== name);
       localStorage.setItem(LAYOUT_CUSTOM_LIST_KEY, JSON.stringify(list));
-    } catch {
+    } catch (error) {
       // localStorage unavailable
+      logger.debug('deleteCustomLayout failed; localStorage unavailable', { error });
     }
   }
 
@@ -382,10 +388,10 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
       if (this.validateLayoutData(data)) {
         return this.migrateIfNeeded(data);
       }
-      console.warn('Invalid layout data, using defaults');
+      logger.warn('Invalid layout data, using defaults');
       return defaultLayout();
     } catch {
-      console.warn('Invalid layout data, using defaults');
+      logger.warn('Invalid layout data, using defaults');
       return defaultLayout();
     }
   }
@@ -393,8 +399,9 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
   private saveToStorage(): void {
     try {
       localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(this._layout));
-    } catch {
+    } catch (error) {
       // localStorage unavailable or quota exceeded
+      logger.debug('saveToStorage failed', { error });
     }
   }
 

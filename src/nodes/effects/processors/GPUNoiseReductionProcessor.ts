@@ -3,6 +3,7 @@ import type { IPImage } from '../../../core/image/Image';
 import type { EvalContext } from '../../../core/graph/Graph';
 import { WebGLNoiseReductionProcessor } from '../../../filters/WebGLNoiseReduction';
 import type { NoiseReductionParams } from '../../../filters/NoiseReduction';
+import { probe } from '../../../utils/probe';
 
 /** Minimal interface for reading noise reduction parameters from the owning node. */
 interface NoiseReductionParamsProvider {
@@ -21,12 +22,12 @@ export class GPUNoiseReductionProcessor implements NodeProcessor {
   private gpuProcessor: WebGLNoiseReductionProcessor | null = null;
 
   constructor(private readonly params: NoiseReductionParamsProvider) {
-    try {
-      const canvas = document.createElement('canvas');
-      this.gpuProcessor = new WebGLNoiseReductionProcessor(canvas);
-    } catch {
-      // GPU not available -- node will use its built-in CPU path
-    }
+    // GPU may be unavailable -- node will use its built-in CPU path.
+    this.gpuProcessor =
+      probe('GPUNoiseReductionProcessor.init', () => {
+        const canvas = document.createElement('canvas');
+        return new WebGLNoiseReductionProcessor(canvas);
+      }) ?? null;
   }
 
   isReady(): boolean {

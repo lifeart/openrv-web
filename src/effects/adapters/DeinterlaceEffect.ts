@@ -8,7 +8,7 @@
  *   deinterlaceFieldOrder: 'tff' | 'bff'  (default 'tff')
  */
 
-import type { ImageEffect } from '../ImageEffect';
+import type { ImageEffect, EffectParams } from '../ImageEffect';
 import { applyDeinterlace, isDeinterlaceActive } from '../../filters/Deinterlace';
 import type { DeinterlaceMethod, FieldOrder } from '../../filters/Deinterlace';
 
@@ -17,7 +17,7 @@ export const deinterlaceEffect: ImageEffect = {
   label: 'Deinterlace',
   category: 'spatial',
 
-  apply(imageData: ImageData, params: Record<string, unknown>): void {
+  apply(imageData: ImageData, params: EffectParams): void {
     applyDeinterlace(imageData, {
       enabled: (params['deinterlaceEnabled'] as boolean) ?? false,
       method: (params['deinterlaceMethod'] as DeinterlaceMethod) ?? 'bob',
@@ -25,7 +25,7 @@ export const deinterlaceEffect: ImageEffect = {
     });
   },
 
-  isActive(params: Record<string, unknown>): boolean {
+  isActive(params: EffectParams): boolean {
     return isDeinterlaceActive({
       enabled: (params['deinterlaceEnabled'] as boolean) ?? false,
       method: (params['deinterlaceMethod'] as DeinterlaceMethod) ?? 'bob',

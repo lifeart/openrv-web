@@ -7,6 +7,9 @@
 
 import type { MuHttpResponse, RemoteConnectionInfo } from './types';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('MuNetworkBridge');
 export class MuNetworkBridge {
   /** Active WebSocket connections by ID */
   private connections = new Map<string, WebSocket>();
@@ -116,7 +119,7 @@ export class MuNetworkBridge {
    */
   remoteConnect(name: string, host: string, port: number): void {
     if (!this.networkEnabled) {
-      console.warn('[MuNetworkBridge] Remote networking is not enabled. Call remoteNetwork(true) first.');
+      logger.warn('[MuNetworkBridge] Remote networking is not enabled. Call remoteNetwork(true) first.');
       return;
     }
 
@@ -137,7 +140,7 @@ export class MuNetworkBridge {
 
       const id = url;
       if (this.connections.has(id)) {
-        console.warn(`[MuNetworkBridge] Already connected to ${id}`);
+        logger.warn(`[MuNetworkBridge] Already connected to ${id}`);
         return;
       }
 
@@ -185,10 +188,10 @@ export class MuNetworkBridge {
       });
 
       ws.addEventListener('error', (e) => {
-        console.error(`[MuNetworkBridge] WebSocket error for ${id}:`, e);
+        logger.error(`[MuNetworkBridge] WebSocket error for ${id}:`, e);
       });
     } catch (err) {
-      console.error(`[MuNetworkBridge] Failed to connect to ${host}:${port}:`, err);
+      logger.error(`[MuNetworkBridge] Failed to connect to ${host}:${port}:`, err);
     }
   }
 
@@ -217,7 +220,7 @@ export class MuNetworkBridge {
   remoteSendMessage(connectionId: string, messages: string[]): void {
     const ws = this.connections.get(connectionId);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      console.warn(`[MuNetworkBridge] No open connection for ${connectionId}`);
+      logger.warn(`[MuNetworkBridge] No open connection for ${connectionId}`);
       return;
     }
     ws.send(
@@ -455,7 +458,7 @@ export class MuNetworkBridge {
       const msg = JSON.parse(event.data);
       // Enforce permission: 0 = none → reject non-handshake messages
       if (this.defaultPermission === 0 && msg.type !== 'handshake') {
-        console.warn(
+        logger.warn(
           `[MuNetworkBridge] Rejecting incoming "${msg.type}" from ${connectionId}: permission is "none" (0)`,
         );
         return;
@@ -465,7 +468,7 @@ export class MuNetworkBridge {
         this.defaultPermission === 1 &&
         (msg.type === 'message' || msg.type === 'event' || msg.type === 'dataEvent')
       ) {
-        console.warn(
+        logger.warn(
           `[MuNetworkBridge] Rejecting incoming "${msg.type}" from ${connectionId}: permission is "read" (1)`,
         );
         return;
@@ -525,8 +528,8 @@ export class MuNetworkBridge {
           break;
         }
       }
-    } catch {
-      // Non-JSON text payload — ignore
+    } catch (error) {
+      logger.warn('MuNetworkBridge:handleTextMessage failed (non-JSON payload)', { error });
     }
   }
 

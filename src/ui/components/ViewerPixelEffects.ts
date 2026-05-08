@@ -44,6 +44,9 @@ import type { BackgroundPatternState } from './BackgroundPatternControl';
 import type { InteractionQualityManager } from './InteractionQualityManager';
 import type { CropManager } from './CropManager';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('ViewerPixelEffects');
 /**
  * Context interface for ViewerPixelEffects to access Viewer state
  * without tight coupling. The Viewer implements this interface.
@@ -689,7 +692,7 @@ export async function applyBatchedPixelEffectsAsync(
       ctx.getCropManager().clearOutsideCropRegion(canvasCtx, width, height);
     }
   } catch (err) {
-    console.error('Async batched pixel effects processing failed:', err);
+    logger.error('Async batched pixel effects processing failed:', err);
   }
 }
 

@@ -602,7 +602,8 @@ openrv-web/
 │   │   ├── EventEmitter.ts      # Event emitter system + listenerCount()
 │   │   ├── globalErrorHandler.ts # Unhandled rejection handler
 │   │   ├── HistoryManager.ts    # Undo/redo history manager
-│   │   ├── Logger.ts            # Structured logging
+│   │   ├── Logger.ts            # Structured logging (only console.* call site in src/)
+│   │   ├── probe.ts             # Auditable feature-detection swallows (probe / probeAsync)
 │   │   ├── LRUCache.ts          # LRU cache utility
 │   │   ├── PerfTrace.ts         # Performance tracing
 │   │   ├── WorkerPool.ts        # Web Worker pool manager
@@ -997,3 +998,12 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Viewer.ts decomposed (10 modules extracted: ViewerEffects, ViewerExport, ViewerInteraction, ViewerPrerender, ViewerCanvasSetup, ViewerGLRenderer, ViewerImageRenderer, ViewerIndicators, ViewerInputHandler, ViewerPixelEffects)
 - [x] Generic FormatDecoder\<TOptions\> for typed decoder interfaces
 - [x] ESLint v9 + Prettier + pre-commit hooks + CI lint workflow
+- [x] Logger surface unified (CONS-2): 256 raw `console.error/warn` migrated to module-scoped `Logger` instances; ESLint `no-console: error` (allows only `console.log`)
+- [x] Empty catch blocks eliminated (CONS-1a–e): ~70 sites migrated to `probe()` / `probeAsync()` (`src/utils/probe.ts`) for auditable feature-detection swallows or explicit `Logger.warn` with rationale; ESLint `no-empty: error` with `allowEmptyCatch: false`
+- [x] `ViewerAccessor` interface (CONS-3): persistence consumes the viewer via a narrow read API (`src/core/viewer/ViewerAccessor.ts`) instead of `(viewer as any)` casts
+- [x] Session test access cleaned up (CONS-4): 17 `@ts-ignore` directives removed; tests import parse helpers from public sibling modules
+- [x] Module suffix doctrine (CONS-5): documented in `docs/CONVENTIONS.md` (Manager / Service / Orchestrator / Engine / Bridge / Controller); audio cluster refactored — `AudioMixer.loadTrackFromUrl` now owns fetch+decode; `AudioOrchestrator` is composition-only
+- [x] `defineNodeProperty` rolled out to all source nodes (CONS-6): Video / Sequence / Procedural now use the factory
+- [x] Decoder file naming (CONS-7): `avif.ts` → `AVIFDecoder.ts`, `MultiViewEXR.ts` → `MultiViewEXRDecoder.ts` (100% match `<Format>Decoder.ts`)
+- [x] Type tightening at API boundaries (CONS-8): 52 `Record<string, unknown>` sites typed; `EffectParams`, `ProceduralSourceOptions`, `SerializedEffect`/`Chain`, `HDRCanvas2DSettings` introduced
+- [x] UI shared-helper consolidation (UI-1..UI-7): 11 SettingsMenu files migrated to `FormElements`; 8 toolbar controls migrated to `createButton`/`createPanel`; slider rows deduped via `createColorSliderRow`; native `confirm()` and frame-export bespoke modal replaced with `showConfirm`/`showModal`; literal `z-index` and panel widths replaced with `Z_INDEX` / `PANEL_WIDTHS` tokens in `shared/theme.ts`

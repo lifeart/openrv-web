@@ -3,7 +3,7 @@
  * Plain AVIF decoding is browser-native only (no WASM fallback).
  *
  * These tests validate that:
- * 1. avif.ts only uses createImageBitmap (no WASM decoder)
+ * 1. AVIFDecoder.ts only uses createImageBitmap (no WASM decoder)
  * 2. FileSourceNode's AVIF path uses blob URL + Image element (no WASM fallback)
  * 3. The docs accurately reflect browser-native-only behavior
  */
@@ -14,9 +14,9 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 describe('Issue #504: Plain AVIF is browser-native only (no WASM fallback)', () => {
-  describe('avif.ts source analysis', () => {
+  describe('AVIFDecoder.ts source analysis', () => {
     // @ts-ignore -- __dirname available in test environment
-    const avifSource = readFileSync(resolve(__dirname, 'avif.ts'), 'utf-8');
+    const avifSource = readFileSync(resolve(__dirname, 'AVIFDecoder.ts'), 'utf-8');
 
     it('uses createImageBitmap for decoding', () => {
       expect(avifSource).toContain('createImageBitmap');
@@ -68,8 +68,8 @@ describe('Issue #504: Plain AVIF is browser-native only (no WASM fallback)', () 
     it('does not reference a WASM AVIF decoder for plain AVIF', () => {
       expect(fsNodeSource).not.toMatch(/avif.*wasm/i);
       expect(fsNodeSource).not.toMatch(/wasm.*avif/i);
-      expect(fsNodeSource).not.toContain("from '../../formats/avif'");
-      expect(fsNodeSource).not.toContain("import('../../formats/avif')");
+      expect(fsNodeSource).not.toContain("from '../../formats/AVIFDecoder'");
+      expect(fsNodeSource).not.toContain("import('../../formats/AVIFDecoder')");
     });
 
     it('SDR AVIF path uses HTMLImageElement (img.src = blobUrl pattern)', () => {

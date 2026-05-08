@@ -10,6 +10,7 @@ import { InfoPanelSettingsMenu } from '../../ui/components/InfoPanelSettingsMenu
 import type { Panel } from '../../ui/components/shared/Panel';
 import type { AppControlRegistry } from '../../AppControlRegistry';
 import type { AppSessionBridge } from '../../AppSessionBridge';
+import { PANEL_WIDTHS, Z_INDEX } from '../../ui/components/shared/theme';
 
 export interface BuildPanelTogglesDeps {
   registry: AppControlRegistry;
@@ -178,9 +179,9 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): PanelTogglesResu
     const container = document.createElement('div');
     container.dataset.pluginPanelId = id;
     container.style.cssText =
-      'display: none; position: absolute; top: 100%; right: 0; z-index: 1000; ' +
+      `display: none; position: absolute; top: 100%; right: 0; z-index: ${Z_INDEX.sidePanel}; ` +
       'background: var(--bg-primary, #1e1e1e); border: 1px solid var(--border-color, #444); ' +
-      'border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); min-width: 200px; padding: 8px;';
+      `border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); min-width: ${PANEL_WIDTHS.menu}; padding: 8px;`;
 
     // Use 'grid' as a fallback icon when no icon is provided
     const iconName = (icon || 'grid') as import('../../ui/components/shared/Icons').IconName;

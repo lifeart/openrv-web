@@ -12,7 +12,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type SafeAreasOverlay, type SafeAreasState, type AspectRatioGuide, ASPECT_RATIOS } from './SafeAreasOverlay';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { SHADOWS } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface SafeAreasControlEvents extends EventMap {
@@ -115,8 +115,8 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 8px 0;
-      min-width: 220px;
-      z-index: 9999;
+      min-width: ${PANEL_WIDTHS.narrow};
+      z-index: ${Z_INDEX.dropdown};
       display: none;
       flex-direction: column;
       box-shadow: ${SHADOWS.dropdown};

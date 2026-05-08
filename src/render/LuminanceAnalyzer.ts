@@ -14,6 +14,9 @@
 import { ShaderProgram } from './ShaderProgram';
 import luminanceFragSource from './shaders/luminance.frag.glsl?raw';
 
+import { Logger } from '../utils/Logger';
+
+const logger = new Logger('LuminanceAnalyzer');
 const LUMINANCE_FBO_SIZE = 256;
 
 /** Simple vertex shader for full-screen quad. */
@@ -155,7 +158,7 @@ export class LuminanceAnalyzer {
             linearAvg: Math.min(Math.max(linAvg, 1e-6), 1e6),
           };
         } else if (!this.nanWarned) {
-          console.warn('LuminanceAnalyzer: NaN/Infinity in readback, using cached result');
+          logger.warn('LuminanceAnalyzer: NaN/Infinity in readback, using cached result');
           this.nanWarned = true;
         }
       }
@@ -180,7 +183,7 @@ export class LuminanceAnalyzer {
 
     // Check for color buffer float support (needed for RGBA16F FBO)
     if (!gl.getExtension('EXT_color_buffer_float')) {
-      console.warn('LuminanceAnalyzer: EXT_color_buffer_float not available');
+      logger.warn('LuminanceAnalyzer: EXT_color_buffer_float not available');
       this.initialized = true;
       return;
     }

@@ -48,3 +48,4 @@ docs/api/*
 
 # Generated documentation (built by scripts/docs/)
 docs/generated/
+.claude/scheduled_tasks.lock

@@ -24,6 +24,9 @@ import { HotReloadManager } from './HotReloadManager';
 import { pluginRegistry } from '../PluginRegistry';
 import type { PluginId } from '../types';
 
+import { Logger } from '../../utils/Logger';
+
+const logger = new Logger('clientBridge');
 interface HotReloadPayload {
   pluginId: PluginId;
   filePath?: string;
@@ -86,7 +89,7 @@ export function installPluginHotReloadBridge(): void {
       const run = manager
         .reload(pluginId)
         .catch((err) => {
-          console.error(`[hot-reload] failed for ${pluginId}:`, err);
+          logger.error(`[hot-reload] failed for ${pluginId}:`, err);
           // Don't cascade-replay a broken edit; developer must save again.
           pending.delete(pluginId);
         })
