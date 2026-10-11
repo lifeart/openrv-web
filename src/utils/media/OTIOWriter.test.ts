@@ -67,7 +67,8 @@ describe('OTIOWriter', () => {
       const clip1 = trackChildren[0];
       expect(clip1.OTIO_SCHEMA).toBe('Clip.1');
       expect(clip1.name).toBe('shot_A');
-      expect(clip1.source_range.start_time.value).toBe(1001);
+      // source_range is media time: local frame N is media time N - 1
+      expect(clip1.source_range.start_time.value).toBe(1000);
       expect(clip1.source_range.duration.value).toBe(48);
       expect(clip1.source_range.duration.rate).toBe(24);
 
@@ -75,7 +76,7 @@ describe('OTIOWriter', () => {
       const clip2 = trackChildren[1];
       expect(clip2.OTIO_SCHEMA).toBe('Clip.1');
       expect(clip2.name).toBe('shot_B');
-      expect(clip2.source_range.start_time.value).toBe(1);
+      expect(clip2.source_range.start_time.value).toBe(0);
       expect(clip2.source_range.duration.value).toBe(120);
     });
 
@@ -111,14 +112,15 @@ describe('OTIOWriter', () => {
       // Verify clip A
       expect(result!.clips[0]!.name).toBe('shot_A');
       expect(result!.clips[0]!.sourceUrl).toBe('file:///A.exr');
-      expect(result!.clips[0]!.inFrame).toBe(1);
-      expect(result!.clips[0]!.outFrame).toBe(48);
+      // Parser reports media time (0-based for media without available_range)
+      expect(result!.clips[0]!.inFrame).toBe(0);
+      expect(result!.clips[0]!.outFrame).toBe(47);
 
       // Verify clip B
       expect(result!.clips[1]!.name).toBe('shot_B');
       expect(result!.clips[1]!.sourceUrl).toBe('file:///B.exr');
-      expect(result!.clips[1]!.inFrame).toBe(1);
-      expect(result!.clips[1]!.outFrame).toBe(120);
+      expect(result!.clips[1]!.inFrame).toBe(0);
+      expect(result!.clips[1]!.outFrame).toBe(119);
     });
 
     it('OTIO-W005: handles empty playlist', () => {

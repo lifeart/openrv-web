@@ -10,14 +10,24 @@
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
-import { type PlaylistManager, type PlaylistClip } from '../../core/session/PlaylistManager';
+import {
+  type PlaylistManager,
+  type PlaylistClip,
+  type PlaylistSourceResolver,
+} from '../../core/session/PlaylistManager';
+import type { ParsedOTIOMarker } from '../../utils/media/OTIOParser';
 import { type TransitionManager } from '../../core/session/TransitionManager';
 import { isTransitionType, DEFAULT_TRANSITION_DURATION, type TransitionType } from '../../core/types/transition';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { OPACITY, PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import { downloadEDL, type EDLClip, type EDLTransition } from '../../export/EDLWriter';
-import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
+import {
+  exportOTIOMultiTrack,
+  type OTIOExportClip,
+  type OTIOExportMarker,
+  type OTIOExportTransition,
+} from '../../utils/media/OTIOWriter';
 
 import { Logger } from '../../utils/Logger';
 
@@ -32,7 +42,7 @@ export interface PlaylistPanelEvents extends EventMap {
   /** Emitted when panel is closed */
   closed: void;
   /** Emitted after a playlist is imported */
-  imported: { format: string; importedCount: number; unresolvedCount: number };
+  imported: { format: string; importedCount: number; unresolvedCount: number; unresolvedNames?: string[] };
 }
 
 /** Interface for panels that support mutual exclusion */
@@ -64,8 +74,11 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private activeClipId: string | null = null;
   private fps = 24;
   private sourceUrlResolver: ((sourceIndex: number) => string | null) | null = null;
-  private sourceNameResolver: ((name: string, url?: string) => { index: number; frameCount: number } | null) | null =
+  private sourceNameResolver: PlaylistSourceResolver | null = null;
+  private sourceInfoResolver: ((sourceIndex: number) => { frameCount: number; startFrame?: number } | null) | null =
     null;
+  private markerImporter: ((markers: ParsedOTIOMarker[]) => void) | null = null;
+  private markerProvider: (() => OTIOExportMarker[]) | null = null;
 
   constructor(playlistManager: PlaylistManager) {
     super();
@@ -652,7 +665,8 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       color: var(--text-muted);
     `;
 
-    const tm = this.transitionManager!;
+    const tm = this.transitionManager;
+    if (!tm) return row;
     const currentTransition = tm.getTransition(gapIndex);
     const currentType: TransitionType = currentTransition?.type ?? 'cut';
     const currentDuration = currentTransition?.durationFrames ?? DEFAULT_TRANSITION_DURATION;
@@ -808,39 +822,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
         const reader = new FileReader();
         reader.onload = () => {
-          try {
-            const text = reader.result as string;
-            const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-
-            // Clear existing playlist before import
-            this.playlistManager.clear();
-
-            let importedCount = 0;
-            let unresolvedCount = 0;
-            let format = ext;
-
-            const resolver = this.sourceNameResolver ?? (() => null);
-
-            if (ext === 'otio' || ext === 'json') {
-              format = 'otio';
-              importedCount = this.playlistManager.fromOTIO(text, resolver);
-              unresolvedCount = this.playlistManager.unresolvedClips?.length ?? 0;
-            } else if (ext === 'edl') {
-              format = 'edl';
-              importedCount = this.playlistManager.fromEDL(text, resolver);
-            } else if (ext === 'rvedl') {
-              format = 'rvedl';
-              // RVEDL is treated as EDL format
-              importedCount = this.playlistManager.fromEDL(text, resolver);
-            }
-
-            this.renderList();
-            this.updateFooterInfo();
-
-            this.emit('imported', { format, importedCount, unresolvedCount });
-          } catch (err) {
-            logger.error('[PlaylistPanel] Failed to parse import file:', err);
-          }
+          this.importPlaylistText(file.name, reader.result as string);
         };
         reader.readAsText(file);
       } finally {
@@ -860,12 +842,14 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     // When transitions exist, use overlap-adjusted frames for accurate record timecodes
     const adjustedClips = this.transitionManager ? this.transitionManager.calculateOverlapAdjustedFrames(clips) : clips;
     const edlClips: EDLClip[] = adjustedClips.map((clip, index) => {
+      // Timecode is 0-based: local (1-based) source frame 1 is written as
+      // 00:00:00:00, matching how PlaylistManager.fromEDL reads it back.
       const edlClip: EDLClip = {
         sourceName: clip.sourceName,
-        sourceIn: clip.inPoint,
-        sourceOut: clip.outPoint + 1, // EDL uses exclusive out point
-        recordIn: clip.globalStartFrame,
-        recordOut: clip.globalStartFrame + clip.duration,
+        sourceIn: clip.inPoint - 1,
+        sourceOut: clip.outPoint, // EDL uses exclusive out point
+        recordIn: clip.globalStartFrame - 1,
+        recordOut: clip.globalStartFrame - 1 + clip.duration,
       };
 
       // Add dissolve transition if configured (crossfade and dissolve map to EDL dissolve)
@@ -890,24 +874,19 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
   private exportOTIO(): void {
     const clips = this.playlistManager.getClips();
-    const otioClips: OTIOExportClip[] = clips.map((clip) => {
-      let sourceUrl = '';
-      if (this.sourceUrlResolver) {
-        const resolved = this.sourceUrlResolver(clip.sourceIndex);
-        if (resolved) {
-          sourceUrl = resolved;
-        } else {
-          // Fall back to sourceName if resolver returns null
-          sourceUrl = clip.sourceName;
-          logger.warn(
-            `[PlaylistPanel] No source URL found for clip "${clip.sourceName}" (sourceIndex=${clip.sourceIndex}), using name as fallback`,
-          );
-        }
-      } else {
-        // No resolver configured — fall back to sourceName
-        sourceUrl = clip.sourceName;
+    // Global positions honour transition overlaps (playlist overlap model).
+    const positioned = this.transitionManager ? this.transitionManager.calculateOverlapAdjustedFrames(clips) : clips;
+    const otioClips: OTIOExportClip[] = positioned.map((clip) => {
+      // Fall back to sourceName when no resolver is configured or it returns null
+      const resolvedUrl = this.sourceUrlResolver ? this.sourceUrlResolver(clip.sourceIndex) : null;
+      if (this.sourceUrlResolver && !resolvedUrl) {
+        logger.warn(
+          `[PlaylistPanel] No source URL found for clip "${clip.sourceName}" (sourceIndex=${clip.sourceIndex}), using name as fallback`,
+        );
       }
-      return {
+      const sourceUrl = resolvedUrl || clip.sourceName;
+      const info = this.sourceInfoResolver?.(clip.sourceIndex) ?? null;
+      const exportClip: OTIOExportClip = {
         sourceName: clip.sourceName,
         sourceUrl,
         inPoint: clip.inPoint,
@@ -916,8 +895,49 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
         duration: clip.duration,
         fps: this.fps,
       };
+      if (info) {
+        exportClip.sourceFrameCount = info.frameCount;
+        // Movies start at media time 0; image sequences at their first frame number.
+        exportClip.sourceStartFrame = info.startFrame ?? 0;
+      }
+      return exportClip;
     });
-    const json = exportOTIO(otioClips, { name: 'OpenRV Playlist', fps: this.fps });
+
+    // Transitions: OTIO clips do not overlap, so the incoming clip's first
+    // `durationFrames` frames become the transition's handle (in_offset) and
+    // are trimmed from its visible range.
+    const transitions = new Map<number, OTIOExportTransition>();
+    if (this.transitionManager) {
+      for (let i = 0; i < otioClips.length - 1; i++) {
+        const t = this.transitionManager.getTransition(i);
+        if (!t || t.type === 'cut' || t.durationFrames <= 0) continue;
+        const incoming = otioClips[i + 1];
+        if (!incoming) continue;
+        const n = Math.min(t.durationFrames, incoming.duration - 1);
+        if (n <= 0) continue;
+        otioClips[i + 1] = {
+          ...incoming,
+          inPoint: incoming.inPoint + n,
+          globalStartFrame: incoming.globalStartFrame + n,
+          duration: incoming.duration - n,
+        };
+        transitions.set(i, {
+          name: t.type,
+          transitionType: t.type === 'dissolve' || t.type === 'crossfade' ? 'SMPTE_Dissolve' : 'Custom_Transition',
+          inOffset: n,
+          outOffset: 0,
+          fps: this.fps,
+          metadata: { openrv: { type: t.type } },
+        });
+      }
+    }
+
+    const json = exportOTIOMultiTrack({
+      name: 'OpenRV Playlist',
+      fps: this.fps,
+      tracks: [{ name: 'Video Track', clips: otioClips, transitions }],
+      markers: this.markerProvider?.() ?? [],
+    });
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     try {
@@ -939,9 +959,24 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     this.sourceUrlResolver = resolver;
   }
 
-  /** Set a resolver that maps source names to their indices for EDL/OTIO import */
-  setSourceNameResolver(resolver: (name: string, url?: string) => { index: number; frameCount: number } | null): void {
+  /** Set a resolver that maps source names to their indices for EDL/OTIO/RVEDL import */
+  setSourceNameResolver(resolver: PlaylistSourceResolver): void {
     this.sourceNameResolver = resolver;
+  }
+
+  /** Set a resolver providing media length / start frame per source (used for OTIO available_range export) */
+  setSourceInfoResolver(resolver: (sourceIndex: number) => { frameCount: number; startFrame?: number } | null): void {
+    this.sourceInfoResolver = resolver;
+  }
+
+  /** Set a callback that receives markers parsed from imported OTIO files */
+  setMarkerImporter(importer: (markers: ParsedOTIOMarker[]) => void): void {
+    this.markerImporter = importer;
+  }
+
+  /** Set a provider of timeline markers to include in OTIO export */
+  setMarkerProvider(provider: () => OTIOExportMarker[]): void {
+    this.markerProvider = provider;
   }
 
   /** Set the frames-per-second used for EDL/OTIO export timecodes */
@@ -1019,20 +1054,60 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   importOTIOFile(file: File): void {
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const text = reader.result as string;
-        this.playlistManager.clear();
-        const resolver = this.sourceNameResolver ?? (() => null);
-        const importedCount = this.playlistManager.fromOTIO(text, resolver);
-        const unresolvedCount = this.playlistManager.unresolvedClips?.length ?? 0;
-        this.renderList();
-        this.updateFooterInfo();
-        this.emit('imported', { format: 'otio', importedCount, unresolvedCount });
-      } catch (err) {
-        logger.error('[PlaylistPanel] Failed to parse OTIO file:', err);
-      }
+      this.importPlaylistText(
+        file.name.toLowerCase().endsWith('.otio') ? file.name : `${file.name}.otio`,
+        reader.result as string,
+      );
     };
     reader.readAsText(file);
+  }
+
+  /**
+   * Import playlist text, choosing the parser from the file extension:
+   * `.otio`/`.json` -> OTIO, `.edl` -> CMX3600 EDL, `.rvedl` -> OpenRV RVEDL.
+   * The existing playlist is replaced. Emits `imported` with the names of
+   * clips that could not be matched to loaded media.
+   */
+  importPlaylistText(fileName: string, text: string): void {
+    try {
+      const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+
+      // Clear existing playlist before import
+      this.playlistManager.clear();
+
+      let importedCount = 0;
+      let format = ext;
+
+      const resolver: PlaylistSourceResolver = this.sourceNameResolver ?? (() => null);
+
+      if (ext === 'otio' || ext === 'json') {
+        format = 'otio';
+        const markerImporter = this.markerImporter;
+        importedCount = markerImporter
+          ? this.playlistManager.fromOTIO(text, resolver, { markerImporter })
+          : this.playlistManager.fromOTIO(text, resolver);
+      } else if (ext === 'edl') {
+        format = 'edl';
+        importedCount = this.playlistManager.fromEDL(text, resolver, { fps: this.fps });
+      } else if (ext === 'rvedl') {
+        format = 'rvedl';
+        importedCount = this.playlistManager.fromRVEDL(text, resolver);
+      }
+
+      this.renderList();
+      this.updateFooterInfo();
+
+      const unresolved = this.playlistManager.unresolvedClips ?? [];
+      const unresolvedNames = unresolved.map((c) => c.name).filter((n): n is string => typeof n === 'string' && !!n);
+      this.emit('imported', {
+        format,
+        importedCount,
+        unresolvedCount: unresolved.length,
+        ...(unresolvedNames.length > 0 ? { unresolvedNames } : {}),
+      });
+    } catch (err) {
+      logger.error('[PlaylistPanel] Failed to parse import file:', err);
+    }
   }
 
   /**

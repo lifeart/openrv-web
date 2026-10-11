@@ -20,42 +20,57 @@ export interface OTIOTimeRange {
   duration: OTIORationalTime;
 }
 
-/** OTIO media reference */
+/** OTIO media reference (ExternalReference, ImageSequenceReference, MissingReference, ... any version) */
 export interface OTIOMediaReference {
-  OTIO_SCHEMA: string; // 'ExternalReference.1' or 'MissingReference.1'
+  OTIO_SCHEMA: string;
+  name?: string;
   target_url?: string;
   available_range?: OTIOTimeRange;
+  /** ImageSequenceReference fields */
+  target_url_base?: string;
+  name_prefix?: string;
+  name_suffix?: string;
+  start_frame?: number;
+  frame_step?: number;
+  rate?: number;
+  frame_zero_padding?: number;
+  metadata?: Record<string, unknown>;
 }
 
 /** OTIO marker */
 export interface OTIOMarker {
-  OTIO_SCHEMA: 'Marker.1';
+  OTIO_SCHEMA: string; // 'Marker.1', 'Marker.2', ...
   name: string;
   color?: string;
   marked_range?: OTIOTimeRange;
   metadata?: Record<string, unknown>;
 }
 
-/** OTIO clip */
+/** OTIO clip (`Clip.1` uses `media_reference`; `Clip.2`+ uses `media_references`) */
 export interface OTIOClip {
-  OTIO_SCHEMA: 'Clip.1';
+  OTIO_SCHEMA: string; // 'Clip.1', 'Clip.2', ...
   name: string;
   source_range?: OTIOTimeRange;
   media_reference?: OTIOMediaReference;
+  media_references?: Record<string, OTIOMediaReference>;
+  active_media_reference_key?: string;
   markers?: OTIOMarker[];
   metadata?: Record<string, unknown>;
+  enabled?: boolean;
 }
 
 /** OTIO gap */
 export interface OTIOGap {
-  OTIO_SCHEMA: 'Gap.1';
+  OTIO_SCHEMA: string; // 'Gap.1', ...
   name?: string;
   source_range?: OTIOTimeRange;
+  /** Legacy gap duration field */
+  duration?: OTIORationalTime;
 }
 
 /** OTIO transition */
 export interface OTIOTransition {
-  OTIO_SCHEMA: 'Transition.1';
+  OTIO_SCHEMA: string; // 'Transition.1', ...
   name?: string;
   transition_type?: string;
   in_offset?: OTIORationalTime;
@@ -63,28 +78,33 @@ export interface OTIOTransition {
   metadata?: Record<string, unknown>;
 }
 
-/** OTIO track item (union type) */
-export type OTIOTrackItem = OTIOClip | OTIOGap | OTIOTransition;
+/** OTIO track item (union type). Tracks may also contain nested Stacks/Tracks. */
+export type OTIOTrackItem = OTIOClip | OTIOGap | OTIOTransition | OTIOStack | OTIOTrack;
 
 /** OTIO track */
 export interface OTIOTrack {
-  OTIO_SCHEMA: 'Track.1';
+  OTIO_SCHEMA: string; // 'Track.1', ...
   name: string;
   kind: string; // 'Video', 'Audio'
   children: OTIOTrackItem[];
+  source_range?: OTIOTimeRange;
   markers?: OTIOMarker[];
+  enabled?: boolean;
 }
 
 /** OTIO stack (collection of tracks) */
 export interface OTIOStack {
-  OTIO_SCHEMA: 'Stack.1';
+  OTIO_SCHEMA: string; // 'Stack.1', ...
   name?: string;
-  children: OTIOTrack[];
+  children: (OTIOTrack | OTIOStack)[];
+  source_range?: OTIOTimeRange;
+  markers?: OTIOMarker[];
+  enabled?: boolean;
 }
 
 /** OTIO timeline (top-level) */
 export interface OTIOTimeline {
-  OTIO_SCHEMA: 'Timeline.1';
+  OTIO_SCHEMA: string; // 'Timeline.1', ...
   name: string;
   global_start_time?: OTIORationalTime;
   tracks: OTIOStack;
@@ -96,10 +116,19 @@ export interface OTIOTimeline {
 export interface ParsedOTIOClip {
   name: string;
   sourceUrl?: string;
+  /** First frame of the clip in media time (the OTIO source_range coordinate space) */
   inFrame: number;
+  /** Last frame (inclusive) of the clip in media time */
   outFrame: number;
+  /** 0-based timeline frame where the clip starts */
   timelineInFrame: number;
   timelineOutFrame: number;
+  /**
+   * Media-time frame at which the media reference's available_range starts,
+   * when the reference declares one. Local (1-based) source frame =
+   * inFrame - availableStartFrame + 1.
+   */
+  availableStartFrame?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -265,130 +294,310 @@ function normalizeTransitionType(raw?: string): TransitionType {
 }
 
 /**
- * Parse a single OTIO track into a ParsedOTIOTrack.
- * Extracts clips, gaps (which advance the timeline position), and transitions
- * (which create overlap regions between adjacent clips).
+ * Base schema name of an OTIO object, without its version
+ * (`'Clip.2'` -> `'Clip'`). Any schema version is accepted.
  */
-function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
-  const clips: ParsedOTIOClip[] = [];
-  const transitions: ParsedOTIOTransition[] = [];
-  const gaps: ParsedOTIOGap[] = [];
-  const markers: ParsedOTIOMarker[] = [];
-  let timelinePosition = 0;
+export function otioSchemaName(obj: unknown): string {
+  if (!obj || typeof obj !== 'object') return '';
+  const schema = (obj as { OTIO_SCHEMA?: unknown }).OTIO_SCHEMA;
+  if (typeof schema !== 'string') return '';
+  const dot = schema.lastIndexOf('.');
+  return dot > 0 ? schema.slice(0, dot) : schema;
+}
 
-  // First pass: we need to figure out clip indices for transitions.
-  // In OTIO, a Transition sits *between* two clips and borrows time from both.
-  // The transition's in_offset eats into the preceding clip's tail, and
-  // the out_offset eats into the following clip's head.
-  //
-  // According to the OTIO spec, transitions do NOT advance the timeline
-  // position. Instead they create overlap regions. The timeline position
-  // only advances for Clips and Gaps.
-  //
-  // We collect pending transitions and resolve them once the incoming clip is known.
+/**
+ * Resolve the active media reference of a clip.
+ * OTIO 0.15+ (`Clip.2`) stores references in `media_references` keyed by
+ * `active_media_reference_key` (default `DEFAULT_MEDIA`); older files use
+ * `media_reference`.
+ */
+export function getActiveMediaReference(clip: OTIOClip): OTIOMediaReference | undefined {
+  const refs = clip.media_references;
+  if (refs && typeof refs === 'object') {
+    const key = clip.active_media_reference_key ?? 'DEFAULT_MEDIA';
+    const ref = refs[key] ?? Object.values(refs)[0];
+    if (ref) return ref;
+  }
+  return clip.media_reference;
+}
 
-  let pendingTransition: OTIOTransition | null = null;
-  let pendingTransitionOutgoingClipIndex = -1;
+/**
+ * URL of a media reference. Image sequence references are expanded to a
+ * `####`-style pattern (`base/prefix####suffix`).
+ */
+function mediaReferenceUrl(ref: OTIOMediaReference | undefined): string | undefined {
+  if (!ref) return undefined;
+  const kind = otioSchemaName(ref);
+  if (kind === 'ImageSequenceReference') {
+    const base = ref.target_url_base ?? '';
+    const sep = base && !base.endsWith('/') ? '/' : '';
+    const padding = ref.frame_zero_padding && ref.frame_zero_padding > 0 ? ref.frame_zero_padding : 4;
+    return `${base}${sep}${ref.name_prefix ?? ''}${'#'.repeat(padding)}${ref.name_suffix ?? ''}`;
+  }
+  return ref.target_url;
+}
 
-  for (const item of track.children) {
-    if (item.OTIO_SCHEMA === 'Clip.1') {
+/**
+ * Media-time frame at which the reference's available media begins, if known.
+ * Clip `source_range` values are expressed in this coordinate space.
+ */
+function mediaReferenceStartFrame(ref: OTIOMediaReference | undefined, fps: number): number | undefined {
+  if (!ref) return undefined;
+  if (ref.available_range) return rationalTimeToFrames(ref.available_range.start_time, fps);
+  return undefined;
+}
+
+/** Duration of any composable item (clip, gap, nested track/stack), in frames. */
+function itemDurationFrames(item: OTIOTrackItem | OTIOTrack | OTIOStack, fps: number): number {
+  const kind = otioSchemaName(item);
+  const sourceRange = (item as { source_range?: OTIOTimeRange }).source_range;
+  if (kind === 'Transition') return 0;
+  if (sourceRange) return timeRangeDurationFrames(sourceRange, fps);
+  if (kind === 'Clip') {
+    const ref = getActiveMediaReference(item as OTIOClip);
+    return ref?.available_range ? timeRangeDurationFrames(ref.available_range, fps) : 0;
+  }
+  if (kind === 'Gap') {
+    const dur = (item as OTIOGap).duration;
+    return dur ? rationalTimeToFrames(dur, fps) : 0;
+  }
+  if (kind === 'Track') {
+    return ((item as OTIOTrack).children ?? []).reduce((sum, child) => sum + itemDurationFrames(child, fps), 0);
+  }
+  if (kind === 'Stack') {
+    return ((item as OTIOStack).children ?? []).reduce(
+      (max, child) => Math.max(max, itemDurationFrames(child, fps)),
+      0,
+    );
+  }
+  return 0;
+}
+
+/** Pick the track of a (nested) stack that supplies the flattened clip list: the first video track. */
+function primaryTrackOfStack(stack: OTIOStack): OTIOTrack | OTIOStack | undefined {
+  const children = stack.children ?? [];
+  return (
+    children.find((c) => otioSchemaName(c) === 'Track' && (c as OTIOTrack).kind !== 'Audio') ??
+    children.find((c) => otioSchemaName(c) === 'Stack')
+  );
+}
+
+/** Mutable accumulator for the recursive track walker. */
+interface TrackWalkState {
+  fps: number;
+  clips: ParsedOTIOClip[];
+  transitions: ParsedOTIOTransition[];
+  gaps: ParsedOTIOGap[];
+  markers: ParsedOTIOMarker[];
+  pendingTransition: OTIOTransition | null;
+  pendingTransitionOutgoingClipIndex: number;
+}
+
+/**
+ * Walk a track's children, appending clips/gaps/transitions/markers to `state`.
+ *
+ * `windowStart`/`windowEnd` restrict the walk to a range of the track's own
+ * time (used for nested compositions with a `source_range`), and
+ * `outerOffset` is the parent-timeline frame at which `windowStart` lands.
+ * According to the OTIO spec transitions do not advance the timeline; they
+ * overlap the neighbouring items.
+ */
+function walkTrackChildren(
+  children: readonly (OTIOTrackItem | OTIOTrack | OTIOStack)[],
+  state: TrackWalkState,
+  outerOffset: number,
+  windowStart: number,
+  windowEnd: number,
+): void {
+  const { fps } = state;
+  let pos = 0;
+
+  for (const item of children) {
+    const kind = otioSchemaName(item);
+    if (kind === 'Transition') {
+      // Resolved when the incoming clip is encountered; requires an outgoing clip
+      // that ends at the current position.
+      const last = state.clips[state.clips.length - 1];
+      if (last && last.timelineOutFrame === outerOffset + (pos - windowStart) - 1) {
+        state.pendingTransition = item as OTIOTransition;
+        state.pendingTransitionOutgoingClipIndex = state.clips.length - 1;
+      }
+      continue;
+    }
+
+    const duration = itemDurationFrames(item, fps);
+    const itemStart = pos;
+    const itemEnd = pos + duration;
+    pos = itemEnd;
+
+    const visStart = Math.max(itemStart, windowStart);
+    const visEnd = Math.min(itemEnd, windowEnd);
+    if (visEnd <= visStart) {
+      state.pendingTransition = null;
+      continue;
+    }
+    const timelineIn = outerOffset + (visStart - windowStart);
+    const visDuration = visEnd - visStart;
+
+    const disabled = (item as { enabled?: boolean }).enabled === false;
+
+    if (kind === 'Clip' && !disabled) {
       const clip = item as OTIOClip;
-      const sourceRange = clip.source_range;
+      const ref = getActiveMediaReference(clip);
+      const range = clip.source_range ?? ref?.available_range;
+      const rangeStart = range ? rationalTimeToFrames(range.start_time, fps) : 0;
+      const inFrame = rangeStart + (visStart - itemStart);
+      const clipIndex = state.clips.length;
 
-      let inFrame = 0;
-      let duration = 0;
-
-      if (sourceRange) {
-        inFrame = rationalTimeToFrames(sourceRange.start_time, fps);
-        duration = timeRangeDurationFrames(sourceRange, fps);
-      } else if (clip.media_reference?.available_range) {
-        inFrame = rationalTimeToFrames(clip.media_reference.available_range.start_time, fps);
-        duration = timeRangeDurationFrames(clip.media_reference.available_range, fps);
-      }
-
-      const outFrame = inFrame + duration - 1;
-      const clipIndex = clips.length;
-
-      clips.push({
+      const parsed: ParsedOTIOClip = {
         name: clip.name,
-        sourceUrl: clip.media_reference?.target_url,
+        sourceUrl: mediaReferenceUrl(ref),
         inFrame,
-        outFrame,
-        timelineInFrame: timelinePosition,
-        timelineOutFrame: timelinePosition + duration - 1,
+        outFrame: inFrame + visDuration - 1,
+        timelineInFrame: timelineIn,
+        timelineOutFrame: timelineIn + visDuration - 1,
         metadata: clip.metadata,
-      });
+      };
+      const availableStart = mediaReferenceStartFrame(ref, fps);
+      if (availableStart !== undefined) parsed.availableStartFrame = availableStart;
+      state.clips.push(parsed);
 
-      // Collect clip-level markers
+      // Clip markers are expressed in the clip's source time.
       if (clip.markers) {
-        markers.push(...parseMarkers(clip.markers, fps, timelinePosition));
+        state.markers.push(...parseMarkers(clip.markers, fps, timelineIn - inFrame));
       }
 
-      // Resolve any pending transition now that we know the incoming clip
-      if (pendingTransition && pendingTransitionOutgoingClipIndex >= 0) {
-        const transInOffset = pendingTransition.in_offset ? rationalTimeToFrames(pendingTransition.in_offset, fps) : 0;
-        const transOutOffset = pendingTransition.out_offset
-          ? rationalTimeToFrames(pendingTransition.out_offset, fps)
-          : 0;
+      const pending = state.pendingTransition;
+      if (pending && state.pendingTransitionOutgoingClipIndex >= 0 && visStart === itemStart) {
+        const transInOffset = pending.in_offset ? rationalTimeToFrames(pending.in_offset, fps) : 0;
+        const transOutOffset = pending.out_offset ? rationalTimeToFrames(pending.out_offset, fps) : 0;
         const transDuration = transInOffset + transOutOffset;
+        // The transition starts `inOffset` frames before the cut point.
+        const transTimelineIn = timelineIn - transInOffset;
 
-        // The transition starts `inOffset` frames before the cut point
-        // (i.e. before the current timeline position).
-        const transTimelineIn = timelinePosition - transInOffset;
-
-        transitions.push({
-          name: pendingTransition.name ?? '',
-          transitionType: normalizeTransitionType(pendingTransition.transition_type),
+        state.transitions.push({
+          name: pending.name ?? '',
+          transitionType: normalizeTransitionType(pending.transition_type),
           inOffset: transInOffset,
           outOffset: transOutOffset,
           duration: transDuration,
-          outgoingClipIndex: pendingTransitionOutgoingClipIndex,
+          outgoingClipIndex: state.pendingTransitionOutgoingClipIndex,
           incomingClipIndex: clipIndex,
           timelineInFrame: transTimelineIn,
           timelineOutFrame: transTimelineIn + transDuration - 1,
-          metadata: pendingTransition.metadata,
+          metadata: pending.metadata,
         });
-
-        pendingTransition = null;
-        pendingTransitionOutgoingClipIndex = -1;
       }
-
-      timelinePosition += duration;
-    } else if (item.OTIO_SCHEMA === 'Gap.1') {
-      const gap = item as OTIOGap;
-      if (gap.source_range) {
-        const gapDuration = timeRangeDurationFrames(gap.source_range, fps);
-        if (gapDuration > 0) {
-          gaps.push({
-            timelineInFrame: timelinePosition,
-            durationFrames: gapDuration,
-          });
-        }
-        timelinePosition += gapDuration;
+      state.pendingTransition = null;
+      state.pendingTransitionOutgoingClipIndex = -1;
+    } else if (kind === 'Track' || kind === 'Stack') {
+      // Nested composition: flatten its (primary) track into this one,
+      // honouring its source_range as a window into its own time.
+      state.pendingTransition = null;
+      const nested = item as OTIOTrack | OTIOStack;
+      const nestedRange = nested.source_range;
+      const nestedStart = nestedRange ? rationalTimeToFrames(nestedRange.start_time, fps) : 0;
+      const innerStart = nestedStart + (visStart - itemStart);
+      const innerEnd = innerStart + visDuration;
+      const target = kind === 'Track' ? (nested as OTIOTrack) : primaryTrackOfStack(nested as OTIOStack);
+      if (target) {
+        walkComposition(target, state, timelineIn, innerStart, innerEnd);
       }
-    } else if (item.OTIO_SCHEMA === 'Transition.1') {
-      // Store the transition; it will be resolved when the next clip is encountered.
-      // Only valid if there is a preceding clip (outgoing side).
-      if (clips.length > 0) {
-        pendingTransition = item as OTIOTransition;
-        pendingTransitionOutgoingClipIndex = clips.length - 1;
+      if (nested.markers) {
+        state.markers.push(...parseMarkers(nested.markers, fps, timelineIn - innerStart));
       }
+    } else {
+      // Gap (or disabled item, which renders as a gap)
+      state.pendingTransition = null;
+      state.gaps.push({ timelineInFrame: timelineIn, durationFrames: visDuration });
     }
   }
+}
+
+/** Walk a track or nested stack within a window of its own time. */
+function walkComposition(
+  comp: OTIOTrack | OTIOStack,
+  state: TrackWalkState,
+  outerOffset: number,
+  windowStart: number,
+  windowEnd: number,
+): void {
+  if (otioSchemaName(comp) === 'Stack') {
+    const primary = primaryTrackOfStack(comp as OTIOStack);
+    if (primary) walkComposition(primary, state, outerOffset, windowStart, windowEnd);
+    return;
+  }
+  const track = comp as OTIOTrack;
+  walkTrackChildren(track.children ?? [], state, outerOffset, windowStart, windowEnd);
+  if (track.markers) {
+    state.markers.push(...parseMarkers(track.markers, state.fps, outerOffset - windowStart));
+  }
+}
+
+/**
+ * Parse a single OTIO track into a ParsedOTIOTrack.
+ * Extracts clips, gaps (which advance the timeline position), and transitions
+ * (which create overlap regions between adjacent clips). Nested stacks and
+ * tracks are flattened in place (their first video track supplies the clips).
+ */
+function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
+  const state: TrackWalkState = {
+    fps,
+    clips: [],
+    transitions: [],
+    gaps: [],
+    markers: [],
+    pendingTransition: null,
+    pendingTransitionOutgoingClipIndex: -1,
+  };
+  const children = track.children ?? [];
+  walkTrackChildren(children, state, 0, 0, Number.POSITIVE_INFINITY);
 
   // Collect track-level markers
   if (track.markers) {
-    markers.push(...parseMarkers(track.markers, fps, 0));
+    state.markers.push(...parseMarkers(track.markers, fps, 0));
   }
+
+  const totalFrames = children.reduce((sum, child) => sum + itemDurationFrames(child, fps), 0);
 
   return {
     name: track.name,
-    clips,
-    transitions,
-    gaps,
-    markers,
-    totalFrames: timelinePosition,
+    clips: state.clips,
+    transitions: state.transitions,
+    gaps: state.gaps,
+    markers: state.markers,
+    totalFrames,
   };
+}
+
+/** Find the first rate used in the timeline (fallback when global_start_time is absent). */
+function detectTimelineRate(timeline: OTIOTimeline): number {
+  if (timeline.global_start_time?.rate && timeline.global_start_time.rate > 0) {
+    return timeline.global_start_time.rate;
+  }
+  const stack: unknown[] = [timeline.tracks];
+  let guard = 0;
+  while (stack.length > 0 && guard++ < 10000) {
+    const node = stack.pop();
+    if (!node || typeof node !== 'object') continue;
+    const range = (node as { source_range?: OTIOTimeRange }).source_range;
+    if (range?.duration?.rate && range.duration.rate > 0) return range.duration.rate;
+    const children = (node as { children?: unknown[] }).children;
+    if (Array.isArray(children)) stack.push(...[...children].reverse());
+  }
+  return 24;
+}
+
+/** Video tracks at the top level of the timeline stack (any Track schema version). */
+function topLevelVideoTracks(timeline: OTIOTimeline): OTIOTrack[] {
+  return (timeline.tracks.children || []).filter(
+    (t): t is OTIOTrack => otioSchemaName(t) === 'Track' && (t as OTIOTrack).kind === 'Video',
+  );
+}
+
+/** Markers attached to the timeline itself and to its top-level stack. */
+function timelineLevelMarkers(timeline: OTIOTimeline, fps: number): ParsedOTIOMarker[] {
+  return [...parseMarkers(timeline.tracks.markers, fps, 0), ...parseMarkers(timeline.markers, fps, 0)];
 }
 
 /**
@@ -396,15 +605,18 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
  * Returns null if validation fails.
  */
 function validateAndExtractTimeline(jsonString: string): OTIOTimeline | null {
+  let data: unknown;
   try {
-    const data = JSON.parse(jsonString);
-    if (!data || typeof data !== 'object') return null;
-    if (data.OTIO_SCHEMA !== 'Timeline.1') return null;
-    if (!data.tracks || data.tracks.OTIO_SCHEMA !== 'Stack.1') return null;
-    return data as OTIOTimeline;
+    data = JSON.parse(jsonString);
   } catch {
+    // Not JSON: not an OTIO file.
     return null;
   }
+  if (!data || typeof data !== 'object') return null;
+  if (otioSchemaName(data) !== 'Timeline') return null;
+  const tracks = (data as { tracks?: unknown }).tracks;
+  if (!tracks || otioSchemaName(tracks) !== 'Stack') return null;
+  return data as OTIOTimeline;
 }
 
 /**
@@ -416,24 +628,30 @@ export function parseOTIO(jsonString: string): OTIOParseResult | null {
   const timeline = validateAndExtractTimeline(jsonString);
   if (!timeline) return null;
 
-  const fps = timeline.global_start_time?.rate ?? 24;
+  const fps = detectTimelineRate(timeline);
 
   // Process only video tracks
-  const videoTracks = (timeline.tracks.children || []).filter(
-    (t: OTIOTrack) => t.OTIO_SCHEMA === 'Track.1' && t.kind === 'Video',
-  );
+  const videoTracks = topLevelVideoTracks(timeline);
 
   // Use first video track for linear playlist
   const primaryTrack = videoTracks[0];
   if (!primaryTrack) {
-    return { timeline, clips: [], transitions: [], gaps: [], markers: [], fps, totalFrames: 0 };
+    return {
+      timeline,
+      clips: [],
+      transitions: [],
+      gaps: [],
+      markers: timelineLevelMarkers(timeline, fps),
+      fps,
+      totalFrames: 0,
+    };
   }
 
   const parsed = parseTrack(primaryTrack, fps);
 
   // Collect markers: track-level (from parseTrack) + timeline-level
   const allMarkers = [...parsed.markers];
-  allMarkers.push(...parseMarkers(timeline.markers, fps, 0));
+  allMarkers.push(...timelineLevelMarkers(timeline, fps));
 
   return {
     timeline,
@@ -455,7 +673,7 @@ function parseMarkers(markers: OTIOMarker[] | undefined, fps: number, timelineOf
 
   const result: ParsedOTIOMarker[] = [];
   for (const m of markers) {
-    if (m.OTIO_SCHEMA !== 'Marker.1') continue;
+    if (otioSchemaName(m) !== 'Marker') continue;
 
     let timelineFrame = timelineOffset;
     let durationFrames = 0;
@@ -485,12 +703,10 @@ export function parseOTIOMultiTrack(jsonString: string): OTIOMultiTrackParseResu
   const timeline = validateAndExtractTimeline(jsonString);
   if (!timeline) return null;
 
-  const fps = timeline.global_start_time?.rate ?? 24;
+  const fps = detectTimelineRate(timeline);
 
   // Process only video tracks
-  const videoTracks = (timeline.tracks.children || []).filter(
-    (t: OTIOTrack) => t.OTIO_SCHEMA === 'Track.1' && t.kind === 'Video',
-  );
+  const videoTracks = topLevelVideoTracks(timeline);
 
   const tracks: ParsedOTIOTrack[] = [];
   const allClips: ParsedOTIOClip[] = [];
@@ -512,7 +728,7 @@ export function parseOTIOMultiTrack(jsonString: string): OTIOMultiTrackParseResu
   }
 
   // Parse timeline-level markers
-  allMarkers.push(...parseMarkers(timeline.markers, fps, 0));
+  allMarkers.push(...timelineLevelMarkers(timeline, fps));
 
   return {
     timeline,

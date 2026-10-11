@@ -31,13 +31,7 @@ function playlistClipsToOTIOClips(
   sourceUrlResolver?: (sourceIndex: number) => string | null,
 ): OTIOExportClip[] {
   return manager.getClips().map((clip) => {
-    let sourceUrl = '';
-    if (sourceUrlResolver) {
-      const resolved = sourceUrlResolver(clip.sourceIndex);
-      sourceUrl = resolved ?? clip.sourceName;
-    } else {
-      sourceUrl = clip.sourceName;
-    }
+    const sourceUrl = (sourceUrlResolver ? sourceUrlResolver(clip.sourceIndex) : null) ?? clip.sourceName;
     return {
       sourceName: clip.sourceName,
       sourceUrl,
@@ -198,7 +192,8 @@ describe('OTIOWriter E2E', () => {
       expect(clip.name).toBe('my_shot');
       expect(clip.source_range).toEqual({
         OTIO_SCHEMA: 'TimeRange.1',
-        start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 100, rate: 24 },
+        // media time: local frame 100 is media time 99
+        start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 99, rate: 24 },
         duration: { OTIO_SCHEMA: 'RationalTime.1', value: 101, rate: 24 },
       });
       expect(clip.media_reference).toEqual({
@@ -418,12 +413,13 @@ describe('OTIOWriter E2E', () => {
       expect(result!.clips).toHaveLength(2);
 
       expect(result!.clips[0]!.name).toBe('shot_A');
-      expect(result!.clips[0]!.inFrame).toBe(1);
-      expect(result!.clips[0]!.outFrame).toBe(48);
+      // media time (0-based)
+      expect(result!.clips[0]!.inFrame).toBe(0);
+      expect(result!.clips[0]!.outFrame).toBe(47);
 
       expect(result!.clips[1]!.name).toBe('shot_B');
-      expect(result!.clips[1]!.inFrame).toBe(10);
-      expect(result!.clips[1]!.outFrame).toBe(33);
+      expect(result!.clips[1]!.inFrame).toBe(9);
+      expect(result!.clips[1]!.outFrame).toBe(32);
 
       manager.dispose();
     });
@@ -526,7 +522,7 @@ describe('OTIOWriter E2E', () => {
       const parsed = JSON.parse(json);
       const clip = parsed.tracks.children[0].children[0];
 
-      expect(clip.source_range.start_time.value).toBe(50);
+      expect(clip.source_range.start_time.value).toBe(49);
       expect(clip.source_range.duration.value).toBe(1);
     });
 

@@ -10,6 +10,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PlaylistPanel } from './PlaylistPanel';
 import type { ExclusivePanel } from './PlaylistPanel';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
+import { PlaylistManager as RealPlaylistManager } from '../../core/session/PlaylistManager';
+import { TransitionManager } from '../../core/session/TransitionManager';
+import { createSessionSourceResolver } from '../../core/session/EditorialSourceMatcher';
+import type { MediaSource } from '../../core/session/SessionTypes';
 
 function createMockPlaylistManager(): PlaylistManager {
   const listeners: Record<string, Array<(data: unknown) => void>> = {};
@@ -445,6 +449,7 @@ describe('PlaylistPanel', () => {
       expect((manager as unknown as Record<string, ReturnType<typeof vi.fn>>).fromEDL).toHaveBeenCalledWith(
         edlContent,
         expect.any(Function),
+        { fps: 24 },
       );
       expect(importedHandler).toHaveBeenCalledWith(expect.objectContaining({ format: 'edl', importedCount: 2 }));
 
@@ -534,6 +539,7 @@ describe('PlaylistPanel', () => {
       expect((manager as unknown as Record<string, ReturnType<typeof vi.fn>>).fromEDL).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Function),
+        expect.objectContaining({ fps: 24 }),
       );
 
       document.body.removeChild(panel.render());
@@ -582,6 +588,7 @@ describe('PlaylistPanel', () => {
         format: 'otio',
         importedCount: 3,
         unresolvedCount: 1,
+        unresolvedNames: ['unresolved.exr'],
       });
     });
 
@@ -639,5 +646,136 @@ describe('PlaylistPanel', () => {
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Editorial import/export with a real PlaylistManager (E1/E3 review findings)
+// ---------------------------------------------------------------------------
+
+describe('PlaylistPanel editorial import/export (real manager)', () => {
+  let realManager: RealPlaylistManager;
+  let transitions: TransitionManager;
+  let panel: PlaylistPanel;
+
+  const sources = [
+    { name: 'shot_a.mov', url: 'blob:a', duration: 100 },
+    { name: 'shot_b.####.exr', url: '/plates/shot_b.####.exr', duration: 50, sequenceInfo: { startFrame: 1001 } },
+  ];
+
+  beforeEach(() => {
+    realManager = new RealPlaylistManager();
+    transitions = new TransitionManager();
+    realManager.setTransitionManager(transitions);
+    panel = new PlaylistPanel(realManager);
+    panel.setTransitionManager(transitions);
+    panel.setSourceNameResolver(createSessionSourceResolver(() => sources as unknown as MediaSource[]));
+  });
+
+  afterEach(() => {
+    panel.dispose();
+    realManager.dispose();
+  });
+
+  it('PL-ED-001: .rvedl is routed to the RVEDL parser and sequence frames are localised', () => {
+    const imported = vi.fn();
+    panel.on('imported', imported);
+    panel.importPlaylistText('cut.rvedl', '/plates/shot_b.1001.exr 1011 1020\n/missing/x.mov 1 10\n');
+    const clips = realManager.getClips();
+    expect(clips).toHaveLength(1);
+    expect(clips[0]).toMatchObject({ sourceIndex: 1, inPoint: 11, outPoint: 20 });
+    expect(imported).toHaveBeenCalledWith({
+      format: 'rvedl',
+      importedCount: 1,
+      unresolvedCount: 1,
+      unresolvedNames: ['x.mov'],
+    });
+  });
+
+  it('PL-ED-002: EDL import resolves via FROM CLIP NAME against loaded sources', () => {
+    panel.importPlaylistText(
+      'cut.edl',
+      [
+        'TITLE: t',
+        'FCM: NON-DROP FRAME',
+        '001  SHOT_A   V     C        00:00:00:00 00:00:01:00 00:00:00:00 00:00:01:00',
+        '* FROM CLIP NAME: shot_a.mov',
+      ].join('\n'),
+    );
+    expect(realManager.getClips()).toHaveLength(1);
+    expect(realManager.getClips()[0]).toMatchObject({ sourceIndex: 0, inPoint: 1, outPoint: 24 });
+  });
+
+  it('PL-ED-003: OTIO markers are handed to the marker importer', () => {
+    const markerImporter = vi.fn();
+    panel.setMarkerImporter(markerImporter);
+    const otio = JSON.stringify({
+      OTIO_SCHEMA: 'Timeline.1',
+      name: 't',
+      tracks: {
+        OTIO_SCHEMA: 'Stack.1',
+        children: [],
+        markers: [
+          {
+            OTIO_SCHEMA: 'Marker.2',
+            name: 'note',
+            color: 'GREEN',
+            marked_range: {
+              OTIO_SCHEMA: 'TimeRange.1',
+              start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 4, rate: 24 },
+              duration: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+            },
+          },
+        ],
+      },
+    });
+    panel.importPlaylistText('cut.otio', otio);
+    expect(markerImporter).toHaveBeenCalledWith([expect.objectContaining({ name: 'note', timelineFrame: 4 })]);
+  });
+
+  it('PL-ED-004: OTIO export round-trips clips, transitions and markers', async () => {
+    realManager.addClip(0, 'shot_a.mov', 1, 48);
+    realManager.addClip(1, 'shot_b.####.exr', 1, 48);
+    transitions.setTransition(0, { type: 'dissolve', durationFrames: 12 });
+    panel.setSourceUrlResolver((i) => sources[i]?.url ?? null);
+    panel.setSourceInfoResolver((i) => ({
+      frameCount: sources[i]!.duration,
+      startFrame: sources[i]!.sequenceInfo?.startFrame,
+    }));
+    panel.setMarkerProvider(() => [{ frame: 10, name: 'n1', color: '#ff4444' }]);
+
+    let blob: Blob | null = null;
+    const createSpy = vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => {
+      blob = b as Blob;
+      return 'blob:export';
+    });
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    panel.triggerOTIOExport();
+    createSpy.mockRestore();
+    revokeSpy.mockRestore();
+    expect(blob).not.toBeNull();
+    const json = await (blob as unknown as Blob).text();
+    const parsed = JSON.parse(json);
+    const children = parsed.tracks.children[0].children;
+    expect(children.map((c: { OTIO_SCHEMA: string }) => c.OTIO_SCHEMA)).toEqual(['Clip.1', 'Transition.1', 'Clip.1']);
+    // Movie: local frame 1 is media time 0
+    expect(children[0].source_range.start_time.value).toBe(0);
+    // Sequence starting at 1001: local frame 1 + 12 handle frames
+    expect(children[2].source_range.start_time.value).toBe(1001 + 12);
+    expect(children[2].media_reference.available_range.start_time.value).toBe(1001);
+    expect(parsed.tracks.markers[0]).toMatchObject({ name: 'n1', color: 'RED' });
+
+    // Re-import: clips, transition and global layout are restored
+    const markerImporter = vi.fn();
+    panel.setMarkerImporter(markerImporter);
+    panel.importPlaylistText('roundtrip.otio', json);
+    const clips = realManager.getClips();
+    expect(clips.map((c) => [c.sourceIndex, c.inPoint, c.outPoint])).toEqual([
+      [0, 1, 48],
+      [1, 1, 48],
+    ]);
+    expect(transitions.getTransition(0)).toEqual({ type: 'dissolve', durationFrames: 12 });
+    expect(realManager.getTotalDuration()).toBe(84);
+    expect(markerImporter).toHaveBeenCalledWith([expect.objectContaining({ name: 'n1', timelineFrame: 9 })]);
   });
 });

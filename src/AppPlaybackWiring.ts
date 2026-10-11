@@ -282,6 +282,20 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
 
+  // Editorial import: report clips that could not be matched to loaded media.
+  subs.add(
+    controls.playlistPanel.on('imported', (result) => {
+      void reportPlaylistImport(result);
+    }),
+  );
+
+  // Route .otio files from the header file picker / viewer drop to the playlist import,
+  // and the Export menu's EDL/OTIO items to the playlist exporters.
+  headerBar.onOTIOFileOpen = (file) => controls.playlistPanel.importOTIOFile(file);
+  viewer.setOnOTIOFileDrop((file) => controls.playlistPanel.importOTIOFile(file));
+  subs.add(exportControl.on('edlExportRequested', () => controls.playlistPanel.triggerEDLExport()));
+  subs.add(exportControl.on('otioExportRequested', () => controls.playlistPanel.triggerOTIOExport()));
+
   // Set initial fps and keep playlist panel in sync with session fps
   controls.playlistPanel.setFps(session.fps || 24);
   subs.add(session.on('fpsChanged', (fps) => controls.playlistPanel.setFps(fps)));
@@ -290,6 +304,39 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   wirePlaylistRuntime(session, controls, subs, viewer);
 
   return { subscriptions: subs };
+}
+
+/** Maximum number of unresolved clip names listed in the import report. */
+const MAX_UNRESOLVED_LISTED = 15;
+
+/**
+ * Tell the user which imported clips could not be matched to loaded media.
+ * Exported for tests.
+ */
+export async function reportPlaylistImport(result: {
+  format: string;
+  importedCount: number;
+  unresolvedCount: number;
+  unresolvedNames?: string[];
+}): Promise<void> {
+  if (result.unresolvedCount <= 0 && result.importedCount > 0) return;
+  const format = result.format.toUpperCase();
+  if (result.unresolvedCount <= 0) {
+    await showAlert(`No clips were imported from the ${format} file.`, {
+      type: 'warning',
+      title: 'Playlist Import',
+    });
+    return;
+  }
+  const names = result.unresolvedNames ?? [];
+  const listed = names.slice(0, MAX_UNRESOLVED_LISTED).map((n) => `\u2022 ${n}`);
+  if (names.length > MAX_UNRESOLVED_LISTED) listed.push(`\u2026 and ${names.length - MAX_UNRESOLVED_LISTED} more`);
+  const message =
+    `Imported ${result.importedCount} clip(s) from the ${format} file. ` +
+    `${result.unresolvedCount} clip(s) could not be matched to loaded media` +
+    (listed.length > 0 ? `:\n${listed.join('\n')}` : '.') +
+    `\n\nLoad the missing media and import again, or re-link the clips in the Conform panel.`;
+  await showAlert(message, { type: 'warning', title: 'Unresolved Clips' });
 }
 
 /**

@@ -1162,6 +1162,14 @@ export class Viewer implements ViewerAccessor {
   }
 
   /**
+   * Set a callback invoked when an `.otio` file is dropped onto the viewer.
+   * Wired by AppPlaybackWiring to route to the playlist OTIO import.
+   */
+  setOnOTIOFileDrop(cb: ((file: File) => void) | null): void {
+    this.inputHandler.onOTIOFileDrop = cb;
+  }
+
+  /**
    * Set a callback invoked before media files are loaded via drag-and-drop.
    * Used to create auto-checkpoints before destructive media load operations.
    */

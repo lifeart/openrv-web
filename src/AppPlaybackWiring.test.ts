@@ -175,6 +175,7 @@ function createMockViewer() {
     renderFrameToCanvas: vi.fn(),
     setOnBeforeMediaLoad: vi.fn(),
     setPlaylistTransitionProvider: vi.fn(),
+    setOnOTIOFileDrop: vi.fn(),
   };
 }
 
@@ -213,6 +214,9 @@ function createMockControls() {
     notePanel: new EventEmitter(),
     playlistPanel: Object.assign(new EventEmitter(), {
       setFps: vi.fn(),
+      importOTIOFile: vi.fn(),
+      triggerEDLExport: vi.fn(),
+      triggerOTIOExport: vi.fn(),
     }),
     autoSaveManager: {},
     playlistManager,
@@ -394,6 +398,42 @@ describe('wirePlaybackControls', () => {
     expect(session.setInOutRange).toHaveBeenCalledWith(10, 90);
     expect(session.goToFrame).toHaveBeenCalledWith(42);
     expect(controls.playlistManager.setCurrentFrame).toHaveBeenCalledWith(101);
+  });
+
+  it('PW-009b: playlist import with unresolved clips lists them in an alert', async () => {
+    controls.playlistPanel.emit('imported', {
+      format: 'edl',
+      importedCount: 1,
+      unresolvedCount: 2,
+      unresolvedNames: ['shot_a.mov', 'shot_b.mov'],
+    });
+    await Promise.resolve();
+    expect(showAlertSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/2 clip\(s\) could not be matched[\s\S]*shot_a\.mov[\s\S]*shot_b\.mov/),
+      expect.objectContaining({ type: 'warning', title: 'Unresolved Clips' }),
+    );
+  });
+
+  it('PW-009c: fully resolved playlist import shows no alert', async () => {
+    showAlertSpy.mockClear();
+    controls.playlistPanel.emit('imported', { format: 'otio', importedCount: 3, unresolvedCount: 0 });
+    await Promise.resolve();
+    expect(showAlertSpy).not.toHaveBeenCalled();
+  });
+
+  it('PW-009d: OTIO open/drop and EDL/OTIO export menu route to the playlist panel', () => {
+    const file = new File(['{}'], 'cut.otio');
+    (headerBar as unknown as { onOTIOFileOpen: (f: File) => void }).onOTIOFileOpen(file);
+    expect(controls.playlistPanel.importOTIOFile).toHaveBeenCalledWith(file);
+    const dropCb = (viewer.setOnOTIOFileDrop as ReturnType<typeof vi.fn>).mock.calls[0]![0] as (f: File) => void;
+    dropCb(file);
+    expect(controls.playlistPanel.importOTIOFile).toHaveBeenCalledTimes(2);
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('edlExportRequested', undefined);
+    exportControl.emit('otioExportRequested', undefined);
+    expect(controls.playlistPanel.triggerEDLExport).toHaveBeenCalled();
+    expect(controls.playlistPanel.triggerOTIOExport).toHaveBeenCalled();
   });
 
   it('PW-010: enabling playlist with no clips disables mode and shows warning', () => {

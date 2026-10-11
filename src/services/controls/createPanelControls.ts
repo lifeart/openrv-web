@@ -11,6 +11,7 @@ import { CacheIndicator } from '../../ui/components/CacheIndicator';
 import { CacheManagementPanel } from '../../ui/components/CacheManagementPanel';
 import { SnapshotPanel } from '../../ui/components/SnapshotPanel';
 import { PlaylistPanel } from '../../ui/components/PlaylistPanel';
+import { createSessionSourceResolver } from '../../core/session/EditorialSourceMatcher';
 import { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
 import { ShotGridPanel } from '../../ui/components/ShotGridPanel';
 import {
@@ -89,6 +90,34 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
     if (sourceIndex < 0 || sourceIndex >= sources.length) return null;
     return sources[sourceIndex]?.url || null;
   });
+  // Editorial import (EDL / RVEDL / OTIO) resolves clips against loaded media.
+  playlistPanel.setSourceNameResolver(createSessionSourceResolver(() => session.allSources ?? []));
+  playlistPanel.setSourceInfoResolver((sourceIndex: number) => {
+    const source = session.getSourceByIndex(sourceIndex);
+    if (!source) return null;
+    return { frameCount: source.duration, startFrame: source.sequenceInfo?.startFrame };
+  });
+  // OTIO markers (timeline / track / clip) become session markers. OTIO
+  // timeline time is 0-based; playlist frames are 1-based.
+  playlistPanel.setMarkerImporter((markers) => {
+    for (const m of markers) {
+      const frame = m.timelineFrame + 1;
+      const endFrame = m.durationFrames > 1 ? frame + m.durationFrames - 1 : undefined;
+      const openrvMeta = m.metadata?.openrv;
+      const metaColor =
+        openrvMeta && typeof openrvMeta === 'object' ? (openrvMeta as { color?: unknown }).color : undefined;
+      const color = typeof metaColor === 'string' ? metaColor : m.color?.startsWith('#') ? m.color : undefined;
+      session.setMarker(frame, m.name, color, endFrame);
+    }
+  });
+  playlistPanel.setMarkerProvider(() =>
+    Array.from(session.marks.values()).map((m) => ({
+      frame: m.frame,
+      endFrame: m.endFrame,
+      name: m.note,
+      color: m.color,
+    })),
+  );
 
   // Mutual exclusion: only one panel can be open at a time
   snapshotPanel.setExclusiveWith(playlistPanel);
