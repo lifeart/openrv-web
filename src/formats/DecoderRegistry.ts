@@ -199,7 +199,8 @@ function isTIFFAndFloat(buffer: ArrayBuffer): boolean {
     }
   }
 
-  return sampleFormat === SAMPLE_FMT_FLOAT && bitsPerSample === 32;
+  // 16-bit half, 32-bit float and 64-bit double are all handled by TIFFFloatDecoder
+  return sampleFormat === SAMPLE_FMT_FLOAT && (bitsPerSample === 16 || bitsPerSample === 32 || bitsPerSample === 64);
 }
 
 // --- JPEG Gainmap detection ---
@@ -660,7 +661,11 @@ const rawPreviewDecoder: FormatDecoder = {
             c.height = height;
             return c;
           })();
-    const ctx = canvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+    const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
+    if (!ctx) {
+      bitmap.close();
+      throw new Error('Failed to acquire 2D canvas context for RAW preview');
+    }
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close();
     const imageData = ctx.getImageData(0, 0, width, height);

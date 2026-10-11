@@ -350,7 +350,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
   function readCode(): number {
     while (bitsInBuffer < codeSize) {
       if (bytePos >= compressed.length) return EOI_CODE;
-      bitBuffer = (bitBuffer << 8) | compressed[bytePos++]!;
+      bitBuffer = (bitBuffer << 8) | (compressed[bytePos++] ?? 0);
       bitsInBuffer += 8;
     }
     bitsInBuffer -= codeSize;
@@ -373,7 +373,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       return;
     }
     // Build string by following prefix chain (in reverse), then output
-    const len = tableLength[code]!;
+    const len = tableLength[code] ?? 0;
     const startIdx = output.length;
     // Extend output array
     output.length += len;
@@ -384,8 +384,8 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       if (++depth > MAX_CHAIN_DEPTH) {
         throw new DecoderError('TIFF', `LZW chain corruption detected: prefix chain cycle at code ${code}`);
       }
-      output[idx--] = tableSuffix[c]!;
-      c = tablePrefix[c]!;
+      output[idx--] = tableSuffix[c] ?? 0;
+      c = tablePrefix[c] ?? 0;
     }
     output[idx] = c; // first character
   }
@@ -397,7 +397,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       if (++depth > MAX_CHAIN_DEPTH) {
         throw new DecoderError('TIFF', `LZW chain corruption detected: prefix chain cycle at code ${code}`);
       }
-      c = tablePrefix[c]!;
+      c = tablePrefix[c] ?? 0;
     }
     return c;
   }
@@ -442,7 +442,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       if (nextCode <= MAX_CODE) {
         tablePrefix[nextCode] = oldCode;
         tableSuffix[nextCode] = firstChar(code);
-        tableLength[nextCode] = (oldCode < 256 ? 1 : tableLength[oldCode]!) + 1;
+        tableLength[nextCode] = (oldCode < 256 ? 1 : (tableLength[oldCode] ?? 0)) + 1;
         nextCode++;
       }
     } else if (code === nextCode) {
@@ -453,7 +453,7 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       if (nextCode <= MAX_CODE) {
         tablePrefix[nextCode] = oldCode;
         tableSuffix[nextCode] = fc;
-        tableLength[nextCode] = (oldCode < 256 ? 1 : tableLength[oldCode]!) + 1;
+        tableLength[nextCode] = (oldCode < 256 ? 1 : (tableLength[oldCode] ?? 0)) + 1;
         nextCode++;
       }
 
@@ -525,19 +525,19 @@ function decompressPackBits(compressed: Uint8Array, expectedSize?: number): Uint
 
   while (pos < compressed.length) {
     // Read header byte as signed
-    let n = compressed[pos++]!;
+    let n = compressed[pos++] ?? 0;
     if (n > 127) n -= 256; // Convert to signed
 
     if (n >= 0 && n <= 127) {
       // Literal run: copy next n+1 bytes
       const count = n + 1;
       for (let i = 0; i < count && pos < compressed.length; i++) {
-        output.push(compressed[pos++]!);
+        output.push(compressed[pos++] ?? 0);
       }
     } else if (n >= -127 && n <= -1) {
       // Repeated run: repeat next byte (1-n) times
       if (pos >= compressed.length) break;
-      const value = compressed[pos++]!;
+      const value = compressed[pos++] ?? 0;
       const count = 1 - n;
       for (let i = 0; i < count; i++) {
         output.push(value);
@@ -559,15 +559,20 @@ function decompressPackBits(compressed: Uint8Array, expectedSize?: number): Uint
 }
 
 /**
- * Apply TIFF predictor reconstruction to decompressed strip data.
+ * Apply TIFF predictor reconstruction to decompressed strip/tile data.
  *
- * Predictor 2 (horizontal differencing): Each byte after the first in a row
- * is stored as the difference from the previous byte, with a stride equal
- * to samplesPerPixel * bytesPerSample.
+ * Predictor 2 (horizontal differencing): each *sample word* (16/32/64-bit,
+ * read in the file's byte order) is stored as the difference from the same
+ * channel of the previous pixel. Accumulation is done modulo 2^bits on whole
+ * words (matching libtiff's horAcc16/32/64), not per byte, so carries between
+ * bytes are handled correctly.
  *
- * Predictor 3 (floating-point): Bytes are first delta-decoded (stride 1),
- * then un-rearranged from planar (all first bytes, all second bytes, ...)
- * to interleaved byte order.
+ * Predictor 3 (floating-point): bytes are first delta-decoded (stride 1),
+ * then un-rearranged from byte planes to interleaved samples. Per the
+ * Adobe TIFF Technical Note 3 / libtiff fpAcc, the first plane always holds
+ * the most significant byte of every sample regardless of the file's byte
+ * order, so the reconstructed bytes are written in the file's byte order
+ * (`le`) so downstream readers can keep using the file byte order.
  */
 function applyPredictor(
   data: Uint8Array,
@@ -576,51 +581,58 @@ function applyPredictor(
   samplesPerPixel: number,
   bytesPerSample: number,
   rowCount: number,
+  le: boolean,
 ): Uint8Array {
   if (predictor === PREDICTOR_NONE) return data;
 
-  const result = new Uint8Array(data.length);
   const rowBytes = width * samplesPerPixel * bytesPerSample;
 
   if (predictor === PREDICTOR_HORIZONTAL) {
-    // Horizontal differencing: undo byte-level delta with stride = samplesPerPixel * bytesPerSample
+    const result = new Uint8Array(data);
+    const view = new DataView(result.buffer, result.byteOffset, result.byteLength);
     const stride = samplesPerPixel * bytesPerSample;
     for (let row = 0; row < rowCount; row++) {
       const rowStart = row * rowBytes;
-      // First pixel's bytes are stored directly
-      for (let i = 0; i < stride && rowStart + i < data.length; i++) {
-        result[rowStart + i] = data[rowStart + i]!;
-      }
-      // Subsequent bytes: accumulate
-      for (let i = stride; i < rowBytes && rowStart + i < data.length; i++) {
-        result[rowStart + i] = (result[rowStart + i - stride]! + data[rowStart + i]!) & 0xff;
+      const rowEnd = Math.min(rowStart + rowBytes, result.length);
+      for (let i = rowStart + stride; i + bytesPerSample <= rowEnd; i += bytesPerSample) {
+        const prev = i - stride;
+        if (bytesPerSample === 1) {
+          result[i] = ((result[i] ?? 0) + (result[prev] ?? 0)) & 0xff;
+        } else if (bytesPerSample === 2) {
+          view.setUint16(i, (view.getUint16(i, le) + view.getUint16(prev, le)) & 0xffff, le);
+        } else if (bytesPerSample === 4) {
+          view.setUint32(i, (view.getUint32(i, le) + view.getUint32(prev, le)) >>> 0, le);
+        } else {
+          view.setBigUint64(i, BigInt.asUintN(64, view.getBigUint64(i, le) + view.getBigUint64(prev, le)), le);
+        }
       }
     }
     return result;
   }
 
   if (predictor === PREDICTOR_FLOATING_POINT) {
-    // Floating-point predictor: undo byte-level delta (stride 1), then un-rearrange
+    const result = new Uint8Array(data.length);
     const temp = new Uint8Array(data.length);
+    const wordCount = width * samplesPerPixel;
 
     for (let row = 0; row < rowCount; row++) {
       const rowStart = row * rowBytes;
+      if (rowStart >= data.length) break;
+      const rowEnd = Math.min(rowStart + rowBytes, data.length);
       // Step 1: undo byte-level delta (stride 1)
-      temp[rowStart] = data[rowStart]!;
-      for (let i = 1; i < rowBytes && rowStart + i < data.length; i++) {
-        temp[rowStart + i] = (temp[rowStart + i - 1]! + data[rowStart + i]!) & 0xff;
+      temp[rowStart] = data[rowStart] ?? 0;
+      for (let i = rowStart + 1; i < rowEnd; i++) {
+        temp[i] = ((temp[i - 1] ?? 0) + (data[i] ?? 0)) & 0xff;
       }
 
-      // Step 2: un-rearrange from planar to interleaved
-      // The data is arranged as: all first bytes of each sample, all second bytes, etc.
-      // We need to reconstruct interleaved float bytes
-      const pixelCount = width * samplesPerPixel;
-      for (let i = 0; i < pixelCount && i * bytesPerSample < rowBytes; i++) {
+      // Step 2: plane b holds byte b of each sample counting from the MSB.
+      for (let i = 0; i < wordCount; i++) {
         for (let b = 0; b < bytesPerSample; b++) {
-          const srcIdx = rowStart + b * pixelCount + i;
-          const dstIdx = rowStart + i * bytesPerSample + b;
-          if (srcIdx < temp.length && dstIdx < result.length) {
-            result[dstIdx] = temp[srcIdx]!;
+          const srcIdx = rowStart + b * wordCount + i;
+          const dstByte = le ? bytesPerSample - 1 - b : b;
+          const dstIdx = rowStart + i * bytesPerSample + dstByte;
+          if (srcIdx < rowEnd && dstIdx < rowEnd) {
+            result[dstIdx] = temp[srcIdx] ?? 0;
           }
         }
       }
@@ -943,14 +955,14 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   const bytesPerPixel = samplesPerPixel * bytesPerSample;
 
   for (let stripIdx = 0; stripIdx < stripOffsets.length; stripIdx++) {
-    const stripOffset = stripOffsets[stripIdx]!;
+    const stripOffset = stripOffsets[stripIdx] ?? 0;
     const stripRows = Math.min(rowsPerStrip, height - currentRow);
     const stripPixels = stripRows * width;
 
     const expectedStripBytes = stripPixels * bytesPerPixel;
     const stripByteCount = stripByteCounts[stripIdx] ?? expectedStripBytes;
 
-    if (compression === COMPRESSION_NONE) {
+    if (compression === COMPRESSION_NONE && predictor === PREDICTOR_NONE) {
       // Uncompressed path (original logic)
       const maxPixelsInStrip = Math.floor(stripByteCount / bytesPerPixel);
       const pixelsToRead = Math.min(stripPixels, maxPixelsInStrip);
@@ -973,7 +985,10 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
       const compressedBytes = new Uint8Array(buffer, stripOffset, stripByteCount);
 
       let decompressed: Uint8Array;
-      if (compression === COMPRESSION_LZW) {
+      if (compression === COMPRESSION_NONE) {
+        // Uncompressed but predicted: copy so the predictor can work in place
+        decompressed = compressedBytes.slice();
+      } else if (compression === COMPRESSION_LZW) {
         decompressed = decompressLZW(compressedBytes);
       } else if (compression === COMPRESSION_PACKBITS) {
         decompressed = decompressPackBits(compressedBytes, expectedStripBytes);
@@ -984,7 +999,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
       // Apply predictor if needed
       if (predictor !== PREDICTOR_NONE) {
-        decompressed = applyPredictor(decompressed, predictor, width, samplesPerPixel, bytesPerSample, stripRows);
+        decompressed = applyPredictor(decompressed, predictor, width, samplesPerPixel, bytesPerSample, stripRows, le);
       }
 
       // Parse floats from decompressed data
@@ -1071,7 +1086,7 @@ async function decodeTiledTIFF(
 
       if (tileIdx >= tileOffsets.length) break;
 
-      const tileOffset = tileOffsets[tileIdx]!;
+      const tileOffset = tileOffsets[tileIdx] ?? 0;
 
       // Actual pixel dimensions of this tile (handle partial tiles at edges)
       const actualTileW = Math.min(tileWidth, width - tileCol * tileWidth);
@@ -1085,7 +1100,7 @@ async function decodeTiledTIFF(
       const expectedTileBytes = tileWidth * tileLength * bytesPerPixel;
       const tileByteCount = tileByteCounts[tileIdx] ?? expectedTileBytes;
 
-      if (compression === COMPRESSION_NONE) {
+      if (compression === COMPRESSION_NONE && predictor === PREDICTOR_NONE) {
         // Uncompressed tiles
         // Note: data in file is stored as tileWidth * tileLength even for partial tiles
         for (let ty = 0; ty < actualTileH; ty++) {
@@ -1111,7 +1126,10 @@ async function decodeTiledTIFF(
         const compressedBytes = new Uint8Array(buffer, tileOffset, tileByteCount);
 
         let decompressed: Uint8Array;
-        if (compression === COMPRESSION_LZW) {
+        if (compression === COMPRESSION_NONE) {
+          // Uncompressed but predicted: copy so the predictor can work in place
+          decompressed = compressedBytes.slice();
+        } else if (compression === COMPRESSION_LZW) {
           decompressed = decompressLZW(compressedBytes);
         } else if (compression === COMPRESSION_PACKBITS) {
           decompressed = decompressPackBits(compressedBytes, expectedTileBytes);
@@ -1131,6 +1149,7 @@ async function decodeTiledTIFF(
             samplesPerPixel,
             bytesPerSample,
             tileLength,
+            le,
           );
         }
 
