@@ -49,11 +49,18 @@ describe('LUTPresets', () => {
         const lut = generatePresetLUT(preset.id);
         expect(lut).not.toBeNull();
 
+        // Scan once and assert on the extremes: one expect() per value made this
+        // test slow enough to time out under coverage instrumentation.
         const data = lut!.data;
+        let min = Infinity;
+        let max = -Infinity;
         for (let i = 0; i < data.length; i++) {
-          expect(data[i]).toBeGreaterThanOrEqual(0);
-          expect(data[i]).toBeLessThanOrEqual(1);
+          const v = data[i];
+          if (!(v >= min)) min = v;
+          if (!(v <= max)) max = v;
         }
+        expect(min, preset.id).toBeGreaterThanOrEqual(0);
+        expect(max, preset.id).toBeLessThanOrEqual(1);
       }
     });
 
