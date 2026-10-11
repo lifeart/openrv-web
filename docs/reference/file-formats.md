@@ -21,8 +21,8 @@ This page lists all file formats supported by OpenRV Web.
 | Radiance HDR | `.hdr`, `.pic` | Custom decoder | Yes | RGBE encoding |
 | Float TIFF | `.tiff`, `.tif` | Custom decoder | Yes | Float samples only (16/32/64-bit); JPEG compression not supported |
 | JPEG XL | `.jxl` | WASM (libjxl) + browser native HDR | Yes | Modern HDR format |
-| JPEG 2000 | `.jp2`, `.j2k`, `.j2c` | openjph WASM | No | Wavelet compression |
-| HTJ2K | `.jph`, `.jhc` | openjph WASM | No | High-throughput JPEG 2000 |
+| JPEG 2000 | `.jp2`, `.j2k`, `.j2c` | OpenJPEG WASM | No | Wavelet compression; greyscale or RGB (1 or 3 components) |
+| HTJ2K | `.jph`, `.jhc` (also HTJ2K in `.j2c`/`.jp2`) | OpenJPH WASM (OpenJPEG fallback) | No | High-throughput JPEG 2000; any component count |
 | JPEG Gainmap | `.jpg` | MPF parser | Yes | SDR base + gainmap for HDR |
 | HEIC Gainmap | `.heic` | ISOBMFF parser | Yes | Apple and ISO 21496-1 gainmap |
 | AVIF Gainmap | `.avif` | ISO 21496-1 parser | Yes | Auxiliary gain map items |

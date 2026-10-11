@@ -167,14 +167,17 @@ Standard AVIF images without gain maps:
 
 **Color space**: sRGB.
 
-### JPEG 2000 / HTJ2K (.jp2, .j2k, .j2c)
+### JPEG 2000 / HTJ2K (.jp2, .j2k, .j2c, .jph, .jhc)
 
 JPEG 2000 and its high-throughput variant HTJ2K, used in digital cinema (DCI) packaging:
 
-- **Decoder**: WebAssembly-compiled openjph library (`JP2Decoder.ts`)
+- **Decoder**: WebAssembly builds of OpenJPEG (`@cornerstonejs/codec-openjpeg`, classic Part 1) and OpenJPH (`@cornerstonejs/codec-openjph`, HTJ2K Part 15), wired up in `JP2Decoder.ts` / `JP2WasmCodecs.ts`. Both are lazy-loaded on first use as separate chunks plus `.wasm` assets
+- **Routing**: Codestreams with a CAP marker (HTJ2K) go to OpenJPH, falling back to OpenJPEG (which also decodes HTJ2K); classic codestreams and JP2 box files go to OpenJPEG. The `jp2c` codestream is extracted from box files for OpenJPH
 - **Detection**: Raw J2K codestream SOC marker (`0xFF4F`) or JP2 box format signature (`0x0000000C 6A502020 0D0A870A`)
-- **Bit depth**: Supports various bit depths (8, 10, 12, 16-bit) with signed and unsigned samples
-- **Color space**: `colr` box parsing for ICC profiles and enumerated color spaces
+- **Bit depth**: 1-16 bit samples, signed and unsigned, normalized to `[0, 1]` Float32 RGBA. Greyscale is replicated to RGB; missing alpha is opaque
+- **Components**: Classic JPEG 2000 supports 1 (greyscale) or 3 (RGB) components; 2- and 4-component (alpha) images decode only when HTJ2K-encoded
+- **Color space**: `colr` box parsing for ICC profiles and enumerated color spaces; sYCC (EnumCS 18) is converted to RGB. ICC profiles are not applied
+- **Options**: `maxResolutionLevel` decodes a reduced resolution (clamped to the codestream's decomposition levels); `region` crops the decoded image
 
 ### RAW Preview (.cr2, .nef, .arw, .dng, .orf, etc.)
 
@@ -409,7 +412,7 @@ The following table compares format support between desktop OpenRV and OpenRV We
 | HEIC Gainmap | .heic | No | Yes | JS + WASM | Yes |
 | AVIF Gainmap | .avif | No | Yes | JavaScript | Yes |
 | AVIF | .avif | No | Yes | Native | No |
-| JPEG 2000 | .jp2, .j2k | No | Yes | WASM | No |
+| JPEG 2000 / HTJ2K | .jp2, .j2k, .j2c, .jph, .jhc | No | Yes | WASM | No |
 | RAW Preview | .cr2, .nef, etc. | No | Yes | JavaScript | No |
 | SGI | .sgi, .rgb | Yes | No | -- | No |
 | Softimage PIC | .pic | Yes | No | -- | No |

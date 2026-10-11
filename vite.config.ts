@@ -30,12 +30,13 @@ export default defineConfig({
     rollupOptions: {
       onwarn(warning, defaultHandler) {
         // Suppress "Module has been externalized for browser compatibility" warnings
-        // from libheif-js (emscripten-generated code that safely checks for Node.js modules)
+        // from libheif-js and the @cornerstonejs JPEG 2000 codecs (emscripten-generated
+        // code that only requires fs/path when running under Node.js)
         if (
           warning.code === 'PLUGIN_WARNING' &&
           warning.plugin === 'vite:resolve' &&
           warning.message?.includes('has been externalized for browser compatibility') &&
-          warning.message?.includes('libheif-js')
+          (warning.message?.includes('libheif-js') || warning.message?.includes('@cornerstonejs/codec-openjp'))
         ) {
           return;
         }

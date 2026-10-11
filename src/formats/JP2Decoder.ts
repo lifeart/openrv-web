@@ -11,9 +11,10 @@
  *   bytes 8-11 == 0x0D0A870A
  * - J2K codestream: starts with SOC marker (0xFF4F)
  *
- * Decoding is delegated to an openjph-based WASM module (loaded lazily).
- * When WASM is not available, functions throw a clear error to allow
- * graceful fallback in the application layer.
+ * Decoding is delegated to lazily-loaded WASM codecs (see JP2WasmCodecs.ts):
+ * OpenJPEG for classic JPEG 2000 and OpenJPH for HTJ2K (with OpenJPEG as
+ * fallback). When the WASM codecs cannot be loaded, functions throw a clear
+ * DecoderError to allow graceful fallback in the application layer.
  *
  * Based on ISO/IEC 15444-1 (JPEG 2000 Part 1) and
  * ISO/IEC 15444-15 (HTJ2K / High-Throughput JPEG 2000).
@@ -22,6 +23,7 @@
 import { DecoderError } from '../core/errors';
 import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { validateImageDimensions } from './shared';
+import type { JP2CodecInput } from './JP2WasmCodecs';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -47,6 +49,9 @@ const J2K_SIZ_MARKER = 0xff51;
 
 /** J2K CAP marker (HTJ2K indicator) */
 const J2K_CAP_MARKER = 0xff50;
+
+/** J2K COD marker (Coding style default) */
+const J2K_COD_MARKER = 0xff52;
 
 /** J2K SOT marker (Start of Tile-part) -- stop scanning here */
 const J2K_SOT_MARKER = 0xff93;
@@ -459,6 +464,34 @@ function detectHTJ2K(view: DataView, csOffset: number, byteLength: number): bool
   return false;
 }
 
+/**
+ * Read the number of wavelet decomposition levels from the main-header COD
+ * marker. Returns null when no COD marker is found before the first SOT.
+ *
+ * COD layout: Lcod(2) Scod(1) SGcod[progression(1) layers(2) MCT(1)]
+ * SPcod[decomposition levels(1) ...].
+ */
+function parseCODDecompositions(view: DataView, csOffset: number, byteLength: number): number | null {
+  let offset = csOffset;
+  if (offset + 2 > byteLength || view.getUint16(offset, false) !== J2K_SOC_MARKER) return null;
+  offset += 2;
+
+  while (offset + 4 <= byteLength) {
+    const marker = view.getUint16(offset, false);
+    offset += 2;
+    if (marker === J2K_SOT_MARKER) return null;
+    if (marker >= 0xff30 && marker <= 0xff3f) continue;
+    const segLen = view.getUint16(offset, false);
+    if (marker === J2K_COD_MARKER) {
+      const levelsOffset = offset + 7;
+      return levelsOffset < byteLength ? view.getUint8(levelsOffset) : null;
+    }
+    if (segLen < 2) return null;
+    offset += segLen;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Header parsing (public API)
 // ---------------------------------------------------------------------------
@@ -570,20 +603,46 @@ export function parseJP2Header(buffer: ArrayBuffer): JP2FileInfo {
   throw new DecoderError('JP2', 'Not a JPEG 2000 file: unrecognised signature');
 }
 
+/**
+ * Gather the header facts the WASM codecs need (codestream location,
+ * HTJ2K flag, colour space, decomposition levels).
+ */
+function prepareCodecInput(buffer: ArrayBuffer): JP2CodecInput {
+  const info = parseJP2Header(buffer);
+  const bytes = new Uint8Array(buffer);
+  const isContainer = !(bytes[0] === 0xff && bytes[1] === 0x4f);
+  const codestreamOffset = isContainer ? findCodestreamOffset(buffer) : 0;
+  if (codestreamOffset < 0) {
+    throw new DecoderError('JP2', 'JP2 container has no contiguous codestream (jp2c) box');
+  }
+  const view = new DataView(buffer);
+  return {
+    buffer,
+    codestreamOffset,
+    isContainer,
+    isHTJ2K: info.isHTJ2K,
+    colorSpace: info.colorSpace,
+    width: info.width,
+    height: info.height,
+    numComponents: info.numComponents,
+    numDecompositions: parseCODDecompositions(view, codestreamOffset, buffer.byteLength),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // WASM Decoder class
 // ---------------------------------------------------------------------------
 
 /**
- * JP2WasmDecoder manages the lifecycle of an openjph-based WASM module
- * for high-performance JPEG 2000 / HTJ2K decoding.
+ * JP2WasmDecoder manages the lifecycle of the WASM codecs (OpenJPEG for
+ * classic JPEG 2000, OpenJPH for HTJ2K) used for JPEG 2000 / HTJ2K decoding.
  *
  * Extends EventEmitter<JP2WasmDecoderEvents> for standard event pattern (JP2-QA-001).
  *
  * Usage:
  * ```ts
  * const decoder = new JP2WasmDecoder();
- * await decoder.init('/openjph.wasm');
+ * await decoder.init();
  * const result = await decoder.decode(buffer);
  * decoder.dispose();
  * ```
@@ -609,8 +668,9 @@ export class JP2WasmDecoder extends EventEmitter<JP2WasmDecoderEvents> {
    * Has re-entrancy guard (JP2-R08/QA-002): concurrent callers share the
    * same init promise. Only retries after error (clears promise on error).
    *
-   * @param wasmUrl - URL or path to the openjph WASM binary.
-   *                  When omitted, uses the default bundled path.
+   * @param wasmUrl - Optional URL hint forwarded to `_loadWasmModule()`.
+   *                  The default loader uses the WASM binaries bundled by
+   *                  Vite and ignores it; subclasses may use it.
    * @throws DecoderError if loading fails.
    */
   async init(wasmUrl?: string): Promise<void> {
@@ -633,10 +693,8 @@ export class JP2WasmDecoder extends EventEmitter<JP2WasmDecoderEvents> {
     this.emit('loading', undefined as unknown as void);
 
     try {
-      // In a real implementation, this would fetch and instantiate the WASM module.
-      // The mock / test environment can replace this with a stub via subclass.
-      const url = wasmUrl ?? '/openjph.wasm';
-      const module = await this._loadWasmModule(url);
+      // Subclasses (e.g. tests) can replace the module via _loadWasmModule().
+      const module = await this._loadWasmModule(wasmUrl ?? '');
       this._wasmModule = module;
       this._ready = true;
       this.emit('ready', undefined as unknown as void);
@@ -656,8 +714,7 @@ export class JP2WasmDecoder extends EventEmitter<JP2WasmDecoderEvents> {
       throw new DecoderError('JP2', 'JP2 WASM module not loaded');
     }
 
-    // In a real implementation, this would call into the WASM module.
-    // The test environment replaces _wasmModule with a mock that exposes decode().
+    // The module returns raw integer sample values; decodeJP2() normalizes them.
     const mod = this._wasmModule as {
       decode: (buf: ArrayBuffer, opts?: JP2DecodeOptions) => JP2DecodeResult | Promise<JP2DecodeResult>;
     };
@@ -690,14 +747,23 @@ export class JP2WasmDecoder extends EventEmitter<JP2WasmDecoderEvents> {
 
   /**
    * Load the WASM module. Separated for testability (JP2-QA-003).
-   * In production this would use WebAssembly.instantiateStreaming.
-   * Tests can override this via subclass.
+   * The default implementation lazily imports the OpenJPEG / OpenJPH codec
+   * bindings (separate chunks + .wasm assets). Tests can override this via
+   * subclass.
+   *
+   * The returned object must expose `decode(buffer, options)` returning a
+   * JP2DecodeResult with raw (un-normalized) integer sample values, and may
+   * expose `destroy()`.
    *
    * @internal
    */
   protected async _loadWasmModule(_url: string): Promise<unknown> {
-    // Default implementation throws -- real WASM binary must be provided.
-    throw new Error('WASM module not available');
+    const { createJP2CodecModule } = await import('./JP2WasmCodecs');
+    const codecs = createJP2CodecModule();
+    return {
+      decode: (buffer: ArrayBuffer, options?: JP2DecodeOptions) => codecs.decode(prepareCodecInput(buffer), options),
+      destroy: () => codecs.destroy(),
+    };
   }
 }
 
@@ -722,11 +788,11 @@ function normalizeToFloat32(data: Float32Array, bitsPerComponent: number, isSign
   if (isSigned) {
     const offset = Math.pow(2, bitsPerComponent - 1);
     for (let i = 0; i < data.length; i++) {
-      result[i] = (data[i]! + offset) / maxVal;
+      result[i] = ((data[i] ?? 0) + offset) / maxVal;
     }
   } else {
     for (let i = 0; i < data.length; i++) {
-      result[i] = data[i]! / maxVal;
+      result[i] = (data[i] ?? 0) / maxVal;
     }
   }
 
@@ -738,6 +804,21 @@ function normalizeToFloat32(data: Float32Array, bitsPerComponent: number, isSign
 // ---------------------------------------------------------------------------
 
 let _jp2WasmDecoder: JP2WasmDecoder | null = null;
+
+/** Lazily-created decoder backed by the bundled WASM codecs. */
+let _defaultDecoderPromise: Promise<JP2WasmDecoder> | null = null;
+
+function getDefaultJP2Decoder(): Promise<JP2WasmDecoder> {
+  if (!_defaultDecoderPromise) {
+    const decoder = new JP2WasmDecoder();
+    _defaultDecoderPromise = decoder.init().then(() => decoder);
+    // Clear on failure so a later call can retry (e.g. transient network error)
+    _defaultDecoderPromise.catch(() => {
+      _defaultDecoderPromise = null;
+    });
+  }
+  return _defaultDecoderPromise;
+}
 
 /**
  * Set the module-level JP2 WASM decoder instance for use by the registry adapter.
@@ -762,15 +843,17 @@ export function getJP2WasmDecoder(): JP2WasmDecoder | null {
 /**
  * Decode a JPEG 2000 file.
  *
- * Tries the WASM decoder first if a module instance is provided.
- * Falls back to the module-level decoder, then throws a descriptive error.
+ * Uses, in order: the explicitly provided decoder, the module-level decoder
+ * set via setJP2WasmDecoder(), or a lazily-initialised default decoder backed
+ * by the bundled OpenJPEG / OpenJPH WASM codecs.
  *
  * Includes dimension validation (JP2-QA-004) and output normalization (JP2-R07).
  *
  * @param buffer - The JP2/J2K file data.
  * @param options - Decode options.
  * @param wasmDecoder - Optional pre-initialised WASM decoder instance.
- * @throws DecoderError when the file is not a valid JP2/J2K or WASM is unavailable.
+ * @throws DecoderError when the file is not a valid JP2/J2K, the WASM codecs
+ *         cannot be loaded, or a provided decoder has not been initialised.
  */
 export async function decodeJP2(
   buffer: ArrayBuffer,
@@ -787,8 +870,8 @@ export async function decodeJP2(
   // Validate dimensions (JP2-QA-004)
   validateImageDimensions(info.width, info.height, 'JP2');
 
-  // Select decoder: explicit argument > module-level > error
-  const decoder = wasmDecoder ?? _jp2WasmDecoder;
+  // Select decoder: explicit argument > module-level > bundled default
+  const decoder = wasmDecoder ?? _jp2WasmDecoder ?? (await getDefaultJP2Decoder());
 
   if (decoder && decoder.isReady()) {
     const result = await decoder.decode(buffer, options);
@@ -806,7 +889,7 @@ export async function decodeJP2(
     return result;
   }
 
-  // No WASM available -- throw helpful error
+  // A caller-provided decoder that was never initialised -- throw helpful error
   throw new DecoderError(
     'JP2',
     'JP2 WASM module not loaded. Call JP2WasmDecoder.init() first or provide a loaded decoder instance.',
