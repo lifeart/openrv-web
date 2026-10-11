@@ -512,7 +512,7 @@ export class AutoSaveIndicator {
       case 'disabled':
         this.iconElement.innerHTML = getIconSvg('cloud-off', 'sm');
         this.iconElement.style.animation = '';
-        this.iconElement.style.color = 'var(--text-muted, #666)';
+        this.iconElement.style.color = 'var(--text-muted, #999)';
         this.textElement.textContent = 'Auto-save off';
         this.container.title = 'Auto-save is disabled';
         this.container.style.cursor = 'pointer';
