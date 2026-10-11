@@ -215,7 +215,8 @@ export class Timeline {
     this.hoverThumb.style.cssText = 'display: none; border-radius: 2px;';
     this.hoverLabel = document.createElement('span');
     this.hoverTooltip.append(this.hoverThumb, this.hoverLabel);
-    this.container.appendChild(this.hoverTooltip);
+    // Insert before the canvas so the timeline canvas stays the container's last canvas
+    this.container.insertBefore(this.hoverTooltip, this.canvas);
 
     // Create magnifying glass toggle button (overlaid on left padding area)
     this.magnifierToggleButton = document.createElement('button');

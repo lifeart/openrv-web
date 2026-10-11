@@ -246,6 +246,9 @@ export class FocusManager {
     // global shortcuts (frame stepping, go to start/end) instead of moving focus.
     if (!isKeyboardFocused(activeEl)) return;
 
+    // Widgets that use arrows themselves (e.g. the timeline slider) keep them.
+    if (activeEl.getAttribute('role') === 'slider') return;
+
     const isHorizontal = zone.orientation === 'horizontal';
     const prevKey = isHorizontal ? 'ArrowLeft' : 'ArrowUp';
     const nextKey = isHorizontal ? 'ArrowRight' : 'ArrowDown';
@@ -262,7 +265,9 @@ export class FocusManager {
       newIdx = items.length - 1;
     }
 
-    if (newIdx !== -1) {
+    // Nothing to move to (e.g. the single-item viewer zone): leave the key to
+    // the global shortcuts instead of swallowing it.
+    if (newIdx !== -1 && newIdx !== currentIdx) {
       e.preventDefault();
       // Update tabindex: old becomes -1, new becomes 0
       const next = items[newIdx];

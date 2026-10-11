@@ -134,6 +134,25 @@ describe('FocusManager', () => {
     expect(document.activeElement).toBe(buttons[2]);
   });
 
+  // FM-007b
+  it('End/arrows in a single-item zone (viewer) are left to global shortcuts', () => {
+    const buttons = createButtons(1);
+    fm.addZone(createZone('viewer', buttons));
+    buttons[0]!.focus();
+    expect(pressKey('End').defaultPrevented).toBe(false);
+    expect(pressKey('ArrowRight').defaultPrevented).toBe(false);
+  });
+
+  // FM-007c
+  it('a focused slider keeps its arrow keys', () => {
+    const buttons = createButtons(2);
+    buttons[0]!.setAttribute('role', 'slider');
+    fm.addZone(createZone('timeline', buttons));
+    buttons[0]!.focus();
+    expect(pressKey('ArrowRight').defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(buttons[0]);
+  });
+
   // FM-008
   it('Arrow wraps at boundaries', () => {
     const buttons = createButtons(3);

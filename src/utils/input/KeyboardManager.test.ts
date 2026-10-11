@@ -1323,13 +1323,13 @@ describe('KeyboardManager double-fire / precedence fixes', () => {
     expect(step).not.toHaveBeenCalled();
   });
 
-  it('KBM-DP-007: range sliders keep their arrow keys', () => {
+  it('KBM-DP-007: arrows on a range slider still step frames', () => {
     const step = vi.fn();
     km.register({ code: 'ArrowRight' }, step);
     const range = mount(document.createElement('input'));
     range.type = 'range';
     press(range, 'ArrowRight', 'ArrowRight');
-    expect(step).not.toHaveBeenCalled();
+    expect(step).toHaveBeenCalledTimes(1);
   });
 
   it('KBM-DP-008: a mouse-clicked tab does not swallow arrow keys', () => {

@@ -411,10 +411,9 @@ export class KeyboardManager {
     const isNavKey = NAVIGATION_KEYS.has(e.key);
     const isActivationKey = e.key === ' ' || e.key === 'Enter';
 
-    // Range sliders own their arrow / Home / End / PageUp / PageDown keys.
-    if (target instanceof HTMLInputElement && target.type === 'range' && isBareKey && isNavKey) {
-      return true;
-    }
+    // Range sliders deliberately do not own arrow keys: after adjusting a
+    // control, arrows keep stepping frames (the shortcut preventDefaults, so
+    // the slider value does not also change).
 
     // Composite widgets (listbox, menu, tablist, tree, ...) own their
     // navigation and activation keys.
