@@ -65,7 +65,6 @@ import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
 import { ActiveContextManager, type BindingContext } from './utils/input/ActiveContextManager';
 import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
-import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
 import { resolveDCCEndpoint } from './integrations/DCCSettings';
 import { MediaCacheManager } from './cache/MediaCacheManager';
@@ -125,7 +124,6 @@ export class App {
   private externalPresentation: ExternalPresentation;
   private activeContextManager: ActiveContextManager;
   private cacheManager: MediaCacheManager;
-  private audioOrchestrator: AudioOrchestrator;
   private remoteCursorsOverlay: RemoteCursorsOverlay;
   private frameCacheController: FrameCacheController;
   private dccBridge: DCCBridge | null = null;
@@ -629,10 +627,6 @@ export class App {
       }),
     );
 
-    // Audio orchestrator (manages AudioMixer lifecycle and session wiring)
-    this.audioOrchestrator = new AudioOrchestrator({ session: this.session });
-    this.audioOrchestrator.bindEvents();
-
     // Frame navigation service (playlist/annotation navigation)
     this.frameNavigation = new FrameNavigationService({
       session: this.session,
@@ -691,7 +685,6 @@ export class App {
       wirePlaybackControls(wiringCtx, {
         getKeyboardHandler: () => this.keyboardHandler,
         getFullscreenManager: () => this.fullscreenManager ?? undefined,
-        getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
         getShortcutCheatSheet: () => this.shortcutCheatSheet,
       }),
       wireStackControls(wiringCtx),
@@ -755,9 +748,6 @@ export class App {
 
     this.bindEvents();
     this.renderLoop.start();
-
-    // Lazy-initialize AudioContext on first user interaction (browser policy)
-    this.audioOrchestrator.setupLazyInit();
 
     // Initialize OCIO pipeline from persisted state (if OCIO was enabled before page reload)
     updateOCIOPipeline(
@@ -985,7 +975,6 @@ export class App {
     this.shotGridBridge.dispose();
     this.clientMode.dispose();
     this.externalPresentation.dispose();
-    this.audioOrchestrator.dispose();
     this.frameNavigation.dispose();
     this.timelineEditorService.dispose();
     this.dccBridge?.dispose();

@@ -1132,4 +1132,106 @@ describe('AudioCoordinator', () => {
       expect(onAudioError2).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ======================================================================
+  // Per-source audio (L3 / L4)
+  // ======================================================================
+
+  describe('per-source audio', () => {
+    /** Each URL decodes to its own buffer; resolve order is controlled by the test. */
+    function setupPerUrlDecode() {
+      const pending = new Map<string, () => void>();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          const body = new ArrayBuffer(8);
+          (body as unknown as { url: string }).url = url;
+          return new Promise((resolve) => {
+            pending.set(url, () => resolve({ ok: true, arrayBuffer: () => Promise.resolve(body) }));
+          });
+        }),
+      );
+      mockAudioContext.decodeAudioData = vi.fn((data: ArrayBuffer) =>
+        Promise.resolve({ duration: 10, url: (data as unknown as { url: string }).url } as unknown as AudioBuffer),
+      ) as typeof mockAudioContext.decodeAudioData;
+      return pending;
+    }
+
+    function makeVideo(name: string): HTMLVideoElement {
+      const video = document.createElement('video');
+      video.src = `http://example.test/${name}.mp4`;
+      return video;
+    }
+
+    function attachedUrl(): string | undefined {
+      const buffer = (coordinator.manager as unknown as { audioBuffer: { url: string } | null }).audioBuffer;
+      return buffer?.url;
+    }
+
+    it('AC-200: plays the active source audio, not the last loaded one', async () => {
+      const pending = setupPerUrlDecode();
+      const a = makeVideo('a');
+      const b = makeVideo('b');
+      let active: HTMLVideoElement | null = a;
+      coordinator.setCallbacks({ ...callbacks, getActiveVideo: () => active });
+
+      coordinator.loadFromVideo(a, 0.7, false);
+      coordinator.loadFromVideo(b, 0.7, false);
+      await vi.waitFor(() => expect(pending.size).toBe(2));
+      // B finishes first; A is still the active source.
+      pending.get(b.src)!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(attachedUrl()).toBeUndefined();
+      pending.get(a.src)!();
+      await vi.waitFor(() => expect(attachedUrl()).toBe(a.src));
+
+      // Switching source swaps to B's own track without decoding again.
+      active = b;
+      coordinator.syncActiveSource();
+      expect(attachedUrl()).toBe(b.src);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('AC-201: a still or sequence as active source detaches all audio', async () => {
+      const pending = setupPerUrlDecode();
+      const a = makeVideo('a');
+      let active: HTMLVideoElement | null = a;
+      coordinator.setCallbacks({ ...callbacks, getActiveVideo: () => active });
+      coordinator.loadFromVideo(a, 0.7, false);
+      await vi.waitFor(() => expect(pending.size).toBe(1));
+      pending.get(a.src)!();
+      await vi.waitFor(() => expect(attachedUrl()).toBe(a.src));
+      expect(coordinator.handlesActiveSourceAudio).toBe(true);
+
+      active = null;
+      coordinator.syncActiveSource();
+      expect(attachedUrl()).toBeUndefined();
+      expect(coordinator.manager.isUsingWebAudio).toBe(false);
+      expect(coordinator.handlesActiveSourceAudio).toBe(false);
+    });
+
+    it('AC-202: switching source while playing restarts audio at the current frame', async () => {
+      const pending = setupPerUrlDecode();
+      const a = makeVideo('a');
+      const b = makeVideo('b');
+      let active: HTMLVideoElement | null = a;
+      coordinator.setCallbacks({ ...callbacks, getActiveVideo: () => active });
+      coordinator.loadFromVideo(a, 0.7, false);
+      coordinator.loadFromVideo(b, 0.7, false);
+      await vi.waitFor(() => expect(pending.size).toBe(2));
+      pending.get(a.src)!();
+      pending.get(b.src)!();
+      await vi.waitFor(() => expect(attachedUrl()).toBe(a.src));
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      await vi.waitFor(() => expect(coordinator.manager.isPlaying).toBe(true));
+      const playSpy = vi.spyOn(coordinator.manager, 'play');
+
+      active = b;
+      coordinator.onFrameChanged(49, 24, true);
+
+      expect(attachedUrl()).toBe(b.src);
+      expect(playSpy).toHaveBeenCalledWith(2);
+    });
+  });
 });

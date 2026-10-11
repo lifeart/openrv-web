@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
 import type { LoopMode, PlaybackMode } from '../types/session';
 import type { MediaSource } from './SessionTypes';
+type VideoSourceNode = NonNullable<MediaSource['videoSourceNode']>;
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 import type { TimingState } from './PlaybackTimingController';
@@ -43,6 +44,13 @@ export interface PlaybackEngineHost {
   getAudioSyncEnabled(): boolean;
   /** Set audio sync enabled state */
   setAudioSyncEnabled(enabled: boolean): void;
+  /**
+   * Whether the current video element must play for its native audio.
+   * False when Web Audio plays the active source's track, so in mediabunny
+   * mode the element can stay paused instead of decoding the video twice.
+   * Defaults to true when not provided.
+   */
+  isVideoElementAudioNeeded?(): boolean;
 }
 
 /**
@@ -588,7 +596,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
         video.currentTime = targetTime;
 
         if (this._playDirection === 1) {
-          this._host?.safeVideoPlay(video);
+          this.playMediabunnyAudioElement(video);
         } else {
           video.muted = true;
           video.pause();
@@ -660,6 +668,22 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     }
   }
 
+  private isVideoElementAudioNeeded(): boolean {
+    return this._host?.isVideoElementAudioNeeded?.() ?? true;
+  }
+
+  /**
+   * In mediabunny mode the HTMLVideoElement only exists to produce audio.
+   * Play it when its native audio is needed, otherwise keep it paused.
+   */
+  private playMediabunnyAudioElement(video: HTMLVideoElement): void {
+    if (this.isVideoElementAudioNeeded()) {
+      this._host?.safeVideoPlay(video);
+    } else if (!video.paused) {
+      video.pause();
+    }
+  }
+
   togglePlayback(): void {
     if (this._isPlaying) {
       this.pause();
@@ -669,7 +693,15 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   }
 
   togglePlayDirection(): void {
-    this._playDirection *= -1;
+    this.applyPlayDirection(this._playDirection * -1);
+  }
+
+  /**
+   * Switch direction and bring audio, the video element and the preload
+   * direction along. Used by the user toggle and by pingpong bounces.
+   */
+  private applyPlayDirection(direction: number): void {
+    this._playDirection = direction;
 
     const source = this._host?.getCurrentSource();
 
@@ -686,7 +718,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
         if (source.element instanceof HTMLVideoElement) {
           if (this._playDirection === 1) {
             this._host?.applyVolumeToVideo();
-            this._host?.safeVideoPlay(source.element);
+            this.playMediabunnyAudioElement(source.element);
           } else {
             source.element.muted = true;
             source.element.pause();
@@ -794,7 +826,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
 
     // Check if using mediabunny for smooth frame-accurate playback
     if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
-      this.updateMediabunnyPlayback(source);
+      this.updateMediabunnyPlayback(source, source.videoSourceNode);
     } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
       this.updateNativeVideoPlayback(source.element);
     } else {
@@ -806,9 +838,8 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
    * Mediabunny video playback path: frame-accurate playback with cache,
    * starvation handling, play-all-frames support, and audio sync.
    */
-  private updateMediabunnyPlayback(source: MediaSource): void {
+  private updateMediabunnyPlayback(source: MediaSource, videoSourceNode: VideoSourceNode): void {
     const tc = this._timingController;
-    const videoSourceNode = source.videoSourceNode!;
 
     const { frameDuration } = tc.accumulateDelta(this._ts, this._fps, this._playbackSpeed, this._playDirection);
 
@@ -921,7 +952,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
                 const video = source.element;
                 video.currentTime = (this._currentFrame - 1) / this._fps;
                 if (this._playDirection === 1) {
-                  this._host?.safeVideoPlay(video);
+                  this.playMediabunnyAudioElement(video);
                 }
               }
               this.emit('frameChanged', this._currentFrame);
@@ -1012,7 +1043,11 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
       const video = source.element;
       const targetTime = (this._currentFrame - 1) / this._fps;
 
-      if (video.paused || video.ended) {
+      if (!this.isVideoElementAudioNeeded()) {
+        // Web Audio plays this source's track: keep the element idle so the
+        // video isn't decoded a second time alongside mediabunny.
+        if (!video.paused) video.pause();
+      } else if (video.paused || video.ended) {
         video.currentTime = targetTime;
         this._host?.safeVideoPlay(video);
       } else {
@@ -1041,6 +1076,12 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
       if (this._loopMode === 'loop') {
         video.currentTime = (this._inPoint - 1) / this._fps;
         this._host?.safeVideoPlay(video);
+      } else if (this._loopMode === 'pingpong') {
+        // The element can't play backwards: hand over to frame stepping,
+        // which bounces forward again at the in point.
+        this._currentFrame = clamp(this._outPoint - 1, this._inPoint, this._outPoint);
+        this.applyPlayDirection(-1);
+        this.emit('frameChanged', this._currentFrame);
       } else if (this._loopMode === 'once') {
         this.pause();
       }
@@ -1148,8 +1189,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           nextFrame = this._inPoint;
           break;
         case 'pingpong':
-          this._playDirection = -1;
-          this.emit('playDirectionChanged', this._playDirection);
+          this.applyPlayDirection(-1);
           nextFrame = this._outPoint - 1;
           break;
       }
@@ -1163,8 +1203,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           nextFrame = this._outPoint;
           break;
         case 'pingpong':
-          this._playDirection = 1;
-          this.emit('playDirectionChanged', this._playDirection);
+          this.applyPlayDirection(1);
           nextFrame = this._inPoint + 1;
           break;
       }

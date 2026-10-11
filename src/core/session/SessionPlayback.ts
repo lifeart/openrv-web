@@ -103,6 +103,9 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
 
   /** Underlying AudioPlaybackManager (via coordinator) for scrub audio */
   get audioPlaybackManager(): AudioPlaybackManager {
+    // Readers (scrub UI, API) expect the manager to hold the current
+    // source's audio, even right after a source switch while paused.
+    this._audioCoordinator.syncActiveSource();
     return this._audioCoordinator.manager;
   }
 
@@ -549,6 +552,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
       setAudioSyncEnabled: (enabled) => {
         this._volumeManager.audioSyncEnabled = enabled;
       },
+      isVideoElementAudioNeeded: () => !this._audioCoordinator.handlesActiveSourceAudio,
     });
   }
 
@@ -587,6 +591,10 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
       onAudioPathChanged: () => this.applyVolumeToVideo(),
       onAudioScrubAvailabilityChanged: (available) => this.emit('audioScrubAvailabilityChanged', available),
       onAudioError: (error) => this.emit('audioError', error),
+      getActiveVideo: () => {
+        const source = this._host?.getCurrentSource() ?? null;
+        return source?.type === 'video' && source.element instanceof HTMLVideoElement ? source.element : null;
+      },
     });
   }
 

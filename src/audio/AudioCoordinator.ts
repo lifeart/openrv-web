@@ -9,7 +9,9 @@
  *   support. Used at non-1x speeds when pitch preservation is on, or
  *   as a fallback when Web Audio extraction fails.
  *
- * The coordinator ensures only ONE path produces audio at any time.
+ * The coordinator ensures only ONE path produces audio at any time, and
+ * only for the ACTIVE source: every loaded video keeps its own decoded
+ * track, and the one handed to the manager follows the current source.
  * Session delegates all audio concerns here; the scattered
  * `shouldUseWebAudio / startAudioPlayback / applyVolumeToVideo` logic
  * that used to live on Session is now centralised.
@@ -31,6 +33,12 @@ export interface AudioCoordinatorCallbacks {
   onAudioScrubAvailabilityChanged?(available: boolean): void;
   /** An audio playback error occurred; host should surface it to the user. */
   onAudioError?(error: import('./AudioPlaybackManager').AudioPlaybackError): void;
+  /**
+   * The video element of the active source, or null when the active source
+   * has no video (still, sequence, none). When omitted, the most recently
+   * loaded video is treated as active.
+   */
+  getActiveVideo?(): HTMLVideoElement | null;
 }
 
 export class AudioCoordinator implements ManagerBase {
@@ -44,6 +52,17 @@ export class AudioCoordinator implements ManagerBase {
   private _fps = 24;
   private _isPlaying = false;
   private _audioScrubEnabled = true;
+  private _lastFrame = 1;
+
+  // Per-source audio: a decoded track per video element (null = use the
+  // element's native audio). Absent while its decode is still running.
+  private _decoded = new WeakMap<HTMLVideoElement, AudioBuffer | null>();
+  /** Latest decode request per element, so a stale decode can't win a race. */
+  private _pending = new WeakMap<HTMLVideoElement, number>();
+  private _loadSeq = 0;
+  private _lastLoaded: HTMLVideoElement | null = null;
+  /** Element whose decoded audio is attached to the manager (null = none). */
+  private _attached: HTMLVideoElement | null = null;
 
   // ---- Public read-only accessors ----
 
@@ -77,6 +96,14 @@ export class AudioCoordinator implements ManagerBase {
     return this._isPlaying && this.shouldUseWebAudio();
   }
 
+  /**
+   * True when Web Audio would play the active source's audio, so its video
+   * element doesn't have to play for sound. Independent of play state.
+   */
+  get handlesActiveSourceAudio(): boolean {
+    return this._attached !== null && this.shouldUseWebAudio();
+  }
+
   /** Whether audio scrub is currently enabled. */
   get audioScrubEnabled(): boolean {
     return this._audioScrubEnabled;
@@ -98,26 +125,59 @@ export class AudioCoordinator implements ManagerBase {
   // ---- Loading ----
 
   /**
-   * Pre-load audio from a video element via Web Audio API.
-   * Falls back gracefully -- if extraction fails the old
-   * HTMLVideoElement audio path remains available.
+   * Decode audio from a video element via Web Audio API and keep it for that
+   * source. It becomes audible only while that source is the active one.
+   * Falls back gracefully -- if extraction fails the HTMLVideoElement audio
+   * path remains available for that source.
    */
   loadFromVideo(video: HTMLVideoElement, volume: number, muted: boolean): void {
+    this._manager.setVolume(volume);
+    this._manager.setMuted(muted);
+    this._lastLoaded = video;
+    const seq = ++this._loadSeq;
+    this._pending.set(video, seq);
+    this._decoded.delete(video);
+    if (this._attached === video) this.detach();
+
     this._manager
-      .loadFromVideo(video)
-      .then(() => {
-        this._manager.setVolume(volume);
-        this._manager.setMuted(muted);
-        this._callbacks?.onAudioScrubAvailabilityChanged?.(this._manager.isUsingWebAudio);
-        // If playback started while audio was still loading, activate now
-        if (this._isPlaying) {
-          this.activateAppropriateAudioPath();
-        }
-      })
+      .decodeVideoAudio(video)
       .catch((err) => {
         log.warn('Audio extraction failed, using video element audio:', err);
-        this._callbacks?.onAudioScrubAvailabilityChanged?.(false);
+        return null;
+      })
+      .then((buffer) => {
+        if (this._pending.get(video) !== seq) return; // superseded or disposed
+        this._pending.delete(video);
+        this._decoded.set(video, buffer);
+        this.syncActiveSource();
       });
+  }
+
+  /**
+   * Point the manager at the active source's audio. Cheap when nothing
+   * changed, so it is safe to call on every frame.
+   */
+  syncActiveSource(): void {
+    const active = this._callbacks?.getActiveVideo ? this._callbacks.getActiveVideo() : this._lastLoaded;
+    const ready = active !== null && this._decoded.has(active);
+    if (ready ? this._attached === active : this._attached === null) return;
+
+    if (ready) {
+      const buffer = this._decoded.get(active) ?? null;
+      this._manager.attachVideo(active, buffer);
+      this._attached = active;
+    } else {
+      this.detach();
+    }
+
+    this._callbacks?.onAudioScrubAvailabilityChanged?.(this._manager.isUsingWebAudio);
+    // While paused the path is applied when playback starts.
+    if (this._isPlaying) this.activateAppropriateAudioPath(this._lastFrame);
+  }
+
+  private detach(): void {
+    this._manager.attachVideo(null, null);
+    this._attached = null;
   }
 
   // ---- Playback lifecycle (called by Session in response to PlaybackEngine events) ----
@@ -127,6 +187,8 @@ export class AudioCoordinator implements ManagerBase {
     this._speed = speed;
     this._direction = direction;
     this._isPlaying = true;
+    this._lastFrame = frame;
+    this.syncActiveSource();
     this.activateAppropriateAudioPath(frame);
   }
 
@@ -138,6 +200,8 @@ export class AudioCoordinator implements ManagerBase {
 
   onFrameChanged(frame: number, fps: number, isPlaying: boolean): void {
     this._fps = fps;
+    this._lastFrame = frame;
+    this.syncActiveSource();
 
     if (!isPlaying) {
       // Only scrub if audio scrub is enabled
@@ -291,6 +355,10 @@ export class AudioCoordinator implements ManagerBase {
 
     this._errorUnsub?.();
     this._errorUnsub = null;
+    this._pending = new WeakMap();
+    this._decoded = new WeakMap();
+    this._attached = null;
+    this._lastLoaded = null;
     this._manager.dispose();
     this._callbacks = null;
   }

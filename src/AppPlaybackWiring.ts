@@ -13,7 +13,6 @@
 import type { AppWiringContext, WiringResult } from './AppWiringContext';
 import type { AppKeyboardHandler } from './AppKeyboardHandler';
 import type { FullscreenManager } from './utils/ui/FullscreenManager';
-import type { AudioMixer } from './audio/AudioMixer';
 import type { Session } from './core/session/Session';
 import type { LoopMode } from './core/types/session';
 import type { PlaylistClip } from './core/session/PlaylistManager';
@@ -49,7 +48,6 @@ import { isAudioScrubAvailable } from './utils/media/SourceUIState';
 export interface PlaybackWiringDeps {
   getKeyboardHandler: () => AppKeyboardHandler;
   getFullscreenManager: () => FullscreenManager | undefined;
-  getAudioMixer?: () => AudioMixer;
   /** Read-only shortcut cheat sheet overlay (Help > Keyboard Shortcuts). */
   getShortcutCheatSheet?: () => { show(): void } | null;
 }
@@ -107,13 +105,11 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(
     volumeControl.on('volumeChanged', (volume) => {
       session.volume = volume;
-      deps.getAudioMixer?.()?.setMasterVolume(volume);
     }),
   );
   subs.add(
     volumeControl.on('mutedChanged', (muted) => {
       session.muted = muted;
-      deps.getAudioMixer?.()?.setMasterMuted(muted);
     }),
   );
   // Audio scrub toggle
@@ -126,13 +122,11 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(
     session.on('volumeChanged', (volume) => {
       volumeControl.syncVolume(volume);
-      deps.getAudioMixer?.()?.setMasterVolume(volume);
     }),
   );
   subs.add(
     session.on('mutedChanged', (muted) => {
       volumeControl.syncMuted(muted);
-      deps.getAudioMixer?.()?.setMasterMuted(muted);
     }),
   );
   subs.add(
