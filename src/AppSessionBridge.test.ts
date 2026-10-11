@@ -157,7 +157,11 @@ class MockSession extends EventEmitter {
 
 function createContext() {
   const session = new MockSession();
-  const viewer = { getScopeImageData: vi.fn(() => null), initPrerenderBuffer: vi.fn() };
+  const viewer = {
+    getScopeImageData: vi.fn(() => null),
+    initPrerenderBuffer: vi.fn(),
+    setOnScopeDataReady: vi.fn(),
+  };
   const histogram = {
     isVisible: vi.fn(() => false),
     getData: vi.fn(() => null),

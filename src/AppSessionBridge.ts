@@ -135,6 +135,10 @@ export class AppSessionBridge {
       this.updateInfoPanel();
     });
 
+    // --- Worker renderer delivers scope pixels asynchronously ---
+
+    this.context.getViewer().setOnScopeDataReady(() => this.scheduleUpdateScopes());
+
     // --- Source loaded: update info panel, crop, OCIO, HDR auto-config, GTO, stack, prerender, EXR layers, scopes ---
 
     this.on(session, 'sourceLoaded', (loadedSource) => {

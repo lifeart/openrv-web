@@ -398,6 +398,7 @@ export class Viewer implements ViewerAccessor {
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
   private lastSystemHDRHeadroom = 1.0;
+  private scopeDataReadyCallback: (() => void) | null = null;
 
   // WebGL/HDR rendering manager (owns GL canvas, Renderer, worker proxy)
   private glRendererManager!: ViewerGLRenderer;
@@ -439,6 +440,7 @@ export class Viewer implements ViewerAccessor {
       getGamutMappingState: () => this.getGamutMappingState(),
       getNoiseReductionParams: () => this.getNoiseReductionParams(),
       getLuminanceVisualization: () => this.overlayManager.getLuminanceVisualization(),
+      notifyScopeDataReady: () => this.scopeDataReadyCallback?.(),
     };
     return this._glRendererContext;
   }
@@ -4295,6 +4297,14 @@ export class Viewer implements ViewerAccessor {
     if (this.prerenderBuffer) {
       this.prerenderBuffer.clear();
     }
+  }
+
+  /**
+   * Set callback for when the worker renderer delivers fresh scope pixels.
+   * Its readback is async, so scopes must re-read when it lands.
+   */
+  setOnScopeDataReady(callback: (() => void) | null): void {
+    this.scopeDataReadyCallback = callback;
   }
 
   /**
