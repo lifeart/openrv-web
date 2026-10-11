@@ -28,7 +28,8 @@ export type BuiltinFormatName =
   | 'raw-preview'
   | 'hdr'
   | 'jxl'
-  | 'jp2';
+  | 'jp2'
+  | 'png16';
 // Note: 'mxf' is intentionally excluded — MXF is a container format, not a
 // still-image format.  Use isMXFFile / parseMXFHeader from MXFDemuxer instead.
 /** Format name type: includes built-in names plus any string for plugin formats */
@@ -49,6 +50,7 @@ export interface DecoderOptionsMap {
   hdr: NoDecoderOptions;
   jxl: NoDecoderOptions;
   jp2: JP2DecodeOptions;
+  png16: NoDecoderOptions;
 }
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
@@ -201,6 +203,23 @@ function isTIFFAndFloat(buffer: ArrayBuffer): boolean {
 
   // 16-bit half, 32-bit float and 64-bit double are all handled by TIFFFloatDecoder
   return sampleFormat === SAMPLE_FMT_FLOAT && (bitsPerSample === 16 || bitsPerSample === 32 || bitsPerSample === 64);
+}
+
+// --- 16-bit PNG detection ---
+
+/**
+ * True for PNGs whose IHDR declares 16 bits per sample. 8-bit (and lower)
+ * PNGs are deliberately not claimed: they keep the browser-native path.
+ */
+function isPNG16(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 33) return false;
+  const view = new DataView(buffer);
+  return (
+    view.getUint32(0) === 0x89504e47 &&
+    view.getUint32(4) === 0x0d0a1a0a &&
+    view.getUint32(12) === 0x49484452 && // IHDR
+    view.getUint8(24) === 16
+  );
 }
 
 // --- JPEG Gainmap detection ---
@@ -800,6 +819,18 @@ const avifDecoder: FormatDecoder = {
 };
 
 /**
+ * 16-bit PNG decoder adapter (8-bit PNGs are not claimed)
+ */
+const png16Decoder: FormatDecoder = {
+  formatName: 'png16',
+  canDecode: isPNG16,
+  async decode(buffer: ArrayBuffer) {
+    const { decodePNG16 } = await import('./PNG16Decoder');
+    return decodePNG16(buffer);
+  },
+};
+
+/**
  * Registry for image format decoders.
  * Detects format by magic number and dispatches to the appropriate decoder.
  */
@@ -824,6 +855,7 @@ export class DecoderRegistry {
     this.decoders.push(hdrDecoder);
     this.decoders.push(jxlDecoder);
     this.decoders.push(jp2Decoder);
+    this.decoders.push(png16Decoder);
     // MXF is intentionally NOT registered here — it routes through
     // video/container classification instead of the still-image decode path.
   }

@@ -73,6 +73,13 @@ function isJPEGExtension(filename: string): boolean {
 }
 
 /**
+ * Check if a filename has a PNG extension
+ */
+function isPNGExtension(filename: string): boolean {
+  return filename.split('.').pop()?.toLowerCase() === 'png';
+}
+
+/**
  * Check if a filename has an AVIF extension
  */
 function isAVIFExtension(filename: string): boolean {
@@ -566,6 +573,11 @@ export class FileSourceNode extends BaseSourceNode {
   private cachedIPImage: IPImage | null = null;
   private isEXR: boolean = false;
   private _isHDRFormat: boolean = false;
+  /**
+   * True when the image was decoded in memory (no HTMLImageElement) into
+   * float32 values that are already display-referred (e.g. 16-bit PNG).
+   */
+  private _isDisplayReferredFloat: boolean = false;
   private _formatName: string | null = null;
 
   // EXR layer support
@@ -639,6 +651,7 @@ export class FileSourceNode extends BaseSourceNode {
     // Mark canvas dirty immediately so that even if the load fails,
     // the stale cached canvas from a previous image won't be returned.
     this.canvasDirty = true;
+    this._isDisplayReferredFloat = false;
     const filename = name ?? (basename(url) || 'image');
 
     // Check if this is an EXR file
@@ -1034,7 +1047,7 @@ export class FileSourceNode extends BaseSourceNode {
       if (viewsLower.includes('left') && viewsLower.includes('right')) {
         this._stereoInputFormat = 'separate';
         // Decode the right-eye view
-        const rightViewName = views[viewsLower.indexOf('right')]!;
+        const rightViewName = views[viewsLower.indexOf('right')] ?? 'right';
         const rightResult = await decodeEXRView(buffer, rightViewName);
         if (rightResult) {
           rightEyeIPImage = exrToIPImage(rightResult, originalUrl ?? url);
@@ -1160,7 +1173,8 @@ export class FileSourceNode extends BaseSourceNode {
     // Compute peak pixel value for metadata
     let peakValue = 0;
     for (let i = 0; i < Math.min(result.data.length, 500000); i++) {
-      if (result.data[i]! > peakValue) peakValue = result.data[i]!;
+      const v = result.data[i] ?? 0;
+      if (v > peakValue) peakValue = v;
     }
 
     const metadata: ImageMetadata = {
@@ -1226,7 +1240,8 @@ export class FileSourceNode extends BaseSourceNode {
     // Compute peak pixel value for metadata
     let peakValue = 0;
     for (let i = 0; i < Math.min(result.data.length, 500000); i++) {
-      if (result.data[i]! > peakValue) peakValue = result.data[i]!;
+      const v = result.data[i] ?? 0;
+      if (v > peakValue) peakValue = v;
     }
 
     const metadata: ImageMetadata = {
@@ -1468,7 +1483,8 @@ export class FileSourceNode extends BaseSourceNode {
     // Compute peak pixel value for metadata
     let peakValue = 0;
     for (let i = 0; i < Math.min(result.data.length, 500000); i++) {
-      if (result.data[i]! > peakValue) peakValue = result.data[i]!;
+      const v = result.data[i] ?? 0;
+      if (v > peakValue) peakValue = v;
     }
 
     const metadata: ImageMetadata = {
@@ -1908,6 +1924,7 @@ export class FileSourceNode extends BaseSourceNode {
     // Mark canvas dirty immediately so that even if the load fails,
     // the stale cached canvas from a previous image won't be returned.
     this.canvasDirty = true;
+    this._isDisplayReferredFloat = false;
     // Check if this is an EXR file
     if (isEXRExtension(file.name)) {
       const buffer = await file.arrayBuffer();
@@ -2094,14 +2111,80 @@ export class FileSourceNode extends BaseSourceNode {
       }
     }
 
+    // 16-bit PNG: browsers decode to 8 bits, so decode it ourselves.
+    // 8-bit PNGs keep the native path below.
+    if (isPNGExtension(file.name)) {
+      let pngBlobUrl: string | null = null;
+      try {
+        const header = await file.slice(0, 33).arrayBuffer();
+        if (decoderRegistry.detectFormat(header) === 'png16') {
+          const buffer = await file.arrayBuffer();
+          pngBlobUrl = URL.createObjectURL(file);
+          await this.loadPNG16FromBuffer(buffer, file.name, pngBlobUrl);
+          return;
+        }
+      } catch (err) {
+        if (pngBlobUrl) URL.revokeObjectURL(pngBlobUrl);
+        logger.warn('[FileSource] 16-bit PNG decode failed, falling back to standard loading:', err);
+        // Fall through to standard image loading (8-bit via the browser)
+      }
+    }
+
     // Standard image loading
     const url = URL.createObjectURL(file);
     await this.load(url, file.name);
   }
 
+  /**
+   * Load a 16-bit PNG at full precision. The data stays display-referred
+   * (like the 8-bit browser path), only the precision differs.
+   */
+  private async loadPNG16FromBuffer(buffer: ArrayBuffer, name: string, url: string): Promise<void> {
+    const { decodePNG16 } = await import('../../formats/PNG16Decoder');
+    const result = await decodePNG16(buffer);
+
+    this.cachedIPImage = new IPImage({
+      width: result.width,
+      height: result.height,
+      channels: 4,
+      dataType: 'float32',
+      data: result.data.buffer as ArrayBuffer,
+      metadata: {
+        sourcePath: url,
+        frameNumber: 1,
+        attributes: {
+          ...result.metadata,
+          formatName: 'png16',
+        },
+      },
+    });
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = false;
+    this._formatName = 'png16';
+    this._isDisplayReferredFloat = true;
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: result.width,
+      height: result.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('width', result.width);
+    this.properties.setValue('height', result.height);
+    this.properties.setValue('isHDR', false);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
   isReady(): boolean {
     // For HDR files (EXR, DPX, Cineon, Float TIFF, Radiance HDR), check if we have cached IPImage
-    if (this._isHDRFormat || this.isEXR) {
+    if (this._isHDRFormat || this.isEXR || this._isDisplayReferredFloat) {
       return this.cachedIPImage !== null;
     }
     return this.image !== null && this.image.complete;
@@ -2189,11 +2272,13 @@ export class FileSourceNode extends BaseSourceNode {
     } else if (this.cachedIPImage.dataType === 'float32') {
       // Simple clamp for 2D canvas fallback path.
       // The WebGL Renderer handles proper HDR tone mapping via GPU shaders.
+      // Display-referred floats (16-bit PNG) are already encoded: no gamma.
       const floatData = sourceData as Float32Array;
+      const exponent = this._isDisplayReferredFloat ? 1 : 1 / 2.2;
       for (let i = 0; i < floatData.length; i += 4) {
         for (let c = 0; c < 3; c++) {
           const v = Math.max(0, Math.min(1, floatData[i + c] ?? 0));
-          destData[i + c] = Math.round(Math.pow(v, 1 / 2.2) * 255);
+          destData[i + c] = Math.round(Math.pow(v, exponent) * 255);
         }
         // Alpha channel: pass through
         destData[i + 3] = Math.round(Math.min(1, Math.max(0, floatData[i + 3] ?? 1)) * 255);
@@ -2233,8 +2318,8 @@ export class FileSourceNode extends BaseSourceNode {
       return this.cachedIPImage;
     }
 
-    // For HDR files, the IPImage is already created during load
-    if (this._isHDRFormat || this.isEXR) {
+    // For HDR files (and in-memory decodes), the IPImage is already created during load
+    if (this._isHDRFormat || this.isEXR || this._isDisplayReferredFloat) {
       return this.cachedIPImage;
     }
 
@@ -2281,6 +2366,7 @@ export class FileSourceNode extends BaseSourceNode {
     this.exrLayers = [];
     this.isEXR = false;
     this._isHDRFormat = false;
+    this._isDisplayReferredFloat = false;
     this._formatName = null;
     this._rawExifMetadata = null;
     // Clean up cached canvas

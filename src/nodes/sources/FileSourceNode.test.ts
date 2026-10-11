@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { FileSourceNode } from './FileSourceNode';
 import { EXRCompression, EXRPixelType } from '../../formats/EXRDecoder';
+import { PNG16_REFERENCE_FILES, PNG8_FILE } from '../../../test/fixtures/png16ReferenceFiles';
 
 // EXR magic number
 const EXR_MAGIC = 0x01312f76;
@@ -293,6 +294,71 @@ describe('FileSourceNode', () => {
       await loadPromise;
 
       expect(node.isReady()).toBe(true);
+    });
+  });
+
+  describe('16-bit PNG', () => {
+    function b64(s: string): Uint8Array<ArrayBuffer> {
+      return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+    }
+
+    it('FSN-PNG16-001: 16-bit PNG loads at full precision as float32', async () => {
+      const ref = PNG16_REFERENCE_FILES.rgba;
+      if (!ref) throw new Error('missing fixture');
+      const file = new File([b64(ref.png)], 'deep.png', { type: 'image/png' });
+
+      await node.loadFile(file);
+
+      expect(node.isReady()).toBe(true);
+      expect(node.formatName).toBe('png16');
+      expect(node.isHDR()).toBe(false);
+      expect(node.properties.getValue('width')).toBe(11);
+      expect(node.properties.getValue('height')).toBe(9);
+
+      const image = node.evaluate({ frame: 1, width: 1920, height: 1080, quality: 'full' as const });
+      expect(image?.dataType).toBe('float32');
+      const expected = new DataView(b64(ref.rgba64le).buffer).getUint16(0, true) / 65535;
+      const data = image ? new Float32Array(image.data) : new Float32Array(0);
+      expect(data[0]).toBeCloseTo(expected, 6);
+    });
+
+    it('FSN-PNG16-003: canvas fallback does not re-apply gamma to display-referred data', async () => {
+      const ref = PNG16_REFERENCE_FILES.rgba;
+      if (!ref) throw new Error('missing fixture');
+      await node.loadFile(new File([b64(ref.png)], 'deep.png', { type: 'image/png' }));
+
+      let written: ImageData | null = null;
+      const ctx = {
+        createImageData: (w: number, h: number) => new ImageData(w, h),
+        putImageData: (img: ImageData) => {
+          written = img;
+        },
+      };
+      const originalGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = (() => ctx) as unknown as typeof originalGetContext;
+      try {
+        expect(node.getCanvas()).not.toBeNull();
+      } finally {
+        HTMLCanvasElement.prototype.getContext = originalGetContext;
+      }
+
+      const out = written as ImageData | null;
+      expect(out).not.toBeNull();
+      // Blue of the first pixel is a dark mid value, where a gamma would show
+      const expected = new DataView(b64(ref.rgba64le).buffer).getUint16(4, true) / 65535;
+      expect(expected).toBeGreaterThan(0.01);
+      expect(expected).toBeLessThan(0.5);
+      expect(out?.data[2]).toBe(Math.round(expected * 255));
+    });
+
+    it('FSN-PNG16-002: 8-bit PNG keeps the standard image path', async () => {
+      const file = new File([b64(PNG8_FILE)], 'plain.png', { type: 'image/png' });
+      const loadPromise = node.loadFile(file);
+
+      await vi.waitFor(() => expect(node.isReady()).toBe(true), { timeout: 100 });
+      await loadPromise;
+
+      expect(node.formatName).not.toBe('png16');
     });
   });
 
