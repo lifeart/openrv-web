@@ -4,7 +4,7 @@ import {
   createSequenceInfoFromPattern,
   isSequencePattern,
   loadFrameImage,
-  loadFrameImageFromURL,
+  findNearestLoadedFrame,
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
@@ -1075,10 +1075,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     const frame = source.sequenceFrameMap?.get(frameNumber);
     if (!frame) return null;
 
-    // URL-based frames (from pattern loading) use URL fetching; file-based
-    // frames (from local file drops) go through the decoder pipeline.
-    const isURLFrame = frame.url && frame.file.size === 0;
-    const image = isURLFrame ? await loadFrameImageFromURL(frame) : await loadFrameImage(frame);
+    // loadFrameImage dispatches URL-backed frames (pattern loading) to URL
+    // fetching and file-backed frames to the decoder pipeline.
+    const image = await loadFrameImage(frame);
     preloadFrames(source.sequenceFrames, frame.index, 5);
     releaseDistantFrames(source.sequenceFrames, frame.index, 20);
 
@@ -1096,6 +1095,26 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     const frameNumber = startFrame + timelineFrame - 1;
     const frame = source.sequenceFrameMap?.get(frameNumber);
     return frame?.image ?? null;
+  }
+
+  /**
+   * Fallback image for a sequence cache miss: the loaded frame nearest to the
+   * requested timeline frame. Never returns a released (closed) bitmap, unlike
+   * `source.element`, which keeps pointing at frame 0's bitmap after release.
+   */
+  getNearestLoadedSequenceFrameSync(frameIndex?: number): ImageBitmap | null {
+    const source = this.currentSource;
+    if (source?.type !== 'sequence' || !source.sequenceFrames) {
+      return null;
+    }
+
+    const timelineFrame = frameIndex ?? this._host!.getCurrentFrame();
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + timelineFrame - 1;
+    const exact = source.sequenceFrameMap?.get(frameNumber);
+    // Missing frame numbers have no entry; approximate the array position.
+    const index = exact ? exact.index : timelineFrame - 1;
+    return findNearestLoadedFrame(source.sequenceFrames, index)?.image ?? null;
   }
 
   getVideoFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {

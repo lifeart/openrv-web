@@ -40,6 +40,9 @@ import {
   expandPatternToURLs,
   loadFrameImageFromURL,
   createSequenceInfoFromPattern,
+  isURLBackedFrame,
+  releaseFrame,
+  findNearestLoadedFrame,
 } from './SequenceLoader';
 import type { SequenceFrame, SequenceInfo, InferredSequencePattern } from './SequenceLoader';
 
@@ -2158,5 +2161,161 @@ describe('SequenceLoader', () => {
       const src = releaseDistantFrames.toString();
       expect(src).toMatch(/keepWindow\s*(?::\s*number\s*)?=\s*10/);
     });
+  });
+});
+
+// =========================================================================
+// URL-backed sequences survive scrubbing (release + reload)
+// =========================================================================
+
+describe('URL-backed sequence frames after release', () => {
+  const mockBitmap = (): ImageBitmap => ({ close: vi.fn(), width: 64, height: 32 }) as unknown as ImageBitmap;
+
+  function urlFrames(count: number): SequenceFrame[] {
+    const frames: SequenceFrame[] = [];
+    for (let i = 0; i < count; i++) {
+      frames.push({
+        index: i,
+        frameNumber: i + 1,
+        file: new File([], `shot.${String(i + 1).padStart(4, '0')}.png`),
+        url: `https://cdn.example.com/shot.${String(i + 1).padStart(4, '0')}.png`,
+      });
+    }
+    return frames;
+  }
+
+  let requestedUrls: string[];
+  let createImageBitmapSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    requestedUrls = [];
+    class FakeImage {
+      crossOrigin = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(value: string) {
+        if (!value) return;
+        requestedUrls.push(value);
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal('Image', FakeImage);
+    createImageBitmapSpy = vi.fn().mockImplementation(() => Promise.resolve(mockBitmap()));
+    vi.stubGlobal('createImageBitmap', createImageBitmapSpy);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('SLD-L10-001: isURLBackedFrame distinguishes remote URLs from object URLs and files', () => {
+    const [remote] = urlFrames(1);
+    expect(isURLBackedFrame(remote!)).toBe(true);
+    expect(isURLBackedFrame({ index: 0, frameNumber: 1, file: new File([], 'a.png'), url: 'blob:abc' })).toBe(false);
+    expect(isURLBackedFrame({ index: 0, frameNumber: 1, file: new File(['x'], 'a.png'), url: 'https://x/a.png' })).toBe(
+      false,
+    );
+    expect(isURLBackedFrame({ index: 0, frameNumber: 1, file: new File(['x'], 'a.png') })).toBe(false);
+  });
+
+  it('SLD-L10-002: loadFrameImage fetches URL-backed frames from their URL', async () => {
+    const [frame] = urlFrames(1);
+    const bitmap = await loadFrameImage(frame!);
+    expect(bitmap).toBe(frame!.image);
+    expect(requestedUrls).toEqual(['https://cdn.example.com/shot.0001.png']);
+  });
+
+  it('SLD-L10-003: preloadFrames loads URL-backed frames', async () => {
+    const frames = urlFrames(10);
+    await preloadFrames(frames, 5, 2);
+    for (let i = 3; i <= 7; i++) {
+      expect(frames[i]!.image).toBeDefined();
+    }
+    expect(frames[0]!.image).toBeUndefined();
+    expect(requestedUrls).toHaveLength(5);
+  });
+
+  it('SLD-L10-004: releaseDistantFrames keeps the remote URL so the frame can be reloaded', async () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    try {
+      const frames = urlFrames(30);
+      await preloadFrames(frames, 0, 2);
+      const firstImage = frames[0]!.image!;
+
+      releaseDistantFrames(frames, 25, 5);
+
+      expect(frames[0]!.image).toBeUndefined();
+      expect(firstImage.close).toHaveBeenCalled();
+      expect(frames[0]!.url).toBe('https://cdn.example.com/shot.0001.png');
+      expect(revokeSpy).not.toHaveBeenCalled();
+
+      // Scrubbing back reloads the released frame from its URL.
+      requestedUrls = [];
+      const reloaded = await loadFrameImage(frames[0]!);
+      expect(reloaded).toBeDefined();
+      expect(requestedUrls).toEqual(['https://cdn.example.com/shot.0001.png']);
+    } finally {
+      revokeSpy.mockRestore();
+    }
+  });
+
+  it('SLD-L10-005: releaseFrame still revokes and clears object URLs of file-backed frames', () => {
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    try {
+      const image = mockBitmap();
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File(['data'], 'f.png'),
+        url: 'blob:object-url',
+        image,
+      };
+      releaseFrame(frame);
+      expect(image.close).toHaveBeenCalled();
+      expect(frame.image).toBeUndefined();
+      expect(revokeSpy).toHaveBeenCalledWith('blob:object-url');
+      expect(frame.url).toBeUndefined();
+    } finally {
+      revokeSpy.mockRestore();
+    }
+  });
+
+  it('SLD-L10-006: concurrent URL loads of the same frame keep a single bitmap', async () => {
+    const [frame] = urlFrames(1);
+    const [a, b] = await Promise.all([loadFrameImageFromURL(frame!), loadFrameImageFromURL(frame!)]);
+    expect(a).toBe(b);
+    expect(frame!.image).toBe(a);
+    const created = await Promise.all(createImageBitmapSpy.mock.results.map((r) => r.value as Promise<ImageBitmap>));
+    const discarded = created.filter((bmp) => bmp !== a);
+    expect(discarded).toHaveLength(1);
+    expect(discarded[0]!.close).toHaveBeenCalled();
+  });
+});
+
+describe('findNearestLoadedFrame', () => {
+  const frameWithImage = (i: number, loaded: boolean): SequenceFrame => ({
+    index: i,
+    frameNumber: i + 1,
+    file: new File([''], `f${i}.png`),
+    image: loaded ? ({ close: vi.fn(), width: 1, height: 1 } as unknown as ImageBitmap) : undefined,
+  });
+
+  it('SLD-L10-010: returns the exact frame when loaded', () => {
+    const frames = [0, 1, 2].map((i) => frameWithImage(i, true));
+    expect(findNearestLoadedFrame(frames, 1)).toBe(frames[1]);
+  });
+
+  it('SLD-L10-011: returns the closest loaded frame, preferring earlier on ties', () => {
+    const frames = [0, 1, 2, 3, 4, 5, 6].map((i) => frameWithImage(i, i === 1 || i === 5));
+    expect(findNearestLoadedFrame(frames, 3)).toBe(frames[1]);
+    expect(findNearestLoadedFrame(frames, 4)).toBe(frames[5]);
+    expect(findNearestLoadedFrame(frames, 0)).toBe(frames[1]);
+    expect(findNearestLoadedFrame(frames, 100)).toBe(frames[5]);
+  });
+
+  it('SLD-L10-012: skips released frames and returns null when nothing is loaded', () => {
+    const frames = [0, 1, 2].map((i) => frameWithImage(i, false));
+    expect(findNearestLoadedFrame(frames, 1)).toBeNull();
+    expect(findNearestLoadedFrame([], 0)).toBeNull();
   });
 });

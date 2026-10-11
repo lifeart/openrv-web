@@ -15,6 +15,7 @@ import {
   type DecodedFrameData,
   createSequenceInfo,
   loadFrameImage,
+  releaseFrame,
   disposeSequence,
 } from '../../utils/media/SequenceLoader';
 import { FramePreloadManager } from '../../utils/media/FramePreloadManager';
@@ -83,17 +84,8 @@ export class SequenceSourceNode extends BaseSourceNode {
       const idx = frame - 1;
       const frameData = this.frames[idx];
       if (frameData) {
-        if (frameData.image) {
-          frameData.image.close();
-          frameData.image = undefined;
-        }
-        if (frameData.decodedData) {
-          frameData.decodedData = undefined;
-        }
-        if (frameData.url) {
-          URL.revokeObjectURL(frameData.url);
-          frameData.url = undefined;
-        }
+        // Keeps the remote URL of URL-backed frames so they can be reloaded.
+        releaseFrame(frameData);
       }
       if (data && typeof data.close === 'function') {
         try {

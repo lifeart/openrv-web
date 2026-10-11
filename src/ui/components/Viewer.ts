@@ -1599,7 +1599,12 @@ export class Viewer implements ViewerAccessor {
               }
             })
             .catch((err) => log.warn('Failed to load hold frame:', err));
-          element = this.session.getSequenceFrameSync(currentFrame) ?? source.element;
+          // Never fall back to source.element: it is frame 0's bitmap, which is
+          // closed once released from the cache window.
+          element =
+            this.session.getSequenceFrameSync(currentFrame) ??
+            this.session.getNearestLoadedSequenceFrameSync?.(currentFrame) ??
+            undefined;
         }
       } else {
         const frameImage = this.session.getSequenceFrameSync();
@@ -1615,8 +1620,10 @@ export class Viewer implements ViewerAccessor {
               }
             })
             .catch((err) => log.warn('Failed to load sequence frame:', err));
-          // Use first frame as fallback if available
-          element = source.element;
+          // Fall back to the nearest still-loaded frame (or nothing). Not
+          // source.element: that is frame 0's bitmap, which is closed once
+          // released from the cache window and must not be drawn.
+          element = this.session.getNearestLoadedSequenceFrameSync?.(currentFrame) ?? undefined;
         }
       }
     } else if (source?.type === 'video' && this.session.isUsingMediabunny()) {

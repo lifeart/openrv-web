@@ -4,6 +4,14 @@ import type { MediaSource } from './Session';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 
 vi.mock('../../utils/media/SequenceLoader', () => ({
+  // Simplified stand-in (real one is covered in SequenceLoader.test.ts).
+  findNearestLoadedFrame: (frames: any[], index: number) => {
+    let best: any = null;
+    for (const f of frames) {
+      if (f.image && (!best || Math.abs(f.index - index) < Math.abs(best.index - index))) best = f;
+    }
+    return best;
+  },
   createSequenceInfo: vi.fn(),
   loadFrameImage: vi.fn(),
   preloadFrames: vi.fn(),
@@ -894,6 +902,41 @@ describe('SessionMedia', () => {
       (media as any)._currentSourceIndex = 0;
 
       expect(media.getSequenceFrameSync(100)).toBeNull();
+    });
+  });
+
+  describe('getNearestLoadedSequenceFrameSync', () => {
+    function makeFrames(loaded: number[]) {
+      const frames = Array.from({ length: 10 }, (_, i) => ({
+        index: i,
+        frameNumber: i + 1,
+        file: new File([], `f${i}.png`),
+        image: loaded.includes(i) ? ({ close: vi.fn() } as unknown as ImageBitmap) : undefined,
+      }));
+      return frames;
+    }
+
+    it('SM-L10-001: returns null when current source is not a sequence', () => {
+      media.addSource(makeImageSource());
+      expect(media.getNearestLoadedSequenceFrameSync(1)).toBeNull();
+    });
+
+    it('SM-L10-002: returns the nearest loaded frame instead of a released frame 0', () => {
+      // Frame 0 was released (scrubbed away); frames 6 and 7 are loaded.
+      const frames = makeFrames([6, 7]);
+      const seqSource = makeSequenceSource({ sequenceFrames: frames });
+      media.addSource(seqSource);
+
+      // Timeline frame 4 -> index 3; nearest loaded is index 6.
+      expect(media.getNearestLoadedSequenceFrameSync(4)).toBe(frames[6]!.image);
+      // Timeline frame 10 -> index 9; nearest loaded is index 7.
+      expect(media.getNearestLoadedSequenceFrameSync(10)).toBe(frames[7]!.image);
+    });
+
+    it('SM-L10-003: returns null when no frame is loaded', () => {
+      const seqSource = makeSequenceSource({ sequenceFrames: makeFrames([]) });
+      media.addSource(seqSource);
+      expect(media.getNearestLoadedSequenceFrameSync(1)).toBeNull();
     });
   });
 

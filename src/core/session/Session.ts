@@ -1192,6 +1192,10 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._media.getSequenceFrameSync(frameIndex);
   }
 
+  getNearestLoadedSequenceFrameSync(frameIndex?: number): ImageBitmap | null {
+    return this._media.getNearestLoadedSequenceFrameSync(frameIndex);
+  }
+
   getVideoFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     return this._media.getVideoFrameCanvas(frameIndex);
   }

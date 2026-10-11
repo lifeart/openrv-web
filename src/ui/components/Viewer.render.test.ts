@@ -1435,5 +1435,65 @@ describe('Viewer', () => {
       drawWithTransform.mockRestore();
       localStorage.removeItem('openrv-prefs-missing-frame-mode');
     });
+
+    it('VWR-L10-001: cache miss draws nearest loaded frame, never the released frame 0 bitmap', () => {
+      const tv = testable(viewer);
+      const drawWithTransform = vi.spyOn(
+        tv as unknown as { drawWithTransform: (...args: unknown[]) => void },
+        'drawWithTransform',
+      );
+      // source.element still points at frame 0's bitmap, which has been released/closed.
+      const closedFirstFrame = new Image(96, 96);
+      const nearestImage = new Image(128, 128);
+      const getSequenceFrameImage = vi.fn().mockResolvedValue(null);
+      const getNearestLoadedSequenceFrameSync = vi.fn().mockReturnValue(nearestImage);
+      const frames = [
+        { index: 0, frameNumber: 1, file: new File([''], 'frame_0001.png') },
+        { index: 1, frameNumber: 2, file: new File([''], 'frame_0002.png') },
+      ];
+
+      tv.session = {
+        ...tv.session,
+        isPlaying: false,
+        currentFrame: 2,
+        frameCount: 2,
+        currentSource: {
+          type: 'sequence' as const,
+          name: 'seq',
+          url: '',
+          width: 100,
+          height: 100,
+          duration: 2,
+          fps: 24,
+          element: closedFirstFrame,
+          sequenceFrames: frames,
+          sequenceFrameMap: new Map(frames.map((f) => [f.frameNumber, f])),
+          sequenceInfo: {
+            name: 'seq',
+            pattern: 'frame_####.png',
+            frames,
+            startFrame: 1,
+            endFrame: 2,
+            width: 100,
+            height: 100,
+            fps: 24,
+            missingFrames: [],
+          },
+        },
+        getSequenceFrameSync: vi.fn(() => null),
+        getSequenceFrameImage,
+        getNearestLoadedSequenceFrameSync,
+        isUsingMediabunny: () => false,
+      } as unknown as TestableViewer['session'];
+
+      viewer.render();
+
+      const drawnElements = drawWithTransform.mock.calls.map(([, element]) => element);
+      expect(getSequenceFrameImage).toHaveBeenCalled();
+      expect(getNearestLoadedSequenceFrameSync).toHaveBeenCalledWith(2);
+      expect(drawnElements.includes(nearestImage)).toBe(true);
+      expect(drawnElements.includes(closedFirstFrame)).toBe(false);
+      drawWithTransform.mockRestore();
+    });
   });
 });
