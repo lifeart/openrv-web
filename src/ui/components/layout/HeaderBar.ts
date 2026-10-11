@@ -9,7 +9,8 @@ import { EventEmitter, type EventMap } from '../../../utils/EventEmitter';
 import { shortcutTooltip } from '../../../utils/input/KeyBindings';
 import { type Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import type { LoopMode } from '../../../core/types/session';
-import { filterImageFiles, inferSequenceFromSingleFile, getBestSequence } from '../../../utils/media/SequenceLoader';
+import { filterImageFiles, inferSequenceFromSingleFile } from '../../../utils/media/SequenceLoader';
+import { partitionSequences } from '../../../utils/media/SequencePartition';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
@@ -1807,40 +1808,22 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       return;
     }
 
-    // Standard loading (sequence or individual files)
-    // Check if multiple image files were selected - treat as sequence
+    // Standard loading: every detected image sequence becomes its own source,
+    // remaining files are loaded individually.
     const imageFiles = filterImageFiles(fileArray);
-    if (imageFiles.length > 1) {
-      // Try to find the best sequence from the selected files
-      const bestSequence = getBestSequence(imageFiles);
-      if (bestSequence && bestSequence.length > 1) {
-        try {
-          await this.session.loadSequence(bestSequence);
-          this.emit('fileLoaded', undefined);
-          input.value = '';
-          return;
-        } catch (err) {
-          logger.error('Failed to load sequence:', err);
-          showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
-          input.value = '';
-          return;
-        }
-      }
-    }
+    const { sequences, others } = partitionSequences(fileArray);
+    let remaining = others;
 
     // Single image file - try to infer a sequence from available files
     const singleFile = imageFiles.length === 1 ? imageFiles[0] : undefined;
-    if (singleFile) {
+    if (sequences.length === 0 && singleFile) {
       try {
-        // Try to infer sequence from the single file and all available files
         const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);
         if (sequenceInfo) {
-          // Successfully inferred a sequence
           const sequenceFiles = sequenceInfo.frames.map((f) => f.file);
-          await this.session.loadSequence(sequenceFiles);
-          this.emit('fileLoaded', undefined);
-          input.value = '';
-          return;
+          sequences.push(sequenceFiles);
+          const inferred = new Set(sequenceFiles);
+          remaining = others.filter((f) => !inferred.has(f));
         }
       } catch (err) {
         logger.error('Failed to infer sequence:', err);
@@ -1848,8 +1831,20 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       }
     }
 
-    // Single file or mixed files - load individually
-    for (const file of fileArray) {
+    for (const sequence of sequences) {
+      try {
+        await this.session.loadSequence(sequence);
+        this.emit('fileLoaded', undefined);
+      } catch (err) {
+        logger.error('Failed to load sequence:', err);
+        showAlert(`Failed to load sequence ${sequence[0]?.name ?? ''}: ${err}`, {
+          type: 'error',
+          title: 'Load Error',
+        });
+      }
+    }
+
+    for (const file of remaining) {
       try {
         await this.session.loadFile(file);
         this.emit('fileLoaded', undefined);
