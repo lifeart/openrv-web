@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVideoFile, waitForTestHelper } from './fixtures';
+import { loadVideoFile, waitForTestHelper, openViewOverlaysMenu } from './fixtures';
 
 /**
  * FPS Indicator E2E Tests
@@ -59,6 +59,7 @@ test.describe('FPS Indicator', () => {
     await page.waitForTimeout(100);
 
     // Should see FPS indicator toggle button
+    await openViewOverlaysMenu(page);
     const fpsButton = page.locator('[data-testid="fps-indicator-toggle-btn"]');
     await expect(fpsButton).toBeVisible();
   });
@@ -67,6 +68,8 @@ test.describe('FPS Indicator', () => {
     // Click View tab
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
+
+    await openViewOverlaysMenu(page);
 
     const fpsButton = page.locator('[data-testid="fps-indicator-toggle-btn"]');
     await expect(fpsButton).toBeVisible();
@@ -80,6 +83,8 @@ test.describe('FPS Indicator', () => {
     // Click View tab
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
+
+    await openViewOverlaysMenu(page);
 
     const fpsButton = page.locator('[data-testid="fps-indicator-toggle-btn"]');
     await expect(fpsButton).toBeVisible();
@@ -144,6 +149,8 @@ test.describe('FPS Indicator', () => {
     // Click View tab
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
+
+    await openViewOverlaysMenu(page);
 
     const fpsButton = page.locator('[data-testid="fps-indicator-toggle-btn"]');
     const title = await fpsButton.getAttribute('title');

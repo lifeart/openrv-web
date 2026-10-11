@@ -480,6 +480,7 @@ export class AppControlRegistry {
     this.convergenceButton = viewResult.convergenceButton;
     this.floatingWindowButton = viewResult.floatingWindowButton;
     contextToolbar.setTabContent('view', viewResult.element);
+    contextToolbar.setTabOverflowItems('view', viewResult.overflowItems);
 
     // Initially hide per-eye controls (shown when stereo mode is activated)
     this.updateStereoEyeControlsVisibility();

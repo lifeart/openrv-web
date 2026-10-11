@@ -30,6 +30,7 @@ import { ShotStatusBadge } from '../ShotStatusBadge';
 import { RepresentationSelector } from '../RepresentationSelector';
 import type { VersionGroup } from '../../../core/session/VersionManager';
 import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
+import { ToolbarOverflowController, ToolbarPopover, type OverflowItem } from '../shared/ToolbarOverflow';
 
 import { Logger } from '../../../utils/Logger';
 import {
@@ -109,6 +110,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private _scrollHandler: (() => void) | null = null;
   private _resizeHandler: (() => void) | null = null;
   private externalPresentationButton: HTMLButtonElement | null = null;
+  private sourcesButton: HTMLButtonElement | null = null;
+  private themeElement: HTMLElement | null = null;
+  private docsButton: HTMLButtonElement | null = null;
+  private fileGroup: HTMLElement | null = null;
+  private utilityGroup: HTMLElement | null = null;
+  private overflowPopover: ToolbarPopover | null = null;
+  private overflowController: ToolbarOverflowController | null = null;
   private _unsubscribeExperimental: (() => void) | null = null;
 
   /**
@@ -134,6 +142,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.wrapper.style.cssText = `
       position: relative;
       flex-shrink: 0;
+      display: flex;
+      align-items: stretch;
     `;
 
     // Create scrollable container
@@ -147,7 +157,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       align-items: center;
       padding: 0 12px;
       gap: 0;
-      flex-shrink: 0;
+      flex: 1 1 auto;
+      min-width: 0;
       user-select: none;
       overflow-x: auto;
       overflow-y: hidden;
@@ -165,7 +176,74 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.createOverflowFades();
 
     this.createControls();
+    this.createOverflowMenu();
     this.bindEvents();
+  }
+
+  /**
+   * "More" (⋯) menu: when the header does not fit, low-priority controls are
+   * moved (not cloned) into a popover, in the order listed below. Play
+   * controls and the Open-media button are never registered, so they always
+   * stay in the bar. Nothing moves while there is enough room.
+   */
+  private createOverflowMenu(): void {
+    const popover = new ToolbarPopover({
+      triggerTestId: 'header-overflow-button',
+      panelTestId: 'header-overflow-menu',
+      icon: 'more-horizontal',
+      title: 'More controls',
+      align: 'right',
+    });
+    popover.trigger.style.cssText += `
+      height: 40px;
+      flex-shrink: 0;
+      border-radius: 0;
+      border-bottom: 1px solid var(--border-secondary);
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    `;
+    this.wrapper.appendChild(popover.trigger);
+    this.overflowPopover = popover;
+
+    const candidates: Array<OverflowItem | null> = [
+      this.docsButton && { element: this.docsButton, label: 'Documentation' },
+      this.themeElement && { element: this.themeElement, label: 'Theme' },
+      { element: this.panelsSlot, label: 'Panels' },
+      { element: this.timecodeEl },
+      { element: this.shotStatusBadge.render() },
+      { element: this.representationSelector.render() },
+      { element: this.versionSelectorContainer },
+      { element: this.sessionNameDisplay },
+      this.sourcesButton && { element: this.sourcesButton },
+      { element: this.networkSlot, label: 'Network sync' },
+      { element: this.layoutButton, label: 'Layout presets' },
+      { element: this.presentationButton, label: 'Presentation mode' },
+      this.externalPresentationButton && { element: this.externalPresentationButton, label: 'External presentation' },
+      { element: this.fullscreenButton, label: 'Fullscreen' },
+      { element: this.volumeEl, label: 'Volume' },
+      { element: this.exportControl.render(), label: 'Export' },
+      { element: this.autoSaveSlot, label: 'Auto-save' },
+      { element: this.helpButton, label: 'Help & key bindings' },
+    ];
+    const observe = [this.fileGroup, this.playbackGroup, this.utilityGroup].filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    this.overflowController = new ToolbarOverflowController({
+      container: this.container,
+      popover,
+      items: candidates.filter((c): c is OverflowItem => c !== null),
+      observe,
+      onLayout: (overflowing) => {
+        // Keep the right fade just left of the visible "More" button.
+        this.fadeRight.style.right = overflowing ? `${popover.trigger.offsetWidth}px` : '0';
+        this.updateOverflowFades();
+      },
+    });
+    this.overflowController.scheduleUpdate();
+  }
+
+  /** Re-run the overflow layout (e.g. after header content changed). */
+  updateOverflow(): void {
+    this.overflowController?.scheduleUpdate();
   }
 
   /**
@@ -297,6 +375,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
     sourcesButton.setAttribute('aria-haspopup', 'menu');
     fileGroup.appendChild(sourcesButton);
+    this.sourcesButton = sourcesButton;
+    this.fileGroup = fileGroup;
 
     this.container.appendChild(fileGroup);
     this.addDivider();
@@ -461,12 +541,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const themeElement = this.themeControl.render();
     themeElement.style.marginLeft = '8px';
     utilityGroup.appendChild(themeElement);
+    this.themeElement = themeElement;
 
     // Documentation button — visible link to docs site
     const docsButton = this.createIconButton('book-open', '', () => window.open('./docs/', '_blank'), 'Documentation');
     docsButton.dataset.testid = 'docs-button';
     docsButton.style.marginLeft = '8px';
     utilityGroup.appendChild(docsButton);
+    this.docsButton = docsButton;
+    this.utilityGroup = utilityGroup;
 
     // Help dropdown button (combines Keyboard Shortcuts + Custom Key Bindings)
     this.helpButton = this.createIconButton(
@@ -488,6 +571,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     if (this.externalPresentationButton) {
       this.externalPresentationButton.style.display = enabled ? '' : 'none';
     }
+    this.updateOverflow();
   }
 
   private createGroup(): HTMLElement {
@@ -632,6 +716,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private updateSessionNameDisplay(): void {
+    this.updateOverflow();
     const metadata = this.session.metadata;
     const nameText = this.sessionNameDisplay.querySelector('.session-name-text') as HTMLElement;
 
@@ -1836,6 +1921,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this._unsubscribeExperimental?.();
     this._unsubscribeExperimental = null;
 
+    this.overflowController?.dispose();
+    this.overflowController = null;
+    this.overflowPopover?.dispose();
+    this.overflowPopover = null;
+
     // Remove procedural sources dropdown
     if (this._sourcesMenu) {
       this._sourcesMenu.dispose();
@@ -1885,6 +1975,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Clear existing content
     this.autoSaveSlot.innerHTML = '';
     this.autoSaveSlot.appendChild(element);
+    this.updateOverflow();
   }
 
   /**
@@ -1893,6 +1984,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   setNetworkControl(element: HTMLElement): void {
     this.networkSlot.innerHTML = '';
     this.networkSlot.appendChild(element);
+    this.updateOverflow();
   }
 
   /**
@@ -1908,6 +2000,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   setPanelToggles(element: HTMLElement): void {
     this.panelsSlot.innerHTML = '';
     this.panelsSlot.appendChild(element);
+    this.updateOverflow();
   }
 
   /**
@@ -2054,6 +2147,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   setImageMode(isImage: boolean): void {
     if (this._isImageMode === isImage) return;
     this._isImageMode = isImage;
+    this.updateOverflow();
 
     // Clear any pending transition timers to prevent race conditions
     for (const timer of this._imageTransitionTimers) {
