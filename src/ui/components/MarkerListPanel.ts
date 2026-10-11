@@ -48,7 +48,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private editingFrame: number | null = null;
   private lastHighlightedFrame: number | null = null;
   private focusedMarkerIndex = -1;
-  private exclusivePanels: ExclusivePanelRef[] = [];
+  private readonly exclusivePanels = new Set<ExclusivePanelRef>();
 
   // Bound event handlers for cleanup
   private boundOnMarksChanged: () => void;
@@ -227,7 +227,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
   /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanels.push(panel);
+    if (panel !== this) this.exclusivePanels.add(panel);
   }
 
   /**

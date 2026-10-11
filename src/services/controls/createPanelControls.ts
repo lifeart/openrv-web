@@ -22,6 +22,7 @@ import {
 } from '../../ui/components/ConformPanel';
 import { createPanel, createPanelHeader } from '../../ui/components/shared/Panel';
 import { PANEL_WIDTHS } from '../../ui/components/shared/theme';
+import { linkExclusivePanels } from '../../ui/components/shared/linkExclusivePanels';
 import { Logger } from '../../utils/Logger';
 import { getGlobalHistoryManager } from '../../utils/HistoryManager';
 import type { PanelControlGroup } from './ControlGroups';
@@ -97,6 +98,41 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
   const shotGridConfig = new ShotGridConfigUI();
   const shotGridPanel = new ShotGridPanel();
   shotGridPanel.setConfigUI(shotGridConfig);
+
+  // Cross-group mutual exclusion: every panel above docks to the same
+  // top-right area, so opening any of them closes all the others (U9).
+  linkExclusivePanels([
+    {
+      isOpen: () => notePanel.isVisible(),
+      hide: () => notePanel.hide(),
+      onOpen: (cb) => notePanel.on('visibilityChanged', (open) => open && cb()),
+    },
+    {
+      isOpen: () => markerListPanel.isVisible(),
+      hide: () => markerListPanel.hide(),
+      onOpen: (cb) => markerListPanel.on('visibilityChanged', (open) => open && cb()),
+    },
+    {
+      isOpen: () => historyPanel.isVisible(),
+      hide: () => historyPanel.hide(),
+      onOpen: (cb) => historyPanel.on('visibilityChanged', (open) => open && cb()),
+    },
+    {
+      isOpen: () => snapshotPanel.isOpen(),
+      hide: () => snapshotPanel.hide(),
+      onOpen: (cb) => snapshotPanel.on('visibilityChanged', ({ open }) => open && cb()),
+    },
+    {
+      isOpen: () => playlistPanel.isOpen(),
+      hide: () => playlistPanel.hide(),
+      onOpen: (cb) => playlistPanel.on('visibilityChanged', ({ open }) => open && cb()),
+    },
+    {
+      isOpen: () => shotGridPanel.isOpen(),
+      hide: () => shotGridPanel.hide(),
+      onOpen: (cb) => shotGridPanel.on('visibilityChanged', (open) => open && cb()),
+    },
+  ]);
 
   // --- Conform / Re-link panel ---
   const conformPanelElement = createPanel({ width: PANEL_WIDTHS.dialogExtraWide, maxHeight: '70vh', align: 'right' });

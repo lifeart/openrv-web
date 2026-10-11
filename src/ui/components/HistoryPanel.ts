@@ -33,7 +33,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   private renderedEntryIds: number[] = [];
   /** Tracks the currentIndex that was last rendered. */
   private renderedCurrentIndex = -1;
-  private exclusivePanels: ExclusivePanelRef[] = [];
+  private readonly exclusivePanels = new Set<ExclusivePanelRef>();
 
   constructor(historyManager: HistoryManager) {
     super();
@@ -147,7 +147,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
 
   /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanels.push(panel);
+    if (panel !== this) this.exclusivePanels.add(panel);
   }
 
   /**
