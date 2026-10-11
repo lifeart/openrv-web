@@ -246,6 +246,29 @@ describe('FocusManager', () => {
     expect(document.activeElement).toBe(outsideBtn);
   });
 
+  // FM-013b
+  it('nested trapFocus resumes the outer trap on release', () => {
+    const outer = document.createElement('div');
+    const outerBtn = document.createElement('button');
+    outer.appendChild(outerBtn);
+    const inner = document.createElement('div');
+    const innerBtn = document.createElement('button');
+    inner.appendChild(innerBtn);
+    document.body.append(outer, inner);
+
+    fm.trapFocus(outer);
+    fm.trapFocus(inner);
+    expect(document.activeElement).toBe(innerBtn);
+
+    fm.releaseFocus();
+    expect(document.activeElement).toBe(outerBtn);
+
+    // Outer trap is active again: Tab stays inside it
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    outerBtn.dispatchEvent(event);
+    expect(document.activeElement).toBe(outerBtn);
+  });
+
   // FM-014
   it('createSkipLink returns anchor with href and class', () => {
     const link = fm.createSkipLink('main-content');

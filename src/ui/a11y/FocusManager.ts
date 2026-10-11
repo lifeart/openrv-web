@@ -21,6 +21,8 @@ export class FocusManager {
   private rovingIndices: Map<string, number> = new Map();
   private trapContainer: HTMLElement | null = null;
   private preTrapFocus: Element | null = null;
+  /** Outer traps suspended by a nested trap (e.g. a confirm opened over a modal). */
+  private suspendedTraps: Array<{ container: HTMLElement; preTrapFocus: Element | null }> = [];
   private boundKeyHandler: (e: KeyboardEvent) => void;
 
   constructor() {
@@ -104,6 +106,9 @@ export class FocusManager {
   }
 
   trapFocus(container: HTMLElement): void {
+    if (this.trapContainer) {
+      this.suspendedTraps.push({ container: this.trapContainer, preTrapFocus: this.preTrapFocus });
+    }
     this.preTrapFocus = document.activeElement;
     this.trapContainer = container;
 
@@ -120,6 +125,12 @@ export class FocusManager {
       this.preTrapFocus.focus();
     }
     this.preTrapFocus = null;
+    // Resume the outer trap, if this one was nested
+    const outer = this.suspendedTraps.pop();
+    if (outer) {
+      this.trapContainer = outer.container;
+      this.preTrapFocus = outer.preTrapFocus;
+    }
   }
 
   createSkipLink(targetId: string): HTMLElement {
@@ -143,6 +154,7 @@ export class FocusManager {
     this.rovingIndices.clear();
     this.trapContainer = null;
     this.preTrapFocus = null;
+    this.suspendedTraps = [];
   }
 
   private handleKeydown(e: KeyboardEvent): void {
