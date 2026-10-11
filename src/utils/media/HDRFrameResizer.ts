@@ -107,9 +107,14 @@ export class HDRFrameResizer {
       // Release original — caller owns the resized frame
       videoFrame.close();
 
+      // A display-p3 float16 canvas holds extended-range values encoded with
+      // the sRGB transfer curve on P3 primaries (1.0 = SDR white). Label them
+      // that way so the renderer decodes the curve and converts P3 -> 709;
+      // calling them linear BT.709 changed the picture whenever resizing
+      // kicked in (zoom level).
       const metadataOverrides =
         this.tier === 'display-p3-float16'
-          ? { transferFunction: 'srgb' as TransferFunction, colorPrimaries: 'bt709' as ColorPrimaries }
+          ? { transferFunction: 'srgb' as TransferFunction, colorPrimaries: 'p3' as ColorPrimaries }
           : undefined;
 
       return {
@@ -185,7 +190,8 @@ export class HDRFrameResizer {
     if (this.tier === 'rec2100') {
       // Match the source transfer function for zero-conversion resize
       const transfer = sourceColorSpace?.transfer;
-      if (transfer === 'smpte2084') return 'rec2100-pq';
+      // WebCodecs reports PQ as 'pq'; 'smpte2084' is the older/ffmpeg spelling.
+      if (transfer === 'pq' || transfer === 'smpte2084') return 'rec2100-pq';
       return 'rec2100-hlg'; // default for HLG and unknown
     }
     // Tier 2: always display-p3

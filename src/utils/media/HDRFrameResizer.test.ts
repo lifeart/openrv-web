@@ -145,6 +145,17 @@ describe('HDRFrameResizer', () => {
       );
     });
 
+    it("should use rec2100-pq for WebCodecs' 'pq' transfer name", () => {
+      setupOffscreenCanvasMock();
+      const resizer = new HDRFrameResizer('rec2100');
+      const frame = createMockVideoFrame({ displayWidth: 3840, displayHeight: 2160 });
+
+      resizer.resize(frame, { w: 1920, h: 1080 }, { transfer: 'pq', primaries: 'bt2020' });
+
+      const canvas = (OffscreenCanvas as unknown as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+      expect(canvas.getContext).toHaveBeenCalledWith('2d', expect.objectContaining({ colorSpace: 'rec2100-pq' }));
+    });
+
     it('should default to rec2100-hlg when transfer is unknown', () => {
       setupOffscreenCanvasMock();
       const resizer = new HDRFrameResizer('rec2100');
@@ -171,9 +182,10 @@ describe('HDRFrameResizer', () => {
       const result = resizer.resize(frame, { w: 1920, h: 1080 }, { transfer: 'arib-std-b67', primaries: 'bt2020' });
 
       expect(result.resized).toBe(true);
+      // sRGB-curve encoded values on P3 primaries (not linear BT.709)
       expect(result.metadataOverrides).toEqual({
         transferFunction: 'srgb',
-        colorPrimaries: 'bt709',
+        colorPrimaries: 'p3',
       });
 
       const canvas = (OffscreenCanvas as unknown as ReturnType<typeof vi.fn>).mock.results[0]!.value;

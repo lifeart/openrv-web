@@ -139,6 +139,27 @@ function createProbeCanvas(name: string): HTMLCanvasElement | null {
 // Detection
 // =============================================================================
 
+type Float16SettingKey = 'colorType' | 'pixelFormat';
+
+/**
+ * Whether a 2D context really uses the requested color space and float16
+ * storage. Browsers ignore unknown dictionary members (`colorType` before
+ * Chrome 137, `pixelFormat` after), so a non-null context alone does not
+ * prove float16 support; the context attributes report what was applied.
+ */
+export function contextHonorsSettings(
+  ctx: RenderingContext | OffscreenRenderingContext | null,
+  colorSpace: string,
+  float16Key: Float16SettingKey,
+): boolean {
+  if (!ctx) return false;
+  const withAttrs = ctx as { getContextAttributes?: () => Record<string, unknown> | null };
+  if (typeof withAttrs.getContextAttributes !== 'function') return false;
+  const attrs = withAttrs.getContextAttributes();
+  if (!attrs) return false;
+  return attrs.colorSpace === colorSpace && attrs[float16Key] === 'float16';
+}
+
 /**
  * Detect display capabilities using throwaway canvases and contexts.
  * All probes are wrapped via the `probe()` helper so a throwing browser API
@@ -204,16 +225,30 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   let probeCanvas2d3: HTMLCanvasElement | null = createProbeCanvas('createProbeCanvasFloat16');
 
   if (probeCanvas2d3) {
-    const canvas = probeCanvas2d3;
-    caps.canvasFloat16 =
-      probe('canvasFloat16', () => {
-        // rec2100-hlg is not in PredefinedColorSpace; pixelFormat is typed via webgl-hdr.d.ts
-        const ctx = canvas.getContext('2d', {
-          colorSpace: 'rec2100-hlg',
-          pixelFormat: 'float16',
-        } as unknown as CanvasRenderingContext2DSettings);
-        return ctx !== null;
-      }) ?? false;
+    const firstCanvas = probeCanvas2d3;
+    // Mirror the Canvas2DHDRBlit attempts: srgb-linear first (stable Chrome),
+    // then rec2100-hlg, each with the modern and the legacy float16 key. A
+    // canvas accepts only one context, so every attempt after the first
+    // uses a fresh canvas.
+    const attempts: Array<{ colorSpace: string; key: Float16SettingKey }> = [
+      { colorSpace: 'srgb-linear', key: 'colorType' },
+      { colorSpace: 'srgb-linear', key: 'pixelFormat' },
+      { colorSpace: 'rec2100-hlg', key: 'colorType' },
+      { colorSpace: 'rec2100-hlg', key: 'pixelFormat' },
+    ];
+    caps.canvasFloat16 = attempts.some(
+      ({ colorSpace, key }, i) =>
+        probe('canvasFloat16', () => {
+          const canvas = i === 0 ? firstCanvas : createProbeCanvas('createProbeCanvasFloat16');
+          if (!canvas) return false;
+          // These color spaces/keys are not in the DOM typings; see webgl-hdr.d.ts
+          const ctx = canvas.getContext('2d', {
+            colorSpace,
+            [key]: 'float16',
+          } as unknown as CanvasRenderingContext2DSettings);
+          return contextHonorsSettings(ctx, colorSpace, key);
+        }) ?? false,
+    );
   }
 
   // --- HDR canvas resize tier detection (OffscreenCanvas with float16) ---
@@ -238,7 +273,7 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
             colorSpace: 'rec2100-hlg',
             ...opt,
           } as unknown as CanvasRenderingContext2DSettings);
-          return ctx !== null;
+          return contextHonorsSettings(ctx, 'rec2100-hlg', Object.keys(opt)[0] as Float16SettingKey);
         }) ?? false;
       if (ok) {
         caps.canvasHDRResizeTier = 'rec2100';
@@ -256,7 +291,7 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
             colorSpace: 'display-p3',
             ...opt,
           } as unknown as CanvasRenderingContext2DSettings);
-          return ctx !== null;
+          return contextHonorsSettings(ctx, 'display-p3', Object.keys(opt)[0] as Float16SettingKey);
         }) ?? false;
       if (ok) {
         caps.canvasHDRResizeTier = 'display-p3-float16';

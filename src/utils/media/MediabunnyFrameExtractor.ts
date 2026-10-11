@@ -372,13 +372,14 @@ export class MediabunnyFrameExtractor {
                     fullRange: cs.fullRange ?? undefined,
                   };
                 }
+                // Display P3 (smpte432) with an SDR transfer is wide-gamut SDR,
+                // not HDR: it stays on the browser-color-managed SDR path.
                 if (
                   transferName === 'pq' ||
                   transferName === 'hlg' ||
                   transferName === 'smpte2084' ||
                   transferName === 'arib-std-b67' ||
-                  primariesName === 'bt2020' ||
-                  primariesName === 'smpte432'
+                  primariesName === 'bt2020'
                 ) {
                   isHDR = true;
                   log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
