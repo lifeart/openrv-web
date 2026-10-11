@@ -737,14 +737,28 @@ const jp2Decoder: FormatDecoder<JP2DecodeOptions> = {
     const { decodeJP2, getJP2WasmDecoder } = await import('./JP2Decoder');
     const wasmDecoder = getJP2WasmDecoder() ?? undefined;
     const result = await decodeJP2(buffer, options, wasmDecoder);
+    // JPEG 2000 samples are display-referred (sRGB / greyscale / sYCC→sRGB).
+    // The float pipeline treats float32 data as scene-linear, so linearize the
+    // colour channels here; otherwise the display transfer is applied on top of
+    // already-encoded values and the image looks washed out.
+    const { srgbToLinear } = await import('./GainMapMetadata');
+    const data = result.data;
+    const channels = result.channels;
+    for (let i = 0; i < data.length; i += channels) {
+      const colorChannels = channels === 4 || channels === 2 ? channels - 1 : channels;
+      for (let c = 0; c < colorChannels; c++) {
+        data[i + c] = srgbToLinear(data[i + c] ?? 0);
+      }
+    }
     return {
       width: result.width,
       height: result.height,
-      data: result.data,
-      channels: result.channels,
-      colorSpace: result.colorSpace,
+      data,
+      channels,
+      colorSpace: 'linear',
       metadata: {
         format: 'jp2',
+        sourceColorSpace: result.colorSpace,
         bitsPerComponent: result.bitsPerComponent,
         isSigned: result.isSigned,
       },

@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { decodeJP2, setJP2WasmDecoder, type JP2DecodeResult } from './JP2Decoder';
 import { decoderRegistry } from './DecoderRegistry';
+import { srgbToLinear } from './GainMapMetadata';
 import { DecoderError } from '../core/errors';
 import { Logger } from '../utils/Logger';
 
@@ -162,5 +163,18 @@ describe('JP2Decoder -- real WASM decode', () => {
     expect(result!.width).toBe(16);
     expect(result!.channels).toBe(4);
     expect(result!.metadata?.bitsPerComponent).toBe(8);
+  });
+
+  it('JP2-REAL-014: registry output is linearized from sRGB, alpha untouched', async () => {
+    const encoded = await decodeJP2(fixture('rgb8.jph'));
+    const result = await decoderRegistry.detectAndDecode(fixture('rgb8.jph'));
+    expect(result!.colorSpace).toBe('linear');
+    expect(result!.metadata?.sourceColorSpace).toBe(encoded.colorSpace);
+    // Pixel (x=8, y=4): rgb8 fixture is (16x, 32y, 255-16x) = (128, 128, 127)
+    const i = (4 * 16 + 8) * 4;
+    expect(encoded.data[i]).toBeCloseTo(128 / 255, 4);
+    expect(result!.data[i]).toBeCloseTo(srgbToLinear(128 / 255), 4);
+    expect(result!.data[i + 1]).toBeCloseTo(srgbToLinear(128 / 255), 4);
+    expect(result!.data[i + 3]).toBe(1);
   });
 });
