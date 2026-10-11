@@ -197,13 +197,16 @@ describe('PlaylistManager – transitions (L6)', () => {
 
       const clips = pm.getClips();
       expect(clips[0]!.globalStartFrame).toBe(1); // A: 1..50
-      expect(clips[1]!.globalStartFrame).toBe(61); // 10-frame gap, B: 61..100
-      expect(clips[2]!.globalStartFrame).toBe(89); // 12-frame overlap, C: 89..118
-      expect(pm.getTotalDuration()).toBe(118); // 50 + 10 + 40 + 30 - 12
+      // OTIO transitions borrow media handles: B is extended by the 6-frame
+      // out_offset. C starts at media frame 0, so it has no head handle and the
+      // 12-frame overlap eats into its visible frames instead.
+      expect(clips[1]!.globalStartFrame).toBe(61); // 10-frame gap, B: 61..106
+      expect(clips[2]!.globalStartFrame).toBe(95); // 12-frame overlap, C: 95..124
+      expect(pm.getTotalDuration()).toBe(124); // 50 + 10 + 46 + 30 - 12
 
       // Gap frames map to no clip; the overlap belongs to C
       expect(pm.getClipAtFrame(55)).toBeNull();
-      expect(pm.getClipAtFrame(95)!.clipIndex).toBe(2);
+      expect(pm.getClipAtFrame(100)!.clipIndex).toBe(2);
     });
 
     it('PL-TR-021: gaps are preserved when a transition is added later and removed again', () => {
