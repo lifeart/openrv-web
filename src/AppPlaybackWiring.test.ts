@@ -4,6 +4,9 @@ import { wirePlaybackControls, type PlaybackWiringDeps } from './AppPlaybackWiri
 import type { AppWiringContext } from './AppWiringContext';
 import * as Modal from './ui/components/shared/Modal';
 import * as Toast from './ui/components/shared/Toast';
+import { PlaylistManager } from './core/session/PlaylistManager';
+import { TransitionManager } from './core/session/TransitionManager';
+import type { PlaylistTransitionFrame } from './core/types/transition';
 
 // ---------------------------------------------------------------------------
 // Module-level mocks for video export pipeline
@@ -171,6 +174,7 @@ function createMockViewer() {
     copyFrameToClipboard: vi.fn(),
     renderFrameToCanvas: vi.fn(),
     setOnBeforeMediaLoad: vi.fn(),
+    setPlaylistTransitionProvider: vi.fn(),
   };
 }
 
@@ -1061,5 +1065,132 @@ describe('wirePlaybackControls — video export', () => {
   it('PW-051: createRequested with no name passes undefined to persistenceManager.createSnapshot', () => {
     controls.snapshotPanel.emit('createRequested', { name: undefined, description: undefined });
     expect(persistenceManager.createSnapshot).toHaveBeenCalledWith(undefined, undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Playlist transitions (review finding L6): playback runtime + blend provider
+// ---------------------------------------------------------------------------
+
+describe('wirePlaybackControls — playlist transitions', () => {
+  let session: ReturnType<typeof createMockSession>;
+  let viewer: ReturnType<typeof createMockViewer>;
+  let pm: PlaylistManager;
+  let tm: TransitionManager;
+  let subs: ReturnType<typeof wirePlaybackControls>;
+
+  beforeEach(() => {
+    session = createMockSession();
+    viewer = createMockViewer();
+    const controls = createMockControls();
+    pm = new PlaylistManager();
+    tm = new TransitionManager();
+    pm.setTransitionManager(tm);
+
+    // A: source 0 frames 1..50 (global 1..50); B: source 1 frames 101..140.
+    pm.addClip(0, 'A', 1, 50);
+    pm.addClip(1, 'B', 101, 140);
+    tm.setTransition(0, { type: 'dissolve', durationFrames: 12 }); // B at global 39..78
+
+    const ctx = {
+      session,
+      viewer,
+      headerBar: createMockHeaderBar(),
+      controls: { ...controls, playlistManager: pm },
+      persistenceManager: createMockPersistenceManager(),
+      paintEngine: {},
+      tabBar: {},
+      sessionBridge: {},
+    } as unknown as AppWiringContext;
+    subs = wirePlaybackControls(ctx, createMockDeps());
+  });
+
+  afterEach(() => {
+    subs.subscriptions.dispose();
+    pm.dispose();
+    tm.dispose();
+  });
+
+  function provider(): () => PlaylistTransitionFrame | null {
+    const fn = viewer.setPlaylistTransitionProvider.mock.calls[0]?.[0] as
+      | (() => PlaylistTransitionFrame | null)
+      | undefined;
+    if (!fn) throw new Error('provider not installed');
+    return fn;
+  }
+
+  /** Simulate session-level playback: step one frame, wrapping at the out point. */
+  function step(): void {
+    const next = session.currentFrame + 1 > session.outPoint ? session.inPoint : session.currentFrame + 1;
+    session.currentFrame = next;
+    session.emit('frameChanged', next);
+  }
+
+  it('PW-TR-001: installs a transition provider on the viewer and clears it on dispose', () => {
+    expect(viewer.setPlaylistTransitionProvider).toHaveBeenCalledWith(expect.any(Function));
+    subs.subscriptions.dispose();
+    expect(viewer.setPlaylistTransitionProvider).toHaveBeenLastCalledWith(null);
+  });
+
+  it('PW-TR-002: playback advances monotonically from A through the overlap into B', () => {
+    pm.setEnabled(true);
+    expect(session.currentSourceIndex).toBe(0);
+    expect(pm.getCurrentFrame()).toBe(1);
+
+    const globals: number[] = [pm.getCurrentFrame()];
+    const sources: number[] = [session.currentSourceIndex];
+    for (let i = 0; i < 200 && session.pause.mock.calls.length === 0; i++) {
+      step();
+      globals.push(pm.getCurrentFrame());
+      sources.push(session.currentSourceIndex);
+    }
+
+    // Playback ended at the playlist end (no loop) after exactly 78 frames.
+    expect(session.pause).toHaveBeenCalled();
+    expect(globals[globals.length - 1]).toBe(78);
+    // Strictly +1 per frame from 1 to 78, never jumping back into A.
+    globals.slice(0, 78).forEach((g, i) => expect(g).toBe(i + 1));
+    // Hand-over to B happens on the first overlap frame (global 39) at B's in point.
+    expect(sources[37]).toBe(0);
+    expect(sources[38]).toBe(1);
+    expect(sources.slice(38).every((s) => s === 1)).toBe(true);
+    expect(session.goToFrame).toHaveBeenCalledWith(101);
+  });
+
+  it('PW-TR-003: blend provider describes the outgoing frame only inside the overlap', () => {
+    pm.setEnabled(true);
+    const getBlend = provider();
+
+    // Before the overlap (global 38, still on A): no blend.
+    for (let i = 0; i < 37; i++) step();
+    expect(pm.getCurrentFrame()).toBe(38);
+    expect(getBlend()).toBeNull();
+
+    // First overlap frame: session is on B, blend fully shows A's frame 39.
+    step();
+    expect(session.currentSourceIndex).toBe(1);
+    expect(getBlend()).toEqual({
+      transitionType: 'dissolve',
+      progress: 0,
+      outgoingSourceIndex: 0,
+      outgoingFrame: 39,
+    });
+
+    // Last overlap frame (global 50): fully incoming, outgoing frame 50.
+    for (let i = 0; i < 11; i++) step();
+    expect(pm.getCurrentFrame()).toBe(50);
+    expect(getBlend()).toMatchObject({ progress: 1, outgoingFrame: 50 });
+
+    // After the overlap: no blend.
+    step();
+    expect(getBlend()).toBeNull();
+  });
+
+  it('PW-TR-004: single-clip loop mode keeps playback on the clip and does not blend', () => {
+    pm.setEnabled(true);
+    pm.setLoopMode('single');
+    for (let i = 0; i < 45; i++) step();
+    expect(session.currentSourceIndex).toBe(0);
+    expect(provider()()).toBeNull();
   });
 });

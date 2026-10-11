@@ -136,6 +136,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private _transitionChangedHandler: (() => void) | null = null;
   private _transitionsResetHandler: (() => void) | null = null;
   private _lastOTIOImportResult: OTIOImportResult | null = null;
+  /**
+   * Empty frames preceding each clip (keyed by clip id), e.g. OTIO gaps.
+   * Captured the first time a clip is laid out so that transition overlaps
+   * can be applied on top of gap spacing without losing it.
+   */
+  private gapsBefore = new Map<string, number>();
 
   constructor() {
     super();
@@ -172,7 +178,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    */
   getTransitionAtFrame(globalFrame: number): TransitionFrameInfo | null {
     if (!this.transitionManager) return null;
-    return this.transitionManager.getTransitionAtFrame(globalFrame, this.clips);
+    return this.transitionManager.getTransitionAtFrame(globalFrame, this.clips, this.resolveGapsBefore());
   }
 
   /**
@@ -202,7 +208,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       clip.metadata = metadata;
     }
 
+    this.resolveGapsBefore();
     this.clips.push(clip);
+    this.gapsBefore.set(clip.id, 0);
     this.transitionManager?.resizeToClips(this.clips.length);
     this.emit('clipsChanged', { clips: [...this.clips] });
     return clip;
@@ -239,6 +247,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
     this.transitionManager?.resizeToClips(nextClips.length);
     this.clips = nextClips;
+    this.gapsBefore = new Map(nextClips.map((c) => [c.id, 0]));
     this.recalculateGlobalFrames();
 
     const totalDuration = this.getTotalDuration();
@@ -254,6 +263,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const index = this.clips.findIndex((c) => c.id === clipId);
     if (index === -1) return false;
 
+    this.resolveGapsBefore();
     this.clips.splice(index, 1);
     this.transitionManager?.resizeToClips(this.clips.length);
     this.recalculateGlobalFrames();
@@ -271,6 +281,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     newIndex = Math.max(0, Math.min(newIndex, this.clips.length - 1));
     if (currentIndex === newIndex) return false;
 
+    this.resolveGapsBefore();
     const removed = this.clips.splice(currentIndex, 1);
     const clip = removed[0];
     if (clip) {
@@ -291,6 +302,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const clip = this.clips.find((c) => c.id === clipId);
     if (!clip) return false;
 
+    this.resolveGapsBefore();
     clip.inPoint = inPoint;
     clip.outPoint = outPoint;
     clip.duration = outPoint - inPoint + 1;
@@ -300,10 +312,16 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   /**
-   * Get clip at a global frame position
+   * Get clip at a global frame position.
+   *
+   * Transition-aware: inside a transition overlap both the outgoing and the
+   * incoming clip cover the frame. The incoming (later) clip owns the frame,
+   * so playback advances through the overlap into the incoming clip instead
+   * of being sent back into the outgoing one. The outgoing clip is the
+   * blend's second input (see `getTransitionAtFrame`).
    */
   getClipAtFrame(globalFrame: number): FrameMapping | null {
-    for (let i = 0; i < this.clips.length; i++) {
+    for (let i = this.clips.length - 1; i >= 0; i--) {
       const clip = this.clips[i];
       if (!clip) continue;
 
@@ -487,24 +505,22 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Returns null if at end with no loop, or if playlist is empty.
    */
   goToNextClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
-    if (this.clips.length === 0) return null;
+    const firstClip = this.clips[0];
+    if (!firstClip) return null;
 
     const currentMapping = this.getClipAtFrame(currentGlobalFrame);
     if (!currentMapping) {
       // Not on any clip — go to first clip
-      const firstClip = this.clips[0]!;
       return { frame: firstClip.globalStartFrame, clip: firstClip };
     }
 
-    const nextIndex = currentMapping.clipIndex + 1;
-    if (nextIndex < this.clips.length) {
-      const nextClip = this.clips[nextIndex]!;
+    const nextClip = this.clips[currentMapping.clipIndex + 1];
+    if (nextClip) {
       return { frame: nextClip.globalStartFrame, clip: nextClip };
     }
 
     // At last clip
     if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
-      const firstClip = this.clips[0]!;
       return { frame: firstClip.globalStartFrame, clip: firstClip };
     }
 
@@ -518,12 +534,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Returns null if at beginning with no loop, or if playlist is empty.
    */
   goToPreviousClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
-    if (this.clips.length === 0) return null;
+    const lastClip = this.clips[this.clips.length - 1];
+    if (!lastClip) return null;
 
     const currentMapping = this.getClipAtFrame(currentGlobalFrame);
     if (!currentMapping) {
       // Not on any clip — go to last clip
-      const lastClip = this.clips[this.clips.length - 1]!;
       return { frame: lastClip.globalStartFrame, clip: lastClip };
     }
 
@@ -534,14 +550,13 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
     // At or near start of clip — go to previous clip
     const prevIndex = currentMapping.clipIndex - 1;
-    if (prevIndex >= 0) {
-      const prevClip = this.clips[prevIndex]!;
+    const prevClip = prevIndex >= 0 ? this.clips[prevIndex] : undefined;
+    if (prevClip) {
       return { frame: prevClip.globalStartFrame, clip: prevClip };
     }
 
     // At first clip
     if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
-      const lastClip = this.clips[this.clips.length - 1]!;
       return { frame: lastClip.globalStartFrame, clip: lastClip };
     }
 
@@ -557,40 +572,67 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   /**
+   * Resolve the empty-frame gap preceding each clip, in clip order.
+   *
+   * Gaps are captured per clip id the first time a clip is laid out. A clip
+   * seen for the first time is assumed to be positioned without transition
+   * overlap (OTIO import positions, `addClip` appending after the current
+   * end, or the placeholder positions of `replaceClips`), so its gap is the
+   * distance from the end of the preceding clip's current position.
+   * Entries for clips no longer in the playlist are dropped.
+   */
+  private resolveGapsBefore(): number[] {
+    const gaps: number[] = [];
+    const next = new Map<string, number>();
+    this.clips.forEach((clip, i) => {
+      let gap = this.gapsBefore.get(clip.id);
+      if (gap === undefined) {
+        const prev = this.clips[i - 1];
+        const expectedStart = prev ? prev.globalStartFrame + prev.duration : 1;
+        gap = Math.max(0, clip.globalStartFrame - expectedStart);
+      }
+      gaps.push(gap);
+      next.set(clip.id, gap);
+    });
+    this.gapsBefore = next;
+    return gaps;
+  }
+
+  /**
    * Recalculate global start frames after clip changes.
-   * When a transition manager is set, uses overlap-adjusted frames.
+   * Preserves gap spacing (e.g. OTIO gaps) and, when a transition manager is
+   * set, applies transition overlaps on top of it.
    */
   private recalculateGlobalFrames(): void {
+    const gaps = this.resolveGapsBefore();
     if (this.transitionManager) {
-      const adjusted = this.transitionManager.calculateOverlapAdjustedFrames(this.clips);
-      for (let i = 0; i < this.clips.length; i++) {
-        this.clips[i]!.globalStartFrame = adjusted[i]!.globalStartFrame;
-      }
+      const adjusted = this.transitionManager.calculateOverlapAdjustedFrames(this.clips, gaps);
+      this.clips.forEach((clip, i) => {
+        clip.globalStartFrame = adjusted[i]?.globalStartFrame ?? clip.globalStartFrame;
+      });
     } else {
       let globalStart = 1;
-      for (const clip of this.clips) {
+      this.clips.forEach((clip, i) => {
+        globalStart += gaps[i] ?? 0;
         clip.globalStartFrame = globalStart;
         globalStart += clip.duration;
-      }
+      });
     }
   }
 
   /**
    * Get total playlist duration in frames.
-   * Accounts for gap-spaced clips (non-contiguous globalStartFrame values)
-   * by computing the end of the last clip. When a transition manager is set,
-   * subtracts transition overlaps from the raw sum instead.
+   * Computed as the end of the last clip, so it accounts for both gap-spaced
+   * clips (non-contiguous globalStartFrame values, e.g. OTIO gaps) and
+   * transition overlaps (already applied to globalStartFrame by
+   * recalculateGlobalFrames).
    */
   getTotalDuration(): number {
     if (this.clips.length === 0) return 0;
 
-    if (this.transitionManager) {
-      const rawDuration = this.clips.reduce((sum, clip) => sum + clip.duration, 0);
-      return rawDuration - this.transitionManager.getTotalOverlap();
-    }
-
     // Find the end of the last clip by globalStartFrame + duration - 1
-    // This correctly handles gaps (non-contiguous globalStartFrame values).
+    // This correctly handles gaps (non-contiguous globalStartFrame values)
+    // and overlaps (an overlapped clip ends before its successor does).
     let maxEnd = 0;
     for (const clip of this.clips) {
       const clipEnd = clip.globalStartFrame + clip.duration - 1;
@@ -693,6 +735,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    */
   clear(): void {
     this.clips = [];
+    this.gapsBefore.clear();
     this.currentFrame = 1;
     if (this.transitionManager) {
       this.transitionManager.clear();
@@ -727,6 +770,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   setState(state: Partial<PlaylistState>): void {
     if (state.clips) {
       this.clips = [...state.clips];
+      this.captureGapsFromLayout(state.transitions ?? []);
       // Ensure nextClipId is higher than any existing clip
       for (const clip of this.clips) {
         const match = clip.id.match(/clip-(\d+)/);
@@ -756,6 +800,21 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
         this.transitionManager.clear();
       }
     }
+  }
+
+  /**
+   * Re-derive per-clip gaps from a serialized layout whose globalStartFrame
+   * values already include the given transition overlaps.
+   */
+  private captureGapsFromLayout(transitions: readonly (TransitionConfig | null)[]): void {
+    this.gapsBefore = new Map();
+    this.clips.forEach((clip, i) => {
+      const prev = this.clips[i - 1];
+      const prevTransition = i > 0 ? transitions[i - 1] : null;
+      const overlap = prevTransition && prevTransition.type !== 'cut' ? Math.max(0, prevTransition.durationFrames) : 0;
+      const expectedStart = prev ? prev.globalStartFrame + prev.duration - overlap : 1;
+      this.gapsBefore.set(clip.id, Math.max(0, clip.globalStartFrame - expectedStart));
+    });
   }
 
   /**
@@ -958,7 +1017,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   ): number {
     this._unresolvedClips = [];
 
-    const primaryTrack = result.tracks[0]!;
+    const primaryTrack = result.tracks[0];
+    if (!primaryTrack) return 0;
     let importedCount = 0;
 
     // Import clips from the primary (first) video track.
@@ -1062,7 +1122,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const idx = this._unresolvedClips.findIndex((c) => c.id === clipId);
     if (idx === -1) return false;
 
-    const clip = this._unresolvedClips[idx]!;
+    const clip = this._unresolvedClips[idx];
+    if (!clip) return false;
     const outFrame = Math.min(clip.outFrame, frameCount);
     this.addClip(sourceIndex, sourceName, clip.inFrame, outFrame);
     this._unresolvedClips.splice(idx, 1);

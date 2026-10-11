@@ -665,4 +665,39 @@ describe('TransitionManager', () => {
       expect(callback).not.toHaveBeenCalled();
     });
   });
+  describe('gap-aware layout (L6)', () => {
+    it('TM-GAP-001: calculateOverlapAdjustedFrames applies gaps on top of overlaps', () => {
+      const clips = [makeClip('a', 0, 1, 50, 1), makeClip('b', 1, 1, 40, 51), makeClip('c', 2, 1, 30, 91)];
+      manager.setTransition(1, { type: 'dissolve', durationFrames: 10 });
+
+      const adjusted = manager.calculateOverlapAdjustedFrames(clips, [2, 5, 0]);
+      expect(adjusted.map((c) => c.globalStartFrame)).toEqual([3, 58, 88]);
+    });
+
+    it('TM-GAP-002: getOverlapAt ignores cuts and missing transitions', () => {
+      manager.setTransition(0, { type: 'cut', durationFrames: 10 });
+      manager.setTransition(1, { type: 'crossfade', durationFrames: 6 });
+      expect(manager.getOverlapAt(0)).toBe(0);
+      expect(manager.getOverlapAt(1)).toBe(6);
+      expect(manager.getOverlapAt(5)).toBe(0);
+    });
+
+    it('TM-GAP-003: a gap shrinks the blend region to the real overlap', () => {
+      const clips = [makeClip('a', 0, 1, 50, 1), makeClip('b', 1, 1, 40, 51)];
+      manager.setTransition(0, { type: 'crossfade', durationFrames: 10 });
+
+      // Gap of 4 before B: B starts at 1 + 50 - 10 + 4 = 45, A ends at 50
+      // -> 6 overlapping frames instead of 10.
+      const gaps = [0, 4];
+      expect(manager.getTransitionAtFrame(44, clips, gaps)).toBeNull();
+      expect(manager.getTransitionAtFrame(45, clips, gaps)!.progress).toBe(0);
+      expect(manager.getTransitionAtFrame(46, clips, gaps)!.progress).toBeCloseTo(0.2);
+      expect(manager.getTransitionAtFrame(50, clips, gaps)!.progress).toBe(1);
+      expect(manager.getTransitionAtFrame(51, clips, gaps)).toBeNull();
+
+      // A gap at least as long as the transition removes the overlap entirely.
+      expect(manager.getTransitionAtFrame(51, clips, [0, 10])).toBeNull();
+      expect(manager.getTransitionAtFrame(50, clips, [0, 10])).toBeNull();
+    });
+  });
 });
