@@ -1161,6 +1161,50 @@ describe('SessionMedia', () => {
 
       expect(listener).toHaveBeenCalledWith({ name: 'broken.exr' });
     });
+
+    it('SM-047b: broken image error names the file and decoder reason, not the blob URL (U12)', async () => {
+      const proto = MockFileSourceNode.prototype as unknown as { loadFile?: (f: File) => Promise<void> };
+      proto.loadFile = vi.fn().mockRejectedValue(new Error('Invalid PNG signature in blob:http://localhost/abc-123'));
+      const img = {
+        src: '',
+        crossOrigin: '',
+        onload: null as (() => void) | null,
+        onerror: null as (() => void) | null,
+      };
+      vi.stubGlobal(
+        'Image',
+        vi.fn(function () {
+          return img;
+        }),
+      );
+      const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/abc-123');
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const failed = vi.fn();
+      media.on('sourceLoadFailed', failed);
+
+      try {
+        const promise = media.loadImageFile(new File(['not an image'], 'broken.png', { type: 'image/png' }));
+        // Let the primary decoder reject and the fallback <img> start loading
+        await vi.waitFor(() => expect(img.onerror).not.toBeNull());
+        img.onerror?.();
+
+        const error = await promise.then(
+          () => null,
+          (e: unknown) => e as Error,
+        );
+        expect(error).toBeInstanceOf(Error);
+        expect(error?.message).toContain('"broken.png"');
+        expect(error?.message).toContain('not supported');
+        expect(error?.message).toContain('Invalid PNG signature');
+        expect(error?.message).not.toContain('blob:');
+        expect(failed).toHaveBeenCalledWith({ name: 'broken.png' });
+      } finally {
+        delete proto.loadFile;
+        createSpy.mockRestore();
+        revokeSpy.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    });
   });
 
   describe('switchRepresentation playback resume (#538)', () => {
