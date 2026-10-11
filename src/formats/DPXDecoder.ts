@@ -2,8 +2,13 @@
  * DPX (Digital Picture Exchange) File Format Decoder
  *
  * Supports:
- * - 8-bit, 10-bit (Method A packed), 12-bit (in 16-bit container), and 16-bit data
- * - Big-endian and little-endian byte order
+ * - 8-bit, 10-bit and 12-bit (filled Method A/B or bit-packed), and 16-bit data
+ * - Big-endian and little-endian byte order (file-wide, from the magic number)
+ * - Image element data offset and end-of-line padding
+ *
+ * Not supported: run-length encoded image data (encoding = 1). No common
+ * implementation (libdpx/OIIO, FFmpeg) decodes it, and such files are
+ * rejected with a clear error instead of being decoded as garbage.
  * - RGB, RGBA, and Luma (grayscale) images
  * - Linear and logarithmic transfer functions
  * - Optional log-to-linear conversion
@@ -37,7 +42,16 @@ export interface DPXInfo {
   channels: number;
   dataOffset: number;
   descriptor: number;
+  /** Image element packing (0 = packed, 1 = filled Method A, 2 = filled Method B) */
+  packing: number;
+  /** Image element encoding (0 = none, 1 = run-length encoded) */
+  encoding: number;
+  /** End-of-line padding in bytes (undefined when the header leaves it undefined) */
+  eolPadding?: number;
 }
+
+/** DPX "undefined" marker for 32-bit unsigned header fields */
+const DPX_UNDEFINED_U32 = 0xffffffff;
 
 export interface DPXDecodeOptions {
   /** Whether to convert log data to linear (default: false for DPX) */
@@ -90,7 +104,13 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
 
     const le = !bigEndian;
 
-    const dataOffset = view.getUint32(4, le);
+    // Prefer the image element's own data offset (808); fall back to the file header's (4)
+    const fileDataOffset = view.getUint32(4, le);
+    const elementDataOffset = view.getUint32(808, le);
+    const dataOffset =
+      elementDataOffset !== 0 && elementDataOffset !== DPX_UNDEFINED_U32 && elementDataOffset < buffer.byteLength
+        ? elementDataOffset
+        : fileDataOffset;
     // DPX stores width/height as uint32 — getUint32 ensures unsigned interpretation
     const width = view.getUint32(772, le);
     const height = view.getUint32(776, le);
@@ -115,6 +135,10 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
 
     const transferByte = view.getUint8(801);
     const bitDepth = view.getUint8(803);
+    const packing = view.getUint16(804, le);
+    const encoding = view.getUint16(806, le);
+    const rawEol = view.getUint32(812, le);
+    const eolPadding = rawEol === DPX_UNDEFINED_U32 ? undefined : rawEol;
 
     // Determine transfer function
     let transfer: string;
@@ -154,6 +178,9 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
       channels,
       dataOffset,
       descriptor,
+      packing,
+      encoding,
+      eolPadding,
     };
   } catch (e) {
     if (e instanceof DecoderError) {
@@ -163,13 +190,26 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
   }
 }
 
+/** DPX image element packing (SMPTE 268M, image element "packing" field at offset 804). */
+export enum DPXPacking {
+  /** Bits packed tightly into 32-bit words (data may span word boundaries) */
+  PACKED = 0,
+  /** Filled to 32-bit words, Method A: padding in the least significant bits */
+  FILLED_METHOD_A = 1,
+  /** Filled to 32-bit words, Method B: padding in the most significant bits */
+  FILLED_METHOD_B = 2,
+}
+
 /**
- * Unpack 10-bit Method A data from DPX/Cineon packed format.
+ * Unpack 10-bit "filled" data (3 components per 32-bit word).
  *
- * Each 32-bit word contains 3 x 10-bit components + 2 padding bits at LSB:
- *   c0 = (word >> 22) & 0x3FF
- *   c1 = (word >> 12) & 0x3FF
- *   c2 = (word >> 2)  & 0x3FF
+ * Method A (packing 1) puts the 2 padding bits at the LSB:
+ *   c0 = (word >> 22), c1 = (word >> 12), c2 = (word >> 2)
+ * Method B (packing 2) puts them at the MSB:
+ *   c0 = (word >> 20), c1 = (word >> 10), c2 = word
+ *
+ * Each row starts on a 32-bit word boundary; `rowStrideBytes` overrides the
+ * default stride (e.g. to honour end-of-line padding).
  *
  * Returns normalized float values in [0, 1].
  */
@@ -179,43 +219,68 @@ export function unpackDPX10bit(
   height: number,
   numChannels: number,
   bigEndian: boolean,
+  packing: DPXPacking = DPXPacking.FILLED_METHOD_A,
+  rowStrideBytes?: number,
 ): Float32Array {
-  const totalPixels = width * height;
-  const totalComponents = totalPixels * numChannels;
+  const totalComponents = width * height * numChannels;
   const result = new Float32Array(totalComponents);
   const le = !bigEndian;
+  const pad = packing === DPXPacking.FILLED_METHOD_B ? 0 : 2;
+  const shifts = [20 + pad, 10 + pad, pad];
 
-  // 10-bit Method A: 3 components per 32-bit word, with row-level alignment
-  // Each row's packed data starts at a 32-bit word boundary
   const componentsPerRow = width * numChannels;
   const wordsPerRow = Math.ceil(componentsPerRow / 3);
+  const stride = rowStrideBytes ?? wordsPerRow * 4;
   let componentIndex = 0;
 
   for (let row = 0; row < height; row++) {
-    const rowWordOffset = row * wordsPerRow;
-    let rowComponentIndex = 0;
-
-    for (let w = 0; w < wordsPerRow && rowComponentIndex < componentsPerRow; w++) {
-      const byteOffset = (rowWordOffset + w) * 4;
-      if (byteOffset + 4 > packedData.byteLength) break;
-
+    const rowOffset = row * stride;
+    for (let i = 0; i < componentsPerRow; i++) {
+      const byteOffset = rowOffset + Math.floor(i / 3) * 4;
+      if (byteOffset + 4 > packedData.byteLength) return result;
       const word = packedData.getUint32(byteOffset, le);
-      const c0 = (word >>> 22) & 0x3ff;
-      const c1 = (word >>> 12) & 0x3ff;
-      const c2 = (word >>> 2) & 0x3ff;
+      result[componentIndex++] = ((word >>> (shifts[i % 3] ?? 0)) & 0x3ff) / 1023;
+    }
+  }
 
-      if (rowComponentIndex < componentsPerRow && componentIndex < totalComponents) {
-        result[componentIndex++] = c0 / 1023;
-        rowComponentIndex++;
+  return result;
+}
+
+/**
+ * Unpack bit-packed data (packing 0): components are a continuous bitstream
+ * filling 32-bit words (in file byte order) from the least significant bit,
+ * so a component may span two words. Each row starts on a word boundary.
+ * Matches libdpx / FFmpeg.
+ */
+export function unpackDPXPacked(
+  view: DataView,
+  width: number,
+  height: number,
+  numChannels: number,
+  bitDepth: number,
+  bigEndian: boolean,
+  rowStrideBytes?: number,
+): Float32Array {
+  const componentsPerRow = width * numChannels;
+  const result = new Float32Array(componentsPerRow * height);
+  const le = !bigEndian;
+  const mask = 2 ** bitDepth - 1;
+  const stride = rowStrideBytes ?? Math.ceil((componentsPerRow * bitDepth) / 32) * 4;
+  let o = 0;
+
+  for (let row = 0; row < height; row++) {
+    const rowOffset = row * stride;
+    for (let i = 0; i < componentsPerRow; i++) {
+      const bitPos = i * bitDepth;
+      const wordOffset = rowOffset + Math.floor(bitPos / 32) * 4;
+      const shift = bitPos % 32;
+      if (wordOffset + 4 > view.byteLength) return result;
+      let value = view.getUint32(wordOffset, le) >>> shift;
+      if (shift + bitDepth > 32) {
+        if (wordOffset + 8 > view.byteLength) return result;
+        value = (value | (view.getUint32(wordOffset + 4, le) << (32 - shift))) >>> 0;
       }
-      if (rowComponentIndex < componentsPerRow && componentIndex < totalComponents) {
-        result[componentIndex++] = c1 / 1023;
-        rowComponentIndex++;
-      }
-      if (rowComponentIndex < componentsPerRow && componentIndex < totalComponents) {
-        result[componentIndex++] = c2 / 1023;
-        rowComponentIndex++;
-      }
+      result[o++] = (value & mask) / mask;
     }
   }
 
@@ -225,61 +290,51 @@ export function unpackDPX10bit(
 /**
  * Unpack 8-bit data from DPX
  */
-function unpack8bit(view: DataView, width: number, height: number, numChannels: number): Float32Array {
-  const totalComponents = width * height * numChannels;
-  const result = new Float32Array(totalComponents);
-
-  for (let i = 0; i < totalComponents && i < view.byteLength; i++) {
-    result[i] = view.getUint8(i) / 255;
+function unpack8bit(view: DataView, width: number, height: number, numChannels: number, stride: number): Float32Array {
+  const componentsPerRow = width * numChannels;
+  const result = new Float32Array(componentsPerRow * height);
+  let o = 0;
+  for (let row = 0; row < height; row++) {
+    const rowOffset = row * stride;
+    for (let i = 0; i < componentsPerRow; i++) {
+      if (rowOffset + i >= view.byteLength) return result;
+      result[o++] = view.getUint8(rowOffset + i) / 255;
+    }
   }
-
   return result;
 }
 
 /**
- * Unpack 16-bit data from DPX
+ * Unpack 12-bit (filled into 16-bit containers) or 16-bit data from DPX.
+ * 12-bit Method A stores the value in the upper 12 bits, Method B in the lower 12.
  */
-function unpack16bit(
+function unpack16bitContainer(
   view: DataView,
   width: number,
   height: number,
   numChannels: number,
   bigEndian: boolean,
+  bitDepth: 12 | 16,
+  packing: DPXPacking,
+  stride: number,
 ): Float32Array {
-  const totalComponents = width * height * numChannels;
-  const result = new Float32Array(totalComponents);
+  const componentsPerRow = width * numChannels;
+  const result = new Float32Array(componentsPerRow * height);
   const le = !bigEndian;
+  let o = 0;
 
-  for (let i = 0; i < totalComponents; i++) {
-    const byteOffset = i * 2;
-    if (byteOffset + 2 > view.byteLength) break;
-    result[i] = view.getUint16(byteOffset, le) / 65535;
-  }
-
-  return result;
-}
-
-/**
- * Unpack 12-bit data from DPX (stored in 16-bit container, upper 12 bits)
- */
-function unpack12bit(
-  view: DataView,
-  width: number,
-  height: number,
-  numChannels: number,
-  bigEndian: boolean,
-): Float32Array {
-  const totalComponents = width * height * numChannels;
-  const result = new Float32Array(totalComponents);
-  const le = !bigEndian;
-
-  for (let i = 0; i < totalComponents; i++) {
-    const byteOffset = i * 2;
-    if (byteOffset + 2 > view.byteLength) break;
-    const value16 = view.getUint16(byteOffset, le);
-    // 12-bit data is in the upper 12 bits of the 16-bit container
-    const value12 = value16 >>> 4;
-    result[i] = value12 / 4095;
+  for (let row = 0; row < height; row++) {
+    const rowOffset = row * stride;
+    for (let i = 0; i < componentsPerRow; i++) {
+      const byteOffset = rowOffset + i * 2;
+      if (byteOffset + 2 > view.byteLength) return result;
+      const v = view.getUint16(byteOffset, le);
+      if (bitDepth === 16) {
+        result[o++] = v / 65535;
+      } else {
+        result[o++] = (packing === DPXPacking.FILLED_METHOD_B ? v & 0xfff : v >>> 4) / 4095;
+      }
+    }
   }
 
   return result;
@@ -312,7 +367,18 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
     throw new DecoderError('DPX', 'Invalid DPX file');
   }
 
-  const { width, height, bitDepth, bigEndian, transfer, channels: inputChannels, dataOffset, descriptor } = info;
+  const {
+    width,
+    height,
+    bitDepth,
+    bigEndian,
+    transfer,
+    channels: inputChannels,
+    dataOffset,
+    descriptor,
+    encoding,
+    eolPadding,
+  } = info;
 
   // Validate dimensions
   validateImageDimensions(width, height, 'DPX');
@@ -322,27 +388,52 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
     throw new DecoderError('DPX', `Unsupported DPX bit depth: ${bitDepth}`);
   }
 
+  if (encoding !== 0) {
+    throw new DecoderError(
+      'DPX',
+      `Unsupported DPX encoding: ${encoding} (run-length encoded image data is not supported)`,
+    );
+  }
+
+  // Undefined/unknown packing values fall back to the most common layout (Method A)
+  const packing: DPXPacking =
+    info.packing === DPXPacking.PACKED || info.packing === DPXPacking.FILLED_METHOD_B
+      ? info.packing
+      : DPXPacking.FILLED_METHOD_A;
+
   // Validate data offset
   if (dataOffset >= buffer.byteLength) {
     throw new DecoderError('DPX', `Invalid DPX file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
   }
 
-  // Validate expected pixel data size against available file data (MED-32)
-  // This catches malformed files where dimensions are within limits but the
-  // scanline byte width computation (width * channels * bytesPerComponent)
-  // would produce a size far exceeding the actual file data.
+  // Row layout. Validate the expected pixel data size against the available
+  // file data (MED-32) so malformed dimensions are rejected before unpacking.
   const availableData = buffer.byteLength - dataOffset;
-  let expectedPixelDataSize: number;
-  if (bitDepth === 10) {
-    const componentsPerRow = width * inputChannels;
-    const wordsPerRow = Math.ceil(componentsPerRow / 3);
-    expectedPixelDataSize = wordsPerRow * height * 4;
+  const componentsPerRow = width * inputChannels;
+  const bitPacked = packing === DPXPacking.PACKED && (bitDepth === 10 || bitDepth === 12);
+  let rowBytes: number;
+  if (bitPacked) {
+    rowBytes = Math.ceil((componentsPerRow * bitDepth) / 32) * 4;
+  } else if (bitDepth === 10) {
+    rowBytes = Math.ceil(componentsPerRow / 3) * 4;
   } else if (bitDepth === 8) {
-    expectedPixelDataSize = width * height * inputChannels;
+    rowBytes = componentsPerRow;
   } else {
-    // 12-bit and 16-bit both use 2 bytes per component
-    expectedPixelDataSize = width * height * inputChannels * 2;
+    // 12-bit (filled) and 16-bit use 2 bytes per component
+    rowBytes = componentsPerRow * 2;
   }
+
+  let stride = rowBytes + (eolPadding ?? 0);
+  // 8/12/16-bit rows are commonly padded to a 4-byte boundary even when the
+  // end-of-line padding field is 0 or undefined (FFmpeg writes them this way).
+  // In that case use the aligned stride if the file is large enough to hold
+  // it (same heuristic as FFmpeg's decoder).
+  const alignedStride = Math.ceil(rowBytes / 4) * 4;
+  if (!eolPadding && alignedStride !== stride && alignedStride * height <= availableData) {
+    stride = alignedStride;
+  }
+
+  const expectedPixelDataSize = stride * (height - 1) + rowBytes;
   if (expectedPixelDataSize > availableData) {
     throw new DecoderError(
       'DPX',
@@ -353,23 +444,25 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
   // Create DataView for pixel data
   const pixelDataView = new DataView(buffer, dataOffset);
 
-  // Unpack pixel data based on bit depth
+  // Unpack pixel data based on bit depth and packing
   let componentData: Float32Array;
-  switch (bitDepth) {
-    case 8:
-      componentData = unpack8bit(pixelDataView, width, height, inputChannels);
-      break;
-    case 10:
-      componentData = unpackDPX10bit(pixelDataView, width, height, inputChannels, bigEndian);
-      break;
-    case 12:
-      componentData = unpack12bit(pixelDataView, width, height, inputChannels, bigEndian);
-      break;
-    case 16:
-      componentData = unpack16bit(pixelDataView, width, height, inputChannels, bigEndian);
-      break;
-    default:
-      throw new DecoderError('DPX', `Unsupported DPX bit depth: ${bitDepth}`);
+  if (bitPacked) {
+    componentData = unpackDPXPacked(pixelDataView, width, height, inputChannels, bitDepth, bigEndian, stride);
+  } else if (bitDepth === 10) {
+    componentData = unpackDPX10bit(pixelDataView, width, height, inputChannels, bigEndian, packing, stride);
+  } else if (bitDepth === 8) {
+    componentData = unpack8bit(pixelDataView, width, height, inputChannels, stride);
+  } else {
+    componentData = unpack16bitContainer(
+      pixelDataView,
+      width,
+      height,
+      inputChannels,
+      bigEndian,
+      bitDepth,
+      packing,
+      stride,
+    );
   }
 
   // Convert to RGBA
@@ -380,10 +473,10 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
     const totalPixels = width * height;
     for (let i = 0; i < totalPixels; i++) {
       const idx = i * 4;
-      const a = rgbaData[idx]!; // originally A
-      const b = rgbaData[idx + 1]!; // originally B
-      const g = rgbaData[idx + 2]!; // originally G
-      const r = rgbaData[idx + 3]!; // originally R
+      const a = rgbaData[idx] ?? 0; // originally A
+      const b = rgbaData[idx + 1] ?? 0; // originally B
+      const g = rgbaData[idx + 2] ?? 0; // originally G
+      const r = rgbaData[idx + 3] ?? 0; // originally R
       rgbaData[idx] = r;
       rgbaData[idx + 1] = g;
       rgbaData[idx + 2] = b;
@@ -414,6 +507,7 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
       transfer,
       originalChannels: inputChannels,
       descriptor,
+      packing,
     },
   };
 }
