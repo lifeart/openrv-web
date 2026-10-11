@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { OUTPUT_ENCODING_EXTENDED_SRGB } from '../../config/RenderConfig';
 import { ViewerGLRenderer, type GLRendererContext } from './ViewerGLRenderer';
 import type { Renderer } from '../../render/Renderer';
 import type { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
@@ -800,6 +801,8 @@ describe('ViewerGLRenderer', () => {
         renderImageToFloat: syncReadback,
         renderImageToFloatAsync: asyncReadback,
         hasPendingStateChanges: vi.fn(() => pendingChanges),
+        isOCIOWasmActive: vi.fn(() => false),
+        setColorPrimaries: vi.fn(),
         dispose: vi.fn(),
       };
 
@@ -842,6 +845,21 @@ describe('ViewerGLRenderer', () => {
       // Sync readback used for immediate visual feedback after state change
       expect(syncReadback).toHaveBeenCalled();
       expect(asyncReadback).not.toHaveBeenCalled();
+    });
+
+    it('VGLR-042: WebGPU blit reads back extended-sRGB pixels on the blit canvas primaries', () => {
+      const { glRenderer, syncReadback, mockRendererObj, setPendingChanges } = setupBlitRenderer();
+      setPendingChanges(true);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      image.metadata.colorPrimaries = 'bt2020';
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      // The WebGPU canvas is an 'srgb' rgba16float canvas: it expects sRGB-encoded
+      // extended values, not linear light.
+      expect(syncReadback).toHaveBeenCalledWith(image, 100, 100, OUTPUT_ENCODING_EXTENDED_SRGB);
+      // BT.2020 input converted, output on the canvas' sRGB primaries (not the display gamut)
+      expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith('bt2020', 'srgb');
     });
 
     it('VGLR-041: blit path uses async readback when no pending state changes', () => {

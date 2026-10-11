@@ -105,6 +105,7 @@ export function createMockRendererGL(opts: MockRendererGLOptions = {}): WebGL2Re
     texParameteri: vi.fn(),
     texImage2D: vi.fn(),
     texImage3D: vi.fn(),
+    pixelStorei: vi.fn(),
     generateMipmap: vi.fn(),
     getParameter: vi.fn((pname: number) => {
       if (pname === 0x0ba2 /* VIEWPORT */) return new Int32Array([0, 0, 800, 600]);
@@ -150,6 +151,9 @@ export function createMockRendererGL(opts: MockRendererGLOptions = {}): WebGL2Re
     TEXTURE_WRAP_R: 0x8072,
     TEXTURE3: 0x84c3,
     COMPLETION_STATUS_KHR: 0x91b1,
+    NONE: 0,
+    UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
+    BROWSER_DEFAULT_WEBGL: 0x9244,
   } as unknown as WebGL2RenderingContext;
 
   return gl;

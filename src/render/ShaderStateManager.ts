@@ -771,6 +771,13 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     inputPrimaries: ColorPrimaries | undefined,
     outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
   ): void {
+    // Called every frame by the viewer; only dirty the uniforms on a change so
+    // the render-skip and async-readback fast paths stay effective.
+    const prevInputEnabled = this.state.inputPrimariesEnabled;
+    const prevInputMatrix = this.state.inputPrimariesMatrix;
+    const prevOutputEnabled = this.state.outputPrimariesEnabled;
+    const prevOutputMatrix = this.state.outputPrimariesMatrix;
+
     if (inputPrimaries === 'bt2020') {
       this.state.inputPrimariesEnabled = true;
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB;
@@ -793,7 +800,14 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.state.outputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.IDENTITY;
     }
 
-    this.dirtyFlags.add(DIRTY_COLOR_PRIMARIES);
+    const changed =
+      prevInputEnabled !== this.state.inputPrimariesEnabled ||
+      prevInputMatrix !== this.state.inputPrimariesMatrix ||
+      prevOutputEnabled !== this.state.outputPrimariesEnabled ||
+      prevOutputMatrix !== this.state.outputPrimariesMatrix;
+    if (changed) {
+      this.dirtyFlags.add(DIRTY_COLOR_PRIMARIES);
+    }
   }
 
   setDeinterlace(diState: { enabled: boolean; method: number; fieldOrder: number }): void {

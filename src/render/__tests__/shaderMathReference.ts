@@ -61,10 +61,15 @@ export function hlgOETFInverse(e: number): number {
   }
 }
 
-/**
- * HLG signal → linear with OOTF (gamma 1.2 for 1000 cd/m²)
- * Port of GLSL `hlgToLinear(vec3 signal)` (line ~550)
- */
+/** HDR reference white (ITU-R BT.2408): linear 1.0 for HLG and PQ inputs. */
+export const HDR_REFERENCE_WHITE_NITS = 203;
+/** BT.2100 HLG nominal display peak used for the OOTF (gamma 1.2). */
+export const HLG_NOMINAL_PEAK_NITS = 1000;
+// BT.2100 luminance coefficients (HLG signals are on BT.2020 primaries).
+const LUMA2020_R = 0.2627;
+const LUMA2020_G = 0.678;
+const LUMA2020_B = 0.0593;
+
 // HLG OOTF near-black threshold and linear-ramp slope.
 // Below OOTF_THRESH, the power curve ys^0.2 is replaced by a linear ramp
 // (ys * OOTF_SLOPE) to avoid extreme gain amplification of shadow noise.
@@ -72,16 +77,80 @@ export function hlgOETFInverse(e: number): number {
 const OOTF_THRESH = 0.01;
 const OOTF_SLOPE = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
 
+/**
+ * HLG signal → display linear (1.0 = 203 cd/m²), OOTF gamma 1.2 at 1000 cd/m².
+ * Port of GLSL `hlgToLinear(vec3 signal)`.
+ */
 export function hlgToLinear(r: number, g: number, b: number): [number, number, number] {
   // Apply inverse OETF per channel
   const sr = hlgOETFInverse(r);
   const sg = hlgOETFInverse(g);
   const sb = hlgOETFInverse(b);
-  // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ≈ 1.2
+  // HLG OOTF: Fd = Lw * Ys^(gamma-1) * scene, where gamma = 1.2
   // Linear ramp below threshold to bound near-black gain.
-  const ys = sr * LUMA_R + sg * LUMA_G + sb * LUMA_B;
+  const ys = sr * LUMA2020_R + sg * LUMA2020_G + sb * LUMA2020_B;
   const ootfGain = ys < OOTF_THRESH ? ys * OOTF_SLOPE : Math.pow(ys, 0.2);
-  return [sr * ootfGain, sg * ootfGain, sb * ootfGain];
+  const scale = ootfGain * (HLG_NOMINAL_PEAK_NITS / HDR_REFERENCE_WHITE_NITS);
+  return [sr * scale, sg * scale, sb * scale];
+}
+
+/**
+ * HLG OETF: relative scene light → HLG signal (per-channel).
+ * Port of GLSL `hlgOETF(float e)`.
+ */
+export function hlgOETF(e: number): number {
+  const a = 0.17883277;
+  const b = 0.28466892;
+  const c = 0.55991073;
+  if (e <= 1.0 / 12.0) return Math.sqrt(3.0 * Math.max(e, 0));
+  return a * Math.log(12.0 * e - b) + c;
+}
+
+/**
+ * Display linear (1.0 = 203 cd/m², BT.2020 primaries) → HLG signal.
+ * Exact inverse of `hlgToLinear`. Port of GLSL `linearToHLG(vec3 color)`.
+ */
+export function linearToHLG(r: number, g: number, b: number): [number, number, number] {
+  const k = HDR_REFERENCE_WHITE_NITS / HLG_NOMINAL_PEAK_NITS;
+  const fr = Math.max(r, 0) * k;
+  const fg = Math.max(g, 0) * k;
+  const fb = Math.max(b, 0) * k;
+  const yd = fr * LUMA2020_R + fg * LUMA2020_G + fb * LUMA2020_B;
+  const ydThresh = OOTF_THRESH * OOTF_THRESH * OOTF_SLOPE;
+  let gain = 0;
+  if (yd > 0) gain = yd < ydThresh ? Math.sqrt(yd * OOTF_SLOPE) : Math.pow(yd, 1 / 6);
+  const encode = (f: number) => hlgOETF(gain > 0 ? Math.min(Math.max(f / gain, 0), 1) : 0);
+  return [encode(fr), encode(fg), encode(fb)];
+}
+
+/**
+ * PQ inverse EOTF (per-channel): absolute linear (1.0 = 10000 cd/m²) → PQ signal.
+ * Port of GLSL `pqInverseEOTF(float l)`.
+ */
+export function pqInverseEOTF(l: number): number {
+  const m1 = 0.1593017578125;
+  const m2 = 78.84375;
+  const c1 = 0.8359375;
+  const c2 = 18.8515625;
+  const c3 = 18.6875;
+  const lm1 = Math.pow(Math.min(Math.max(l, 0), 1), m1);
+  return Math.pow((c1 + c2 * lm1) / (1.0 + c3 * lm1), m2);
+}
+
+/**
+ * Display linear (1.0 = 203 cd/m²) → PQ signal. Port of GLSL `linearToPQ`.
+ */
+export function linearToPQ(x: number): number {
+  return pqInverseEOTF(Math.max(x, 0) * (HDR_REFERENCE_WHITE_NITS / 10000));
+}
+
+/**
+ * Extended-range sRGB encode (sign-preserving). Port of GLSL `extendedSRGBEncode`.
+ */
+export function extendedSRGBEncode(c: number): number {
+  const a = Math.abs(c);
+  const e = a <= 0.0031308 ? a * 12.92 : 1.055 * Math.pow(a, 1.0 / 2.4) - 0.055;
+  return Math.sign(c) * e;
 }
 
 /**

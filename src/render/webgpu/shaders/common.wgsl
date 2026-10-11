@@ -55,27 +55,34 @@ fn hlgOETFInverse(e: f32) -> f32 {
   }
 }
 
+// HDR reference levels (mirror viewer.frag.glsl). Linear working values use
+// 1.0 = HDR reference white (203 cd/m^2, ITU-R BT.2408) for HLG and PQ alike.
+const HDR_REFERENCE_WHITE_NITS: f32 = 203.0;
+// BT.2100 HLG nominal display peak used for the OOTF (gamma 1.2 at 1000 cd/m^2).
+const HLG_NOMINAL_PEAK_NITS: f32 = 1000.0;
+// BT.2100 luminance coefficients (HLG signals are defined on BT.2020 primaries).
+const LUMA_BT2020: vec3f = vec3f(0.2627, 0.6780, 0.0593);
+// Near-black OOTF linear ramp (C0-continuous: THRESH^(-0.8) = 10^1.6).
+const HLG_OOTF_THRESH: f32 = 0.01;
+const HLG_OOTF_SLOPE: f32 = 39.810717;
+
 fn hlgToLinear(signal: vec3f) -> vec3f {
-  // Apply inverse OETF per channel, then OOTF (gamma 1.2 for 1000 cd/m^2)
+  // Apply inverse OETF per channel, then the OOTF (gamma 1.2 for a
+  // 1000 cd/m^2 display), then scale so HLG reference white (signal 0.75)
+  // maps to 1.0 like PQ does.
   let scene = vec3f(
     hlgOETFInverse(signal.r),
     hlgOETFInverse(signal.g),
     hlgOETFInverse(signal.b)
   );
-  // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ~ 1.2
-  // Below OOTF_THRESH, use a linear ramp to avoid extreme gain for
-  // near-black values. Linear extension from origin to threshold
-  // keeps the curve C0-continuous.
-  let OOTF_THRESH: f32 = 0.01;
-  let OOTF_SLOPE: f32 = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
-  let ys = dot(scene, LUMA);
+  let ys = dot(scene, LUMA_BT2020);
   var ootfGain: f32;
-  if (ys < OOTF_THRESH) {
-    ootfGain = ys * OOTF_SLOPE; // linear ramp: ys * T^(0.2-1)
+  if (ys < HLG_OOTF_THRESH) {
+    ootfGain = ys * HLG_OOTF_SLOPE; // linear ramp: ys * T^(0.2-1)
   } else {
-    ootfGain = pow(ys, 0.2);    // normal power curve
+    ootfGain = pow(ys, 0.2);        // normal power curve
   }
-  return scene * ootfGain;
+  return scene * ootfGain * (HLG_NOMINAL_PEAK_NITS / HDR_REFERENCE_WHITE_NITS);
 }
 
 // HLG OETF (linear scene light -> HLG signal)
@@ -90,8 +97,21 @@ fn hlgOETF(e: f32) -> f32 {
   }
 }
 
+// Exact inverse of hlgToLinear(): display linear (1.0 = 203 cd/m^2) -> HLG signal.
 fn linearToHLG(color: vec3f) -> vec3f {
-  return vec3f(hlgOETF(color.r), hlgOETF(color.g), hlgOETF(color.b));
+  let fd = max(color, vec3f(0.0)) * (HDR_REFERENCE_WHITE_NITS / HLG_NOMINAL_PEAK_NITS);
+  let yd = dot(fd, LUMA_BT2020);
+  let ydThresh = HLG_OOTF_THRESH * HLG_OOTF_THRESH * HLG_OOTF_SLOPE;
+  var scene = vec3f(0.0);
+  if (yd > 0.0) {
+    if (yd < ydThresh) {
+      scene = fd / sqrt(yd * HLG_OOTF_SLOPE);
+    } else {
+      scene = fd / pow(yd, 1.0 / 6.0);
+    }
+  }
+  scene = clamp(scene, vec3f(0.0), vec3f(1.0));
+  return vec3f(hlgOETF(scene.r), hlgOETF(scene.g), hlgOETF(scene.b));
 }
 
 // ---------------------------------------------------------------------------
@@ -113,8 +133,8 @@ fn pqEOTFChannel(n: f32) -> f32 {
 
 fn pqToLinear(signal: vec3f) -> vec3f {
   // PQ encodes absolute luminance; 1.0 = 10000 cd/m^2
-  // Normalize so SDR white (203 cd/m^2) -> 1.0
-  let pqNormFactor: f32 = 10000.0 / 203.0;
+  // Normalize so HDR reference white (203 cd/m^2) -> 1.0
+  let pqNormFactor: f32 = 10000.0 / HDR_REFERENCE_WHITE_NITS;
   return vec3f(
     pqEOTFChannel(signal.r),
     pqEOTFChannel(signal.g),
@@ -137,7 +157,7 @@ fn pqOETFChannel(l: f32) -> f32 {
 }
 
 fn linearToPQ(color: vec3f) -> vec3f {
-  let pqNormFactor: f32 = 203.0 / 10000.0;
+  let pqNormFactor: f32 = HDR_REFERENCE_WHITE_NITS / 10000.0;
   let normalized = color * pqNormFactor;
   return vec3f(
     pqOETFChannel(normalized.r),

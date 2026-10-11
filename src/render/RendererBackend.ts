@@ -272,8 +272,10 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
    * Render to an offscreen RGBA16F FBO and return float pixel data.
    * Optional — only WebGL2 backend implements this (used for WebGPU HDR blit path).
    * Returns null if the FBO cannot be created or rendering fails.
+   * `encoding` is an `OUTPUT_ENCODING_*` code for the destination canvas
+   * (defaults to linear light).
    */
-  renderImageToFloat?(image: IPImage, width: number, height: number): Float32Array | null;
+  renderImageToFloat?(image: IPImage, width: number, height: number, encoding?: number): Float32Array | null;
 
   /**
    * Async PBO readback variant of renderImageToFloat. Uses double-buffered
@@ -282,7 +284,7 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
    * calls returns the PREVIOUS frame's float pixel data immediately.
    * Falls back to synchronous renderImageToFloat if PBOs are unavailable.
    */
-  renderImageToFloatAsync?(image: IPImage, width: number, height: number): Float32Array | null;
+  renderImageToFloatAsync?(image: IPImage, width: number, height: number, encoding?: number): Float32Array | null;
 
   // --- Shader compilation status ---
 
