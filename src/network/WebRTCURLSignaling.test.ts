@@ -18,7 +18,7 @@ describe('WebRTCURLSignaling', () => {
       hostUserId: 'host-1',
       hostUserName: 'Host',
       hostColor: '#4a9eff',
-      pinCode: '1234',
+      pinRequired: true,
       createdAt: Date.now(),
       sdp: 'v=0\no=- 1 1 IN IP4 127.0.0.1',
     };
@@ -409,8 +409,8 @@ describe('WebRTCURLSignaling', () => {
     expect(decodeWebRTCURLSignal(token)).toBeNull();
   });
 
-  it('WUS-026: preserves optional pinCode in offer', () => {
-    const offer: WebRTCURLOfferSignal = {
+  it('WUS-026: legacy offer carrying a PIN only yields pinRequired, never the PIN', () => {
+    const token = encodeWebRTCURLSignal({
       version: 1,
       type: 'offer',
       roomId: 'room-1',
@@ -421,14 +421,14 @@ describe('WebRTCURLSignaling', () => {
       pinCode: '9876',
       createdAt: Date.now(),
       sdp: 'v=0\no=test',
-    };
-    const token = encodeWebRTCURLSignal(offer);
+    } as unknown as WebRTCURLOfferSignal);
     const decoded = decodeWebRTCURLSignal(token) as WebRTCURLOfferSignal;
     expect(decoded).not.toBeNull();
-    expect(decoded.pinCode).toBe('9876');
+    expect(decoded.pinRequired).toBe(true);
+    expect(JSON.stringify(decoded)).not.toContain('9876');
   });
 
-  it('WUS-027: offer without pinCode decodes with pinCode undefined', () => {
+  it('WUS-027: offer without pinRequired decodes with pinRequired undefined', () => {
     const offer: WebRTCURLOfferSignal = {
       version: 1,
       type: 'offer',
@@ -443,7 +443,7 @@ describe('WebRTCURLSignaling', () => {
     const token = encodeWebRTCURLSignal(offer);
     const decoded = decodeWebRTCURLSignal(token) as WebRTCURLOfferSignal;
     expect(decoded).not.toBeNull();
-    expect(decoded.pinCode).toBeUndefined();
+    expect(decoded.pinRequired).toBeUndefined();
   });
 
   it('WUS-028: decodeWebRTCURLSignal trims whitespace from token', () => {

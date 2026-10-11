@@ -467,7 +467,9 @@ describe('NetworkControl', () => {
       const shareInput = document.querySelector('[data-testid="network-share-link-input"]') as HTMLInputElement;
       expect(shareInput).toBeTruthy();
       expect(shareInput.value).toContain('room=TEST-CODE');
-      expect(shareInput.value).toContain('pin=1234');
+      // The PIN is shared separately and never put in links.
+      expect(shareInput.value).not.toContain('pin=');
+      expect(shareInput.value).not.toContain('1234');
     });
 
     it('NCC-033: emits applyResponseLink when response URL is provided', () => {

@@ -143,6 +143,19 @@ function createSampleRows(): ReportRow[] {
 
 describe('ReportExporter', () => {
   describe('escapeCSVField', () => {
+    it('neutralises spreadsheet formulas (CSV injection)', () => {
+      expect(escapeCSVField('=HYPERLINK("http://evil","x")')).toBe('"\'=HYPERLINK(""http://evil"",""x"")"');
+      expect(escapeCSVField('+cmd|/c calc')).toBe("'+cmd|/c calc");
+      expect(escapeCSVField('-2+3')).toBe("'-2+3");
+      expect(escapeCSVField('@SUM(A1)')).toBe("'@SUM(A1)");
+      expect(escapeCSVField('\tlook')).toBe("'\tlook");
+    });
+
+    it('leaves plain numbers untouched', () => {
+      expect(escapeCSVField('-5')).toBe('-5');
+      expect(escapeCSVField('+1.5')).toBe('+1.5');
+    });
+
     it('returns plain text unchanged', () => {
       expect(escapeCSVField('hello')).toBe('hello');
     });

@@ -12,6 +12,8 @@ import {
   type RepresentationURLState,
 } from '../core/session/SessionURLManager';
 import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
+import { readRoomLinkSecret } from '../network/RoomCrypto';
+import { showPrompt } from '../ui/components/shared/Modal';
 import type { Transform2D } from '../core/types/transform';
 import { DEFAULT_TRANSFORM } from '../core/types/transform';
 import type { AddRepresentationConfig, MediaRepresentation } from '../core/types/representation';
@@ -93,6 +95,8 @@ export interface URLNetworkSyncManager {
     endApplyRemote(): void;
   };
   setPinCode(pin: string): void;
+  /** Install the end-to-end room secret read from the invite link fragment. */
+  setRoomSecret?(secret: string | null): void;
   joinRoom(roomCode: string, userName: string, pin?: string): void;
   joinServerlessRoomFromOfferToken(token: string, userName: string, pin?: string): Promise<string | null>;
 }
@@ -124,6 +128,8 @@ export interface SessionURLDeps {
    * Used when the session already has media loaded.
    */
   loadSourceFromUrl?: (url: string) => Promise<number>;
+  /** Ask the user for the room PIN. Defaults to a modal prompt. */
+  promptForRoomPin?: () => Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -434,8 +440,14 @@ export class SessionURLService {
 
     const params = new URLSearchParams(this.deps.getLocationSearch());
     const roomCode = params.get('room');
+    // Links no longer carry the PIN; a legacy ?pin= only prefills the field.
     const pinCode = params.get('pin');
     const webrtcSignalToken = params.get(WEBRTC_URL_SIGNAL_PARAM);
+    // The room secret lives in the fragment so it never reaches a server.
+    const roomLink = readRoomLinkSecret(this.deps.getLocationHash());
+    if (roomLink.secret) {
+      networkSyncManager.setRoomSecret?.(roomLink.secret);
+    }
 
     if (roomCode) {
       networkControl.setJoinRoomCodeFromLink(roomCode.toUpperCase());
@@ -451,20 +463,23 @@ export class SessionURLService {
       const signal = decodeWebRTCURLSignal(webrtcSignalToken);
       if (signal?.type === 'offer') {
         handledServerlessOffer = true;
+        let activePin: string | undefined = pinCode ?? undefined;
+        if (!activePin && (signal.pinRequired || roomLink.pinRequired)) {
+          activePin = (await this.promptForRoomPin()) ?? undefined;
+        }
+        if (activePin) {
+          networkControl.setPinCode(activePin);
+        }
         const answerToken = await networkSyncManager.joinServerlessRoomFromOfferToken(
           webrtcSignalToken,
           getPreferredUserName(),
-          pinCode ?? signal.pinCode,
+          activePin,
         );
         if (answerToken) {
           const responseURL = new URL(this.deps.getLocationHref());
           responseURL.search = '';
           responseURL.hash = '';
           responseURL.searchParams.set('room', signal.roomCode);
-          const activePin = pinCode ?? signal.pinCode;
-          if (activePin) {
-            responseURL.searchParams.set('pin', activePin);
-          }
           responseURL.searchParams.set(WEBRTC_URL_SIGNAL_PARAM, answerToken);
           networkControl.setShareLink(responseURL.toString());
           networkControl.setShareLinkKind('response');
@@ -490,7 +505,16 @@ export class SessionURLService {
     }
 
     if (!handledServerlessOffer && roomCode) {
-      networkSyncManager.joinRoom(roomCode.toUpperCase(), getPreferredUserName(), pinCode ?? undefined);
+      if (!roomLink.secret) {
+        networkControl.showInfo(
+          'This room link has no room key, so it cannot be joined. Ask the host for the full invite link.',
+        );
+      } else if (roomLink.pinRequired && !pinCode) {
+        // The room code is prefilled; typing the PIN in the Network panel joins.
+        networkControl.showInfo('Enter the room PIN to join.');
+      } else {
+        networkSyncManager.joinRoom(roomCode.toUpperCase(), getPreferredUserName(), pinCode ?? undefined);
+      }
     }
 
     const locationHash = this.deps.getLocationHash();
@@ -500,6 +524,17 @@ export class SessionURLService {
     } else if (this.hashContainsSessionParam(locationHash)) {
       networkControl.showInfo('Could not restore shared session state: the link may be corrupted or incomplete.');
     }
+  }
+
+  private async promptForRoomPin(): Promise<string | null> {
+    if (this.deps.promptForRoomPin) return this.deps.promptForRoomPin();
+    const value = await showPrompt('This room is protected by a PIN. Enter the PIN the host gave you.', {
+      title: 'Room PIN',
+      placeholder: 'PIN',
+      confirmText: 'Join',
+    });
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
   }
 
   /** Check whether the hash fragment contains a `s=` session parameter. */

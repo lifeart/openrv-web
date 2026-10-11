@@ -4,6 +4,7 @@ import { EventEmitter } from './utils/EventEmitter';
 import { PaintEngine } from './paint/PaintEngine';
 import { NoteManager } from './core/session/NoteManager';
 import { encodeSessionState } from './core/session/SessionURLManager';
+import { showConfirm } from './ui/components/shared/Modal';
 
 vi.mock('./ui/components/shared/Modal', () => ({
   showConfirm: vi.fn().mockResolvedValue(true),
@@ -76,6 +77,14 @@ class MockNetworkSyncManager extends EventEmitter {
   roomInfo = null;
   isHost = false;
   userId = 'test-user-id';
+  users: Array<{ id: string; name: string }> = [];
+  roomSecret: string | null = null;
+  setRoomSecret = vi.fn((secret: string | null) => {
+    this.roomSecret = secret;
+  });
+  setParticipantPermission = vi.fn();
+  broadcastParticipantPermissions = vi.fn();
+  waitForSendCapacity = vi.fn().mockResolvedValue(undefined);
 
   private _sm: {
     isApplyingRemoteState: boolean;
@@ -910,12 +919,12 @@ describe('AppNetworkBridge', () => {
       expect(ctx._session.noteManager.getNotes()).toHaveLength(0);
     });
 
-    it('ANB-064: local notesChanged triggers sendNoteSync with snapshot', () => {
+    it('ANB-064: local notesChanged sends a per-note add operation', () => {
       bridge.setup();
 
+      ctx._networkSyncManager.sendNoteSync.mockClear();
       // Add a note directly (outside of bridge) to simulate local state
       ctx._session.noteManager.addNote(0, 1, 5, 'Local note', 'me');
-      ctx._networkSyncManager.sendNoteSync.mockClear();
 
       // Trigger session notesChanged event (simulates NoteManager callback)
       ctx._session.emit('notesChanged', undefined);
@@ -923,10 +932,55 @@ describe('AppNetworkBridge', () => {
       expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledTimes(1);
       expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'snapshot',
-          notes: expect.arrayContaining([expect.objectContaining({ text: 'Local note' })]),
+          action: 'add',
+          note: expect.objectContaining({ text: 'Local note', author: 'me' }),
         }),
       );
+    });
+
+    it('ANB-064c: editing or deleting a note sends only that change', () => {
+      bridge.setup();
+      const note = ctx._session.noteManager.addNote(0, 1, 5, 'First', 'me');
+      ctx._session.noteManager.addNote(0, 6, 9, 'Second', 'alice');
+      ctx._session.emit('notesChanged', undefined);
+      ctx._networkSyncManager.sendNoteSync.mockClear();
+
+      ctx._session.noteManager.updateNote(note.id, { text: 'First (edited)' });
+      ctx._session.emit('notesChanged', undefined);
+      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          noteId: note.id,
+          note: expect.objectContaining({ text: 'First (edited)' }),
+        }),
+      );
+      const sent = ctx._networkSyncManager.sendNoteSync.mock.calls[0]![0];
+      expect(sent.note.author).toBeUndefined();
+
+      ctx._networkSyncManager.sendNoteSync.mockClear();
+      ctx._session.noteManager.removeNote(note.id);
+      ctx._session.emit('notesChanged', undefined);
+      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'remove', noteId: note.id }),
+      );
+    });
+
+    it('ANB-064d: a remote add never replaces an existing note or its author', () => {
+      bridge.setup();
+      const note = ctx._session.noteManager.addNote(0, 1, 5, 'Mine', 'me');
+
+      ctx._networkSyncManager.emit('syncNote', {
+        action: 'add',
+        noteId: note.id,
+        note: { ...note, text: 'Hijacked', author: 'mallory' },
+        timestamp: Date.now(),
+      });
+
+      const stored = ctx._session.noteManager.toSerializable().find((n) => n.id === note.id)!;
+      expect(stored.text).toBe('Mine');
+      expect(stored.author).toBe('me');
     });
 
     it('ANB-064b: local notesChanged does NOT send when noteManager emits inside remote apply', () => {
@@ -1356,10 +1410,40 @@ describe('AppNetworkBridge', () => {
       });
 
       const annotations = [
-        { id: '1', frame: 1, points: [{ x: 0, y: 0 }], color: '#ff0000', lineWidth: 2, tool: 'pen', user: 'peer' },
+        {
+          type: 'pen' as const,
+          id: 'peer-1',
+          frame: 1,
+          user: 'peer',
+          color: [0, 1, 0, 1] as [number, number, number, number],
+          width: 3,
+          brush: 'round' as const,
+          points: [{ x: 0.1, y: 0.2, pressure: 1 }],
+          join: 'round' as const,
+          cap: 'round' as const,
+          splat: false,
+          mode: 'normal' as const,
+          startFrame: -1,
+          duration: -1,
+        },
       ];
       const notes = [
-        { id: 'n1', frame: 1, startFrame: 1, endFrame: 5, text: 'remote note', author: 'peer', resolved: false },
+        {
+          id: 'n1',
+          sourceIndex: 0,
+          frameStart: 1,
+          frameEnd: 5,
+          text: 'remote note',
+          author: 'peer',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          modifiedAt: '2026-01-01T00:00:00.000Z',
+          status: 'open',
+          parentId: null,
+          color: '#fbbf24',
+          priority: 'medium',
+          category: '',
+          externalId: null,
+        },
       ];
 
       ctx._networkSyncManager.emit('sessionStateReceived', {
@@ -1459,7 +1543,23 @@ describe('AppNetworkBridge', () => {
       });
 
       const notes = [
-        { id: 'n1', sourceIndex: 0, frameStart: 1, frameEnd: 5, text: 'synced note', author: 'peer', status: 'open' },
+        {
+          id: 'n1',
+          sourceIndex: 0,
+          frameStart: 1,
+          frameEnd: 5,
+          text: 'synced note',
+          author: 'peer',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          modifiedAt: '2026-01-01T00:00:00.000Z',
+          status: 'open',
+          parentId: null,
+          color: '#fbbf24',
+          priority: 'medium',
+          category: '',
+          externalId: null,
+        },
+        { id: 'bad', text: 'malformed note is dropped' },
       ];
 
       ctx._networkSyncManager.emit('sessionStateReceived', {
@@ -1627,6 +1727,8 @@ describe('AppNetworkBridge', () => {
     const TIMEOUT_MS = 30_000;
 
     function simulateOffer(transferId: string, senderUserId = 'sender-1') {
+      // Offers are only accepted for transfers this client requested.
+      (bridge as any).requestedMediaTransfers.set(transferId, senderUserId);
       ctx._networkSyncManager.emit('mediaSyncOffered', {
         transferId,
         senderUserId,
@@ -1642,7 +1744,7 @@ describe('AppNetworkBridge', () => {
         senderUserId,
         fileId: 'file-0',
         chunkIndex,
-        totalChunks: 2,
+        totalChunks: 1,
         data: 'AAAA',
       });
     }
@@ -1758,5 +1860,161 @@ describe('AppNetworkBridge', () => {
 
       warnSpy.mockRestore();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Room security (end-to-end key, media consent, peer data validation)
+// ---------------------------------------------------------------------------
+
+describe('AppNetworkBridge room security', () => {
+  let ctx: ReturnType<typeof createContext>;
+  let bridge: AppNetworkBridge;
+
+  function controlHandler(event: string): (...args: any[]) => unknown {
+    const call = ctx._networkControl.on.mock.calls.find((c: unknown[]) => c[0] === event) as unknown[] | undefined;
+    return call![1] as (...args: any[]) => unknown;
+  }
+
+  beforeEach(() => {
+    ctx = createContext();
+    bridge = new AppNetworkBridge({
+      session: ctx.session,
+      viewer: ctx.viewer,
+      paintEngine: ctx.paintEngine,
+      colorControls: ctx.colorControls,
+      networkSyncManager: ctx.networkSyncManager,
+      networkControl: ctx.networkControl,
+      headerBar: ctx.headerBar,
+    });
+    bridge.setup();
+  });
+
+  afterEach(() => {
+    bridge.dispose();
+    vi.mocked(showConfirm).mockReset().mockResolvedValue(true);
+  });
+
+  it('ANB-300: joining by room code alone is refused without the room key', () => {
+    controlHandler('joinRoom')({ roomCode: 'ABCD-EFGH', userName: 'User' });
+
+    expect(ctx._networkSyncManager.joinRoom).not.toHaveBeenCalled();
+    expect(ctx._networkControl.showError).toHaveBeenCalledWith(expect.stringContaining('full invite link'));
+  });
+
+  it('ANB-301: a pasted invite link supplies the key and joins', () => {
+    controlHandler('joinRoom')({ roomCode: 'ABCD-EFGH', userName: 'User', roomSecret: 'AAAAAAAAAAAAAAAAAAAAAA' });
+
+    expect(ctx._networkSyncManager.setRoomSecret).toHaveBeenCalledWith('AAAAAAAAAAAAAAAAAAAAAA');
+    expect(ctx._networkSyncManager.joinRoom).toHaveBeenCalled();
+  });
+
+  it('ANB-302: host is asked before media is sent, and a refusal sends nothing', async () => {
+    ctx._networkSyncManager.isHost = true;
+    ctx._networkSyncManager.users = [{ id: 'guest-1', name: 'Dana' }];
+    ctx._session.sourceCount = 1;
+    (ctx._session as any).getSourceByIndex = () => ({ type: 'image', name: 'plate.exr', url: 'blob:x', fps: 24 });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob([new Uint8Array(10)]),
+    } as Response);
+    vi.mocked(showConfirm).mockResolvedValue(false);
+
+    ctx._networkSyncManager.emit('mediaSyncRequested', { transferId: 'tx-1', requesterUserId: 'guest-1' });
+
+    await vi.waitFor(() => expect(ctx._networkSyncManager.sendMediaComplete).toHaveBeenCalled());
+    expect(showConfirm).toHaveBeenCalledWith(expect.stringContaining('"Dana"'), expect.anything());
+    expect(ctx._networkSyncManager.sendMediaOffer).toHaveBeenCalledWith(
+      'tx-1',
+      'guest-1',
+      expect.objectContaining({ files: [] }),
+    );
+    expect(ctx._networkSyncManager.sendMediaChunk).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it('ANB-303: repeated media requests from one peer are not served twice', async () => {
+    ctx._networkSyncManager.isHost = true;
+    ctx._session.sourceCount = 1;
+    (ctx._session as any).getSourceByIndex = () => ({ type: 'image', name: 'plate.exr', url: 'blob:x', fps: 24 });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob([new Uint8Array(10)]),
+    } as Response);
+    let resolveConfirm: (v: boolean) => void = () => {};
+    vi.mocked(showConfirm).mockReturnValue(new Promise((r) => (resolveConfirm = r)));
+
+    ctx._networkSyncManager.emit('mediaSyncRequested', { transferId: 'tx-1', requesterUserId: 'guest-1' });
+    ctx._networkSyncManager.emit('mediaSyncRequested', { transferId: 'tx-2', requesterUserId: 'guest-1' });
+    await vi.waitFor(() => expect(showConfirm).toHaveBeenCalledTimes(1));
+    resolveConfirm(false);
+    await vi.waitFor(() => expect(ctx._networkSyncManager.sendMediaComplete).toHaveBeenCalledTimes(1));
+    vi.restoreAllMocks();
+  });
+
+  it('ANB-304: unsolicited media offers are ignored', async () => {
+    ctx._networkSyncManager.emit('mediaSyncOffered', {
+      transferId: 'never-requested',
+      senderUserId: 'peer-1',
+      totalBytes: 10,
+      files: [{ id: 'f', name: 'evil.png', type: 'image/png', size: 10, lastModified: 0 }],
+      sources: [{ kind: 'image', fileIds: ['f'], fps: 24 }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(showConfirm).not.toHaveBeenCalled();
+    expect(ctx._networkSyncManager.sendMediaResponse).not.toHaveBeenCalled();
+  });
+
+  it('ANB-305: media URLs with non-http schemes from peers are not loaded', async () => {
+    const applied: unknown[] = [];
+    bridge.dispose();
+    bridge = new AppNetworkBridge({
+      session: ctx.session,
+      viewer: ctx.viewer,
+      paintEngine: ctx.paintEngine,
+      networkSyncManager: ctx.networkSyncManager,
+      networkControl: ctx.networkControl,
+      headerBar: ctx.headerBar,
+      applySessionURLState: (state) => applied.push(state),
+    });
+    bridge.setup();
+    ctx._session.sourceCount = 1;
+
+    ctx._networkSyncManager.emit('sessionStateReceived', {
+      requestId: 'r',
+      senderUserId: 'host',
+      transport: 'websocket',
+      sessionState: encodeSessionState({
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'file:///etc/passwd',
+        sourceUrls: ['https://cdn.example.com/a.mp4', 'javascript:alert(1)'],
+      }),
+    });
+
+    await vi.waitFor(() => expect(applied).toHaveLength(1));
+    expect(applied[0]).not.toHaveProperty('sourceUrl');
+    expect(applied[0]).not.toHaveProperty('sourceUrls');
+  });
+
+  it('ANB-306: share links carry the room key in the fragment and never the PIN', async () => {
+    ctx._networkSyncManager.isHost = true;
+    ctx._networkSyncManager.roomSecret = 'AAAAAAAAAAAAAAAAAAAAAA';
+    (ctx._networkSyncManager as any).roomInfo = { roomCode: 'ABCD-EFGH' };
+    (ctx._networkControl as any).getPinCode = () => '482913';
+    const setShareLink = vi.fn();
+    (ctx._networkControl as any).setShareLink = setShareLink;
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+
+    await controlHandler('copyLink')('');
+
+    const link = new URL(setShareLink.mock.calls.at(-1)![0] as string);
+    expect(link.searchParams.get('room')).toBe('ABCD-EFGH');
+    expect(link.searchParams.get('pin')).toBeNull();
+    expect(link.toString()).not.toContain('482913');
+    expect(link.hash).toContain('k=AAAAAAAAAAAAAAAAAAAAAA');
+    expect(link.hash).toContain('pr=1');
   });
 });

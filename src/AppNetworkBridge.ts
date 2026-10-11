@@ -14,6 +14,7 @@ import type { ColorControls } from './ui/components/ColorControls';
 import type { HeaderBar } from './ui/components/layout/HeaderBar';
 import { type Annotation, isValidAnnotation } from './paint/types';
 import type { Note } from './core/session/NoteManager';
+import type { WipeMode } from './core/types/wipe';
 import type {
   MediaTransferFileDescriptor,
   MediaTransferSourceDescriptor,
@@ -29,7 +30,8 @@ import {
   encodeSessionState,
   type SessionURLState,
 } from './core/session/SessionURLManager';
-import { decryptSessionStateWithPin, encryptSessionStateWithPin, isValidPinCode } from './network/PinEncryption';
+import { decryptSessionStateWithPin, isValidPinCode } from './network/PinEncryption';
+import { generateRoomSecret, withRoomLinkSecret } from './network/RoomCrypto';
 import { createThrottle, type Throttled } from './utils/throttle';
 import { showConfirm } from './ui/components/shared/Modal';
 
@@ -38,9 +40,19 @@ import { Logger } from './utils/Logger';
 const logger = new Logger('AppNetworkBridge');
 const MEDIA_CHUNK_SIZE_BYTES = 48 * 1024;
 const MEDIA_TRANSFER_TIMEOUT_MS = 30_000;
+/** How long a prepared outgoing transfer waits for the requester to accept. */
+const MEDIA_OFFER_TIMEOUT_MS = 120_000;
+/** Outgoing transfers the host serves at once, across all requesters. */
+const MAX_CONCURRENT_OUTGOING_TRANSFERS = 2;
+/** Largest offer a client will even ask its user about. */
+const MAX_INCOMING_TRANSFER_BYTES = 8 * 1024 * 1024 * 1024;
+const MAX_INCOMING_TRANSFER_FILES = 20_000;
+/** Media URLs from peers are only followed over these schemes. */
+const ALLOWED_REMOTE_MEDIA_PROTOCOLS = new Set(['http:', 'https:']);
 
 interface PreparedMediaFile extends MediaTransferFileDescriptor {
-  bytes: Uint8Array;
+  /** Read lazily, one chunk at a time, while streaming. */
+  file: Blob;
 }
 
 interface PreparedMediaBundle {
@@ -51,12 +63,15 @@ interface PreparedMediaBundle {
 
 interface OutgoingMediaTransfer {
   requesterUserId: string;
-  bundle: PreparedMediaBundle;
+  /** Null while the host is still deciding whether to share. */
+  bundle: PreparedMediaBundle | null;
+  expiryTimer: ReturnType<typeof setTimeout> | null;
 }
 
 interface IncomingTransferFileState {
   descriptor: MediaTransferFileDescriptor;
-  chunks: Map<number, string>;
+  chunks: Map<number, Uint8Array>;
+  receivedBytes: number;
   totalChunks: number | null;
 }
 
@@ -87,6 +102,10 @@ export class AppNetworkBridge {
   private ctx: NetworkBridgeContext;
   private unsubscribers: (() => void)[] = [];
   private pendingStateByTransferId = new Map<string, SessionURLState>();
+  /** Media transfers this client asked for, keyed by transfer id, valued by the peer asked. */
+  private requestedMediaTransfers = new Map<string, string>();
+  /** Last note state exchanged with the room, used to send per-note changes. */
+  private syncedNotes = new Map<string, Note>();
   private outgoingMediaTransfers = new Map<string, OutgoingMediaTransfer>();
   private incomingMediaTransfers = new Map<string, IncomingMediaTransfer>();
   private incomingTransferTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -113,13 +132,30 @@ export class AppNetworkBridge {
     // Wire UI events to manager
     this.unsubscribers.push(
       networkControl.on('createRoom', ({ userName }) => {
+        // Every room gets a fresh end-to-end key.
+        networkSyncManager.setRoomSecret(generateRoomSecret());
         networkSyncManager.createRoom(userName, this.getActivePinCode());
       }),
     );
 
     this.unsubscribers.push(
-      networkControl.on('joinRoom', ({ roomCode, userName }) => {
+      networkControl.on('joinRoom', ({ roomCode, userName, roomSecret }) => {
+        if (roomSecret) {
+          networkSyncManager.setRoomSecret(roomSecret);
+        }
+        if (!networkSyncManager.roomSecret) {
+          networkControl.showError(
+            'Rooms are end-to-end encrypted, so the room code alone is not enough. Paste the full invite link instead.',
+          );
+          return;
+        }
         networkSyncManager.joinRoom(roomCode, userName, this.getActivePinCode());
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkControl.on('participantRoleChange', ({ userId, role }) => {
+        networkSyncManager.setParticipantPermission(userId, role);
       }),
     );
 
@@ -154,9 +190,8 @@ export class AppNetworkBridge {
     this.unsubscribers.push(
       networkControl.on('copyLink', async (baseLink) => {
         try {
-          const pinCode = this.getActivePinCode();
           const roomCode = networkSyncManager.roomInfo?.roomCode ?? '';
-          const fallbackBase = roomCode ? this.buildRoomLink(roomCode, pinCode) : baseLink;
+          const fallbackBase = roomCode ? this.buildRoomLink(roomCode) : baseLink;
           let shareLink = baseLink.trim() || fallbackBase;
 
           const hasSessionHash = this.hasSessionShareState(shareLink);
@@ -164,6 +199,7 @@ export class AppNetworkBridge {
             const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
             shareLink = buildShareURL(shareLink, state);
           }
+          shareLink = this.withRoomSecret(shareLink);
 
           const controlWithShare = networkControl as unknown as { setShareLink?: (url: string) => void };
 
@@ -175,7 +211,7 @@ export class AppNetworkBridge {
             buildServerlessInviteShareURL?: (url: string) => Promise<string>;
           };
           if (networkSyncManager.isHost && typeof managerWithServerless.buildServerlessInviteShareURL === 'function') {
-            shareLink = await managerWithServerless.buildServerlessInviteShareURL(shareLink);
+            shareLink = this.withRoomSecret(await managerWithServerless.buildServerlessInviteShareURL(shareLink));
             // Update again with the WebRTC offer token appended
             controlWithShare.setShareLink?.(shareLink);
           }
@@ -220,34 +256,19 @@ export class AppNetworkBridge {
         if (!networkSyncManager.isHost) return;
 
         const encodedState = encodeSessionState(this.ctx.getSessionURLState?.() ?? this.captureSessionURLState());
-        const pinCode = this.getActivePinCode();
 
-        // Capture annotations and notes for full state transfer
+        // Capture annotations and notes for full state transfer. The whole
+        // response (like all peer traffic) is sealed with the room key.
         const paintSnapshot = this.ctx.paintEngine?.toJSON();
         const annotations = paintSnapshot ? Object.values(paintSnapshot.frames).flat() : undefined;
         const notes = session.noteManager.toSerializable();
-
-        if (isValidPinCode(pinCode)) {
-          try {
-            const encrypted = await encryptSessionStateWithPin(encodedState, pinCode);
-            networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
-              encryptedSessionState: encrypted,
-              annotations,
-              notes,
-            });
-            return;
-          } catch (error) {
-            networkControl.showError(
-              `Failed to encrypt session state for transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
-            );
-          }
-        }
 
         networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
           sessionState: encodedState,
           annotations,
           notes,
         });
+        networkSyncManager.broadcastParticipantPermissions();
       }),
     );
 
@@ -273,15 +294,17 @@ export class AppNetworkBridge {
         }
 
         if (!encodedState) return;
-        const decoded = decodeSessionState(encodedState);
-        if (!decoded) {
+        const parsed = decodeSessionState(encodedState);
+        if (!parsed) {
           networkControl.showError('Received an invalid session state payload.');
           return;
         }
+        const decoded = sanitizeRemoteSessionState(parsed);
 
         if (this.shouldRequestMediaSync(decoded)) {
           const transferId = networkSyncManager.requestMediaSync(payload.senderUserId);
           if (transferId) {
+            this.requestedMediaTransfers.set(transferId, payload.senderUserId);
             this.pendingStateByTransferId.set(transferId, decoded);
             this.applySharedSessionState(decoded);
             this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
@@ -297,13 +320,33 @@ export class AppNetworkBridge {
     this.unsubscribers.push(
       networkSyncManager.on('mediaSyncRequested', async ({ transferId, requesterUserId }) => {
         if (!networkSyncManager.isHost) return;
+        if (this.outgoingMediaTransfers.has(transferId)) return;
+        // One transfer per requester, and a small global cap, so repeated
+        // requests cannot pile up copies of the host's media.
+        for (const transfer of this.outgoingMediaTransfers.values()) {
+          if (transfer.requesterUserId === requesterUserId) return;
+        }
+        if (this.outgoingMediaTransfers.size >= MAX_CONCURRENT_OUTGOING_TRANSFERS) {
+          networkSyncManager.sendMediaOffer(transferId, requesterUserId, { totalBytes: 0, files: [], sources: [] });
+          networkSyncManager.sendMediaComplete(transferId, requesterUserId);
+          return;
+        }
+
+        const transfer: OutgoingMediaTransfer = { requesterUserId, bundle: null, expiryTimer: null };
+        this.outgoingMediaTransfers.set(transferId, transfer);
 
         try {
           const bundle = await this.captureLocalMediaBundle();
-          this.outgoingMediaTransfers.set(transferId, {
-            requesterUserId,
-            bundle,
-          });
+          const allowed = await this.confirmMediaShare(requesterUserId, bundle);
+          if (this.outgoingMediaTransfers.get(transferId) !== transfer) return;
+          if (!allowed) {
+            this.releaseOutgoingTransfer(transferId);
+            networkSyncManager.sendMediaOffer(transferId, requesterUserId, { totalBytes: 0, files: [], sources: [] });
+            networkSyncManager.sendMediaComplete(transferId, requesterUserId);
+            return;
+          }
+          transfer.bundle = bundle;
+          transfer.expiryTimer = setTimeout(() => this.releaseOutgoingTransfer(transferId), MEDIA_OFFER_TIMEOUT_MS);
 
           networkSyncManager.sendMediaOffer(transferId, requesterUserId, {
             totalBytes: bundle.totalBytes,
@@ -317,6 +360,7 @@ export class AppNetworkBridge {
             sources: bundle.sources,
           });
         } catch (error) {
+          this.releaseOutgoingTransfer(transferId);
           networkControl.showError(
             `Failed to prepare media transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
           );
@@ -332,7 +376,17 @@ export class AppNetworkBridge {
 
     this.unsubscribers.push(
       networkSyncManager.on('mediaSyncOffered', async ({ transferId, senderUserId, totalBytes, files, sources }) => {
-        const accepted = await this.confirmMediaSync(totalBytes, files.length);
+        // Only offers answering our own request, from the peer we asked.
+        if (this.requestedMediaTransfers.get(transferId) !== senderUserId) return;
+        this.requestedMediaTransfers.delete(transferId);
+        if (this.incomingMediaTransfers.has(transferId)) return;
+
+        const declaredBytes = files.reduce((sum, file) => sum + file.size, 0);
+        const withinLimits =
+          files.length <= MAX_INCOMING_TRANSFER_FILES &&
+          totalBytes <= MAX_INCOMING_TRANSFER_BYTES &&
+          declaredBytes <= MAX_INCOMING_TRANSFER_BYTES;
+        const accepted = withinLimits && (await this.confirmMediaSync(totalBytes, files.length));
         networkSyncManager.sendMediaResponse(transferId, senderUserId, accepted);
 
         if (!accepted) {
@@ -349,6 +403,7 @@ export class AppNetworkBridge {
           incomingFiles.set(descriptor.id, {
             descriptor,
             chunks: new Map(),
+            receivedBytes: 0,
             totalChunks: null,
           });
         });
@@ -370,12 +425,16 @@ export class AppNetworkBridge {
         if (!transfer) return;
         if (transfer.requesterUserId !== senderUserId) return;
 
-        if (!accepted) {
-          this.outgoingMediaTransfers.delete(transferId);
+        if (!accepted || !transfer.bundle) {
+          this.releaseOutgoingTransfer(transferId);
           return;
         }
 
-        void this.streamOutgoingMediaTransfer(transferId, transfer);
+        if (transfer.expiryTimer) {
+          clearTimeout(transfer.expiryTimer);
+          transfer.expiryTimer = null;
+        }
+        void this.streamOutgoingMediaTransfer(transferId, transfer, transfer.bundle);
       }),
     );
 
@@ -387,13 +446,25 @@ export class AppNetworkBridge {
         const fileState = transfer.files.get(payload.fileId);
         if (!fileState) return;
 
-        if (fileState.totalChunks === null) {
-          fileState.totalChunks = payload.totalChunks;
-        }
-        if (payload.totalChunks !== fileState.totalChunks) return;
+        const expectedChunks = Math.max(1, Math.ceil(fileState.descriptor.size / MEDIA_CHUNK_SIZE_BYTES));
+        if (payload.totalChunks !== expectedChunks) return;
+        fileState.totalChunks = expectedChunks;
         if (payload.chunkIndex < 0 || payload.chunkIndex >= payload.totalChunks) return;
+        if (fileState.chunks.has(payload.chunkIndex)) return;
 
-        fileState.chunks.set(payload.chunkIndex, payload.data);
+        let bytes: Uint8Array;
+        try {
+          bytes = this.base64ToBytes(payload.data);
+        } catch (error) {
+          logger.warn('Dropped malformed media chunk', { error });
+          return;
+        }
+        // Never hold more than the size the sender declared up front.
+        if (bytes.byteLength > MEDIA_CHUNK_SIZE_BYTES) return;
+        if (fileState.receivedBytes + bytes.byteLength > fileState.descriptor.size) return;
+
+        fileState.chunks.set(payload.chunkIndex, bytes);
+        fileState.receivedBytes += bytes.byteLength;
 
         this.startTransferTimeout(payload.transferId);
       }),
@@ -611,7 +682,7 @@ export class AppNetworkBridge {
       this.unsubscribers.push(
         colorControls.on('adjustmentsChanged', (adjustments) => {
           if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-            this.colorSyncThrottle!.call({
+            this.colorSyncThrottle?.call({
               exposure: adjustments.exposure,
               gamma: adjustments.gamma,
               saturation: adjustments.saturation,
@@ -706,25 +777,24 @@ export class AppNetworkBridge {
           const noteManager = session.noteManager;
           switch (payload.action) {
             case 'add': {
-              const note = payload.note as Note | undefined;
-              if (note && note.id) {
-                noteManager.importNote(note);
+              // importNote never overwrites an existing note, so a peer
+              // cannot replace someone else's note (or its author) this way.
+              if (isValidNote(payload.note)) {
+                noteManager.importNote(payload.note);
               }
               break;
             }
             case 'remove':
-              if (payload.noteId) {
+              if (typeof payload.noteId === 'string') {
                 noteManager.removeNote(payload.noteId);
               }
               break;
             case 'update': {
               const note = payload.note as Partial<Note> | undefined;
-              if (payload.noteId && note) {
-                noteManager.updateNote(payload.noteId, {
-                  text: note.text,
-                  status: note.status,
-                  color: note.color,
-                });
+              if (typeof payload.noteId === 'string' && note && typeof note === 'object') {
+                // Only content fields; id, author and timestamps of the
+                // original note are kept.
+                noteManager.updateNote(payload.noteId, pickNoteUpdate(note));
               }
               break;
             }
@@ -732,29 +802,35 @@ export class AppNetworkBridge {
               noteManager.fromSerializable([]);
               break;
             case 'snapshot':
+              // Host-only (enforced by NetworkSyncManager); keeps each note's author.
               if (Array.isArray(payload.notes)) {
-                noteManager.fromSerializable(payload.notes as Note[]);
+                noteManager.fromSerializable(payload.notes.filter(isValidNote));
               }
               break;
           }
         } finally {
           sm.endApplyRemote();
+          this.rememberSyncedNotes();
         }
       }),
     );
 
-    // Send outgoing note sync when notes change
+    // Send outgoing note sync when notes change: one operation per changed
+    // note, so concurrent edits to different notes don't overwrite each other.
     this.unsubscribers.push(
       session.on('notesChanged', () => {
-        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-          networkSyncManager.sendNoteSync({
-            action: 'snapshot',
-            notes: session.noteManager.toSerializable(),
-            timestamp: Date.now(),
-          });
+        if (networkSyncManager.getSyncStateManager().isApplyingRemoteState) return;
+        if (!networkSyncManager.isConnected) {
+          this.rememberSyncedNotes();
+          return;
         }
+        this.sendNoteChanges();
       }),
     );
+
+    // Start each room from the notes we have now.
+    this.unsubscribers.push(networkSyncManager.on('roomCreated', () => this.rememberSyncedNotes()));
+    this.unsubscribers.push(networkSyncManager.on('roomJoined', () => this.rememberSyncedNotes()));
 
     // Wire remote cursors overlay
     const remoteCursorsOverlay = this.ctx.remoteCursorsOverlay;
@@ -840,10 +916,42 @@ export class AppNetworkBridge {
           if (frame === this.lastPlaybackSyncFrame && Date.now() - this.lastPlaybackSyncTime < 50) {
             return;
           }
-          this.frameSyncThrottle!.call(frame);
+          this.frameSyncThrottle?.call(frame);
         }
       }),
     );
+  }
+
+  /** Add the room secret (and PIN flag) to a share link's fragment. */
+  private withRoomSecret(link: string): string {
+    const secret = this.ctx.networkSyncManager.roomSecret;
+    if (!secret || !link) return link;
+    return withRoomLinkSecret(link, secret, isValidPinCode(this.getActivePinCode()));
+  }
+
+  private rememberSyncedNotes(): void {
+    this.syncedNotes = new Map(this.ctx.session.noteManager.toSerializable().map((note) => [note.id, note]));
+  }
+
+  private sendNoteChanges(): void {
+    const { session, networkSyncManager } = this.ctx;
+    const current = new Map(session.noteManager.toSerializable().map((note) => [note.id, note]));
+    const timestamp = Date.now();
+
+    for (const [id, note] of current) {
+      const previous = this.syncedNotes.get(id);
+      if (!previous) {
+        networkSyncManager.sendNoteSync({ action: 'add', noteId: id, note, timestamp });
+      } else if (!sameNoteContent(previous, note)) {
+        networkSyncManager.sendNoteSync({ action: 'update', noteId: id, note: pickNoteUpdate(note), timestamp });
+      }
+    }
+    for (const id of this.syncedNotes.keys()) {
+      if (!current.has(id)) {
+        networkSyncManager.sendNoteSync({ action: 'remove', noteId: id, timestamp });
+      }
+    }
+    this.syncedNotes = current;
   }
 
   private getActivePinCode(): string {
@@ -859,10 +967,17 @@ export class AppNetworkBridge {
     if (!roomCode) return;
 
     try {
-      const pinCode = this.getActivePinCode();
       const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
-      const base = this.buildRoomLink(roomCode, pinCode);
+      const base = this.buildRoomLink(roomCode);
       let shareLink = buildShareURL(base, state);
+
+      const controlWithShare = this.ctx.networkControl as unknown as {
+        setShareLink?: (url: string) => void;
+        setShareLinkKind?: (kind: 'invite' | 'response' | 'generic') => void;
+        setResponseToken?: (token: string) => void;
+      };
+      // Show a usable (keyed) link right away; the WebRTC offer can take seconds.
+      controlWithShare.setShareLink?.(this.withRoomSecret(shareLink));
 
       const managerWithServerless = this.ctx.networkSyncManager as unknown as {
         buildServerlessInviteShareURL?: (url: string) => Promise<string>;
@@ -870,12 +985,8 @@ export class AppNetworkBridge {
       if (typeof managerWithServerless.buildServerlessInviteShareURL === 'function') {
         shareLink = await managerWithServerless.buildServerlessInviteShareURL(shareLink);
       }
+      shareLink = this.withRoomSecret(shareLink);
 
-      const controlWithShare = this.ctx.networkControl as unknown as {
-        setShareLink?: (url: string) => void;
-        setShareLinkKind?: (kind: 'invite' | 'response' | 'generic') => void;
-        setResponseToken?: (token: string) => void;
-      };
       controlWithShare.setShareLinkKind?.('invite');
       controlWithShare.setResponseToken?.('');
       controlWithShare.setShareLink?.(shareLink);
@@ -885,15 +996,13 @@ export class AppNetworkBridge {
     }
   }
 
-  private buildRoomLink(roomCode: string, pinCode: string): string {
+  /** Room link without the PIN; the PIN is always shared separately. */
+  private buildRoomLink(roomCode: string): string {
     const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
     const url = new URL(fallbackBase);
     url.search = '';
     url.hash = '';
     url.searchParams.set('room', roomCode);
-    if (pinCode) {
-      url.searchParams.set('pin', pinCode);
-    }
     return url.toString();
   }
 
@@ -908,21 +1017,24 @@ export class AppNetworkBridge {
   }
 
   private applyReceivedAnnotationsAndNotes(annotations?: unknown[], notes?: unknown[]): void {
-    const hasAnnotations = Array.isArray(annotations) && annotations.length > 0 && this.ctx.paintEngine;
-    const hasNotes = Array.isArray(notes) && notes.length > 0;
-    if (!hasAnnotations && !hasNotes) return;
+    const validAnnotations = Array.isArray(annotations) ? annotations.filter(isValidAnnotation) : [];
+    const validNotes = Array.isArray(notes) ? notes.filter(isValidNote) : [];
+    const paintEngine = validAnnotations.length > 0 ? this.ctx.paintEngine : undefined;
+    const hasNotes = validNotes.length > 0;
+    if (!paintEngine && !hasNotes) return;
 
     const sm = this.ctx.networkSyncManager.getSyncStateManager();
     sm.beginApplyRemote();
     try {
-      if (hasAnnotations) {
-        this.ctx.paintEngine!.loadFromAnnotations(annotations as import('./paint/types').Annotation[]);
+      if (paintEngine) {
+        paintEngine.loadFromAnnotations(validAnnotations);
       }
       if (hasNotes) {
-        this.ctx.session.noteManager.fromSerializable(notes as import('./core/session/NoteManager').Note[]);
+        this.ctx.session.noteManager.fromSerializable(validNotes);
       }
     } finally {
       sm.endApplyRemote();
+      this.rememberSyncedNotes();
     }
   }
 
@@ -959,6 +1071,24 @@ export class AppNetworkBridge {
     return await showConfirm(`Accept media sync?\n\nIncoming: ${fileCount} ${fileLabel} (${sizeLabel}).`);
   }
 
+  /** Ask the host before any media leaves this machine. */
+  private async confirmMediaShare(requesterUserId: string, bundle: PreparedMediaBundle): Promise<boolean> {
+    const requester = this.ctx.networkSyncManager.users.find((user) => user.id === requesterUserId);
+    const who = requester?.name ? `"${requester.name}"` : 'A participant';
+    const fileLabel = bundle.files.length === 1 ? 'file' : 'files';
+    return showConfirm(
+      `${who} is asking for a copy of your media: ${bundle.files.length} ${fileLabel} (${this.formatByteSize(bundle.totalBytes)}).\n\nSend it?`,
+      { title: 'Share media', confirmText: 'Send', cancelText: "Don't send" },
+    );
+  }
+
+  private releaseOutgoingTransfer(transferId: string): void {
+    const transfer = this.outgoingMediaTransfers.get(transferId);
+    if (!transfer) return;
+    if (transfer.expiryTimer) clearTimeout(transfer.expiryTimer);
+    this.outgoingMediaTransfers.delete(transferId);
+  }
+
   private async captureLocalMediaBundle(): Promise<PreparedMediaBundle> {
     const { session } = this.ctx;
     const files: PreparedMediaFile[] = [];
@@ -975,17 +1105,16 @@ export class AppNetworkBridge {
       const fileIds: string[] = [];
       for (const file of sourceFiles) {
         const id = `file-${files.length}`;
-        const bytes = new Uint8Array(await file.arrayBuffer());
         files.push({
           id,
           name: file.name,
           type: file.type,
           size: file.size,
           lastModified: file.lastModified || Date.now(),
-          bytes,
+          file,
         });
         fileIds.push(id);
-        totalBytes += bytes.byteLength;
+        totalBytes += file.size;
       }
 
       const kind: MediaTransferSourceDescriptor['kind'] =
@@ -1043,16 +1172,23 @@ export class AppNetworkBridge {
     }
   }
 
-  private async streamOutgoingMediaTransfer(transferId: string, transfer: OutgoingMediaTransfer): Promise<void> {
+  private async streamOutgoingMediaTransfer(
+    transferId: string,
+    transfer: OutgoingMediaTransfer,
+    bundle: PreparedMediaBundle,
+  ): Promise<void> {
     const { networkSyncManager, networkControl } = this.ctx;
 
     try {
-      for (const file of transfer.bundle.files) {
-        const totalChunks = Math.max(1, Math.ceil(file.bytes.byteLength / MEDIA_CHUNK_SIZE_BYTES));
+      for (const file of bundle.files) {
+        const totalChunks = Math.max(1, Math.ceil(file.size / MEDIA_CHUNK_SIZE_BYTES));
         for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          if (this.outgoingMediaTransfers.get(transferId) !== transfer || !networkSyncManager.isConnected) return;
+          // Back-pressure: wait for the socket/data channel to drain before queueing more.
+          await networkSyncManager.waitForSendCapacity();
           const start = chunkIndex * MEDIA_CHUNK_SIZE_BYTES;
-          const end = Math.min(start + MEDIA_CHUNK_SIZE_BYTES, file.bytes.byteLength);
-          const chunkBytes = file.bytes.subarray(start, end);
+          const end = Math.min(start + MEDIA_CHUNK_SIZE_BYTES, file.size);
+          const chunkBytes = new Uint8Array(await file.file.slice(start, end).arrayBuffer());
           const data = this.bytesToBase64(chunkBytes);
 
           networkSyncManager.sendMediaChunk(transferId, transfer.requesterUserId, {
@@ -1070,7 +1206,7 @@ export class AppNetworkBridge {
         `Failed to send media transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
     } finally {
-      this.outgoingMediaTransfers.delete(transferId);
+      this.releaseOutgoingTransfer(transferId);
     }
   }
 
@@ -1082,19 +1218,17 @@ export class AppNetworkBridge {
         throw new Error(`Incomplete transfer for file "${state.descriptor.name}".`);
       }
 
-      const encodedChunks: string[] = [];
+      const parts: BlobPart[] = [];
       for (let i = 0; i < state.totalChunks; i++) {
         const chunk = state.chunks.get(i);
-        if (typeof chunk !== 'string') {
+        if (!chunk) {
           throw new Error(`Missing chunk ${i + 1}/${state.totalChunks} for "${state.descriptor.name}".`);
         }
-        encodedChunks.push(chunk);
+        parts.push(chunk as Uint8Array<ArrayBuffer>);
       }
 
-      const bytes = this.base64ToBytes(encodedChunks.join(''));
-      const bufferView = new Uint8Array(bytes.byteLength);
-      bufferView.set(bytes);
-      const file = new File([bufferView.buffer], state.descriptor.name, {
+      // Assemble from the per-chunk buffers; no single giant string or copy.
+      const file = new File(parts, state.descriptor.name, {
         type: state.descriptor.type,
         lastModified: state.descriptor.lastModified,
       });
@@ -1109,12 +1243,13 @@ export class AppNetworkBridge {
         const files = source.fileIds
           .map((fileId) => assembledFiles.get(fileId))
           .filter((file): file is File => file instanceof File);
-        if (files.length === 0) continue;
+        const [firstFile] = files;
+        if (!firstFile) continue;
 
         if (source.kind === 'sequence') {
           await session.loadSequence(files, source.fps);
         } else {
-          await session.loadFile(files[0]!);
+          await session.loadFile(firstFile);
         }
       }
     } finally {
@@ -1130,8 +1265,8 @@ export class AppNetworkBridge {
     for (let offset = 0; offset < bytes.length; offset += chunkSize) {
       const chunk = bytes.subarray(offset, offset + chunkSize);
       let binary = '';
-      for (let i = 0; i < chunk.length; i++) {
-        binary += String.fromCharCode(chunk[i]!);
+      for (const byte of chunk) {
+        binary += String.fromCharCode(byte);
       }
       parts.push(binary);
     }
@@ -1244,7 +1379,7 @@ export class AppNetworkBridge {
       }
       if (state.wipeMode) {
         viewer.setWipeState({
-          mode: state.wipeMode as any,
+          mode: state.wipeMode as WipeMode,
           position: state.wipePosition ?? 0.5,
           showOriginal: state.wipeMode === 'horizontal' ? 'left' : 'top',
         });
@@ -1265,7 +1400,96 @@ export class AppNetworkBridge {
     this.frameSyncThrottle = null;
     this.clearAllTransferTimeouts();
     this.pendingStateByTransferId.clear();
-    this.outgoingMediaTransfers.clear();
+    for (const transferId of Array.from(this.outgoingMediaTransfers.keys())) {
+      this.releaseOutgoingTransfer(transferId);
+    }
     this.incomingMediaTransfers.clear();
+    this.requestedMediaTransfers.clear();
+    this.syncedNotes.clear();
   }
+}
+
+// ---- Validation of data received from peers ----
+
+const NOTE_STATUSES = new Set(['open', 'resolved', 'wontfix']);
+const NOTE_PRIORITIES = new Set(['low', 'medium', 'high', 'critical']);
+
+function isValidNote(value: unknown): value is Note {
+  if (!value || typeof value !== 'object') return false;
+  const n = value as Record<string, unknown>;
+  return (
+    typeof n.id === 'string' &&
+    n.id.length > 0 &&
+    typeof n.sourceIndex === 'number' &&
+    Number.isFinite(n.frameStart) &&
+    Number.isFinite(n.frameEnd) &&
+    typeof n.text === 'string' &&
+    typeof n.author === 'string' &&
+    typeof n.createdAt === 'string' &&
+    typeof n.modifiedAt === 'string' &&
+    typeof n.status === 'string' &&
+    NOTE_STATUSES.has(n.status) &&
+    (n.parentId === null || typeof n.parentId === 'string') &&
+    typeof n.color === 'string' &&
+    (n.priority === undefined || (typeof n.priority === 'string' && NOTE_PRIORITIES.has(n.priority))) &&
+    (n.category === undefined || typeof n.category === 'string') &&
+    (n.externalId === undefined || n.externalId === null || typeof n.externalId === 'string')
+  );
+}
+
+type NoteUpdate = Partial<Pick<Note, 'text' | 'status' | 'color' | 'priority' | 'category'>>;
+
+function pickNoteUpdate(note: Partial<Note>): NoteUpdate {
+  const update: NoteUpdate = {};
+  if (typeof note.text === 'string') update.text = note.text;
+  if (typeof note.status === 'string' && NOTE_STATUSES.has(note.status)) update.status = note.status;
+  if (typeof note.color === 'string') update.color = note.color;
+  if (typeof note.priority === 'string' && NOTE_PRIORITIES.has(note.priority)) update.priority = note.priority;
+  if (typeof note.category === 'string') update.category = note.category;
+  return update;
+}
+
+function sameNoteContent(a: Note, b: Note): boolean {
+  return (
+    a.text === b.text &&
+    a.status === b.status &&
+    a.color === b.color &&
+    a.priority === b.priority &&
+    a.category === b.category
+  );
+}
+
+function isAllowedRemoteMediaUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  try {
+    return ALLOWED_REMOTE_MEDIA_PROTOCOLS.has(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drop media references a peer should not be able to make us load
+ * (blob:, data:, file:, javascript: and other non-http schemes).
+ */
+function sanitizeRemoteSessionState(state: SessionURLState): SessionURLState {
+  const sanitized: SessionURLState = { ...state };
+  if (sanitized.sourceUrl !== undefined && !isAllowedRemoteMediaUrl(sanitized.sourceUrl)) {
+    delete sanitized.sourceUrl;
+  }
+  if (sanitized.sourceUrls) {
+    const urls = sanitized.sourceUrls.filter(isAllowedRemoteMediaUrl);
+    if (urls.length === sanitized.sourceUrls.length) {
+      sanitized.sourceUrls = urls;
+    } else {
+      // Indices only line up if every source survives; otherwise load none.
+      delete sanitized.sourceUrls;
+    }
+  }
+  if (sanitized.representations) {
+    sanitized.representations = sanitized.representations.filter(
+      (rep) => rep.loaderConfig.url === undefined || isAllowedRemoteMediaUrl(rep.loaderConfig.url),
+    );
+  }
+  return sanitized;
 }

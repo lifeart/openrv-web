@@ -22,6 +22,7 @@ import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
 import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import { getPreferredUserName } from '../../core/UserIdentity';
 import { createUserNameField, type UserNameField } from './UserNameField';
+import { parseRoomInviteLink } from '../../network/RoomCrypto';
 
 /**
  * Validate that a color string is a safe CSS color value.
@@ -38,7 +39,10 @@ function sanitizeColor(color: string): string {
 
 export interface NetworkControlEvents extends EventMap {
   createRoom: { userName: string };
-  joinRoom: { roomCode: string; userName: string };
+  /** `roomSecret` is set when the user pasted a full invite link. */
+  joinRoom: { roomCode: string; userName: string; roomSecret?: string };
+  /** Host changed a participant's role. */
+  participantRoleChange: { userId: string; role: ParticipantRole };
   leaveRoom: void;
   reconnect: void;
   syncSettingsChanged: SyncSettings;
@@ -109,6 +113,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private mediaSyncPrompt!: HTMLElement;
   private mediaSyncPromptText!: HTMLElement;
   private pendingMediaPromptResolver: ((accepted: boolean) => void) | null = null;
+  /** Room secret from an invite link pasted into the room code field. */
+  private pastedRoomSecret: string | null = null;
   private roleIndicator!: HTMLElement;
   private viewOnlyBanner!: HTMLElement;
 
@@ -506,7 +512,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.roomCodeInput = document.createElement('input');
     this.roomCodeInput.dataset.testid = 'network-room-code-input';
     this.roomCodeInput.type = 'text';
-    this.roomCodeInput.placeholder = 'Room Code (XXXX-XXXX)';
+    this.roomCodeInput.placeholder = 'Paste invite link or room code';
     this.roomCodeInput.maxLength = 9;
     this.roomCodeInput.style.cssText = `
       width: 100%;
@@ -529,7 +535,22 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.roomCodeInput.addEventListener('blur', () => {
       this.roomCodeInput.style.borderColor = 'var(--border-primary)';
     });
+    this.roomCodeInput.addEventListener('paste', (e) => {
+      const text = e.clipboardData?.getData('text') ?? '';
+      const invite = parseRoomInviteLink(text);
+      if (!invite) return;
+      e.preventDefault();
+      this.roomCodeInput.value = this.normalizeRoomCode(invite.roomCode) ?? '';
+      this.pastedRoomSecret = invite.secret;
+      if (!invite.secret) {
+        this.showError('This link has no room key. Ask the host for the full invite link.');
+      } else if (invite.pinRequired) {
+        this.showInfo('Enter the room PIN, then join.');
+      }
+    });
     this.roomCodeInput.addEventListener('input', () => {
+      // A hand-edited code no longer matches the pasted link's key.
+      this.pastedRoomSecret = null;
       // Auto-insert hyphen
       let val = this.roomCodeInput.value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
       if (val.length > 4) {
@@ -1075,7 +1096,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       return;
     }
     this.hideError();
-    this.emit('joinRoom', { roomCode: code, userName: this.resolveUserName('User') });
+    const roomSecret = this.pastedRoomSecret ?? undefined;
+    const userName = this.resolveUserName('User');
+    this.emit('joinRoom', roomSecret ? { roomCode: code, userName, roomSecret } : { roomCode: code, userName });
   }
 
   /**
@@ -1403,9 +1426,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     url.search = '';
     url.hash = '';
     url.searchParams.set('room', code);
-    if (this.state.pinCode) {
-      url.searchParams.set('pin', this.state.pinCode);
-    }
+    // The PIN is never put in links; it is shared separately.
     return url.toString();
   }
 
@@ -1529,6 +1550,35 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
       row.appendChild(avatar);
       row.appendChild(name);
+
+      // The host can switch other participants between reviewer and viewer.
+      if (this.state.isHost && !user.isHost && !isLocalUser) {
+        const roleSelect = document.createElement('select');
+        roleSelect.dataset.testid = 'network-user-role-select';
+        roleSelect.title = `Role for ${user.name}`;
+        roleSelect.setAttribute('aria-label', `Role for ${user.name}`);
+        roleSelect.style.cssText = `
+          font-size: 10px;
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          border: 1px solid var(--border-primary);
+          border-radius: 3px;
+          padding: 1px 2px;
+        `;
+        for (const option of ['reviewer', 'viewer'] as const) {
+          const el = document.createElement('option');
+          el.value = option;
+          el.textContent = option.charAt(0).toUpperCase() + option.slice(1);
+          roleSelect.appendChild(el);
+        }
+        roleSelect.value = role === 'viewer' ? 'viewer' : 'reviewer';
+        roleSelect.addEventListener('change', () => {
+          const next: ParticipantRole = roleSelect.value === 'viewer' ? 'viewer' : 'reviewer';
+          this.emit('participantRoleChange', { userId: user.id, role: next });
+        });
+        roleSelect.addEventListener('keydown', (e) => e.stopPropagation());
+        row.appendChild(roleSelect);
+      }
       this.userListContainer.appendChild(row);
     });
   }
