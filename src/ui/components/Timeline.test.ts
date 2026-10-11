@@ -131,7 +131,7 @@ describe('Timeline', () => {
 
     it('TML-003: creates canvas element', () => {
       const container = timeline.render();
-      const canvas = container.querySelector('canvas');
+      const canvas = container.querySelector('[data-testid="timeline-canvas"]');
       expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     });
   });
@@ -452,7 +452,7 @@ describe('Timeline', () => {
      */
     function getCanvas(tl: TestTimeline): HTMLCanvasElement {
       const container = tl.render();
-      return container.querySelector('canvas')!;
+      return container.querySelector('[data-testid="timeline-canvas"]')!;
     }
 
     it('TL-H05a: should register pointerdown (not mousedown) listener', () => {
@@ -1220,7 +1220,7 @@ describe('Timeline', () => {
   describe('context menu integration', () => {
     function getCanvas(tl: TestTimeline): HTMLCanvasElement {
       const container = tl.render();
-      return container.querySelector('canvas')!;
+      return container.querySelector('[data-testid="timeline-canvas"]')!;
     }
 
     function mockCanvasRect(canvas: HTMLCanvasElement): void {
@@ -1275,7 +1275,7 @@ describe('Timeline', () => {
       tl.setSize(1000, 100);
       flushRaf();
 
-      const canvas = container.querySelector('canvas')!;
+      const canvas = container.querySelector('[data-testid="timeline-canvas"]')!;
       mockCanvasRect(canvas);
 
       const event = new MouseEvent('contextmenu', {
@@ -1594,7 +1594,7 @@ describe('Timeline', () => {
       const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
 
       // Trigger context menu
-      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const canvas = timeline.render().querySelector('[data-testid="timeline-canvas"]') ?? timeline.render();
       const contextEvent = new MouseEvent('contextmenu', {
         clientX: 500,
         clientY: 50,
@@ -1632,7 +1632,7 @@ describe('Timeline', () => {
 
       const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
 
-      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const canvas = timeline.render().querySelector('[data-testid="timeline-canvas"]') ?? timeline.render();
       const contextEvent = new MouseEvent('contextmenu', {
         clientX: 500,
         clientY: 50,
@@ -1872,7 +1872,7 @@ describe('Timeline', () => {
     } as DOMRect;
 
     function setup(): HTMLCanvasElement {
-      const canvas = timeline.render().querySelector('canvas') as HTMLCanvasElement;
+      const canvas = timeline.render().querySelector('[data-testid="timeline-canvas"]') as HTMLCanvasElement;
       vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(rect);
       canvas.setPointerCapture = vi.fn();
       canvas.releasePointerCapture = vi.fn();
