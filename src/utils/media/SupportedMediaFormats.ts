@@ -74,6 +74,10 @@ export const MEDIABUNNY_VIDEO_EXTENSIONS = [
   'ogx',
   // MXF (Material Exchange Format)
   'mxf',
+  // MPEG transport stream (mediabunny MPEG_TS input format, part of ALL_FORMATS)
+  'ts',
+  'mts',
+  'm2ts',
 ] as const;
 
 /**
@@ -312,5 +316,5 @@ export const SUPPORTED_PROJECT_ACCEPT = [
  */
 export const VIEWER_PLACEHOLDER_SUPPORT_LINES = [
   'Images: EXR, DPX/CIN, HDR, AVIF, JXL, HEIC, JP2/HTJ2K, RAW, PNG/JPEG/WebP/TIFF',
-  'Video: MP4/M4V/3GP, MOV/QT, MKV/WebM, OGG/OGV, MXF (AVI fallback)',
+  'Video: MP4/M4V/3GP, MOV/QT, MKV/WebM, OGG/OGV, MXF, MPEG-TS (AVI fallback)',
 ] as const;

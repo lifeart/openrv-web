@@ -5,7 +5,10 @@ import {
   getExtensionFromUrl,
   SUPPORTED_IMAGE_EXTENSIONS,
   SUPPORTED_MEDIA_ACCEPT,
+  SUPPORTED_VIDEO_EXTENSIONS,
+  isVideoExtension,
 } from './SupportedMediaFormats';
+import { ALL_FORMATS, MPEG_TS } from 'mediabunny';
 
 // ---------------------------------------------------------------------------
 // getExtensionFromUrl
@@ -215,5 +218,40 @@ describe('detectMediaTypeFromUrl', () => {
     const result = await detectMediaTypeFromUrl('https://example.com/file.xyz');
     expect(result).toBe('video');
     expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MPEG transport stream
+// ---------------------------------------------------------------------------
+
+describe('MPEG-TS support', () => {
+  const tsExtensions = ['ts', 'mts', 'm2ts'] as const;
+
+  it('mediabunny inputs are created with a format list that includes MPEG-TS', () => {
+    expect(ALL_FORMATS).toContain(MPEG_TS);
+  });
+
+  for (const ext of tsExtensions) {
+    it(`.${ext} is a supported video extension`, () => {
+      expect(SUPPORTED_VIDEO_EXTENSIONS).toContain(ext);
+      expect(isVideoExtension(ext)).toBe(true);
+      expect(SUPPORTED_MEDIA_ACCEPT.split(',')).toContain(`.${ext}`);
+    });
+
+    it(`detectMediaTypeFromFile classifies .${ext} as video without a MIME type`, () => {
+      expect(detectMediaTypeFromFile({ name: `clip.${ext}`, type: '' })).toBe('video');
+    });
+
+    it(`detectMediaTypeFromUrl classifies .${ext} as video without fetching`, async () => {
+      vi.stubGlobal('fetch', vi.fn());
+      expect(await detectMediaTypeFromUrl(`https://cdn.example.com/clip.${ext}`)).toBe('video');
+      expect(fetch).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+  }
+
+  it('classifies MPEG-TS MIME types as video', () => {
+    expect(detectMediaTypeFromFile({ name: 'clip.m2ts', type: 'video/mp2t' })).toBe('video');
   });
 });
