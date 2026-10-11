@@ -15,7 +15,14 @@
  * - All messages carry a protocolVersion for forward/backward compatibility
  */
 
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type {
+  ColorAdjustments,
+  ColorWheelsState,
+  ChannelMode,
+  ChannelSwizzle,
+  HSLQualifierState,
+  LinearizeState,
+} from '../core/types/color';
 import type {
   ToneMappingState,
   ZebraState,
@@ -30,6 +37,9 @@ import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
+import type { ColorPrimaries } from '../core/image/Image';
+import type { TextureFilterMode } from '../core/types/filter';
+import type { WireRenderState } from './renderStateTransport';
 
 // =============================================================================
 // Protocol Version
@@ -247,6 +257,17 @@ export interface ReadPixelMessage extends BaseWorkerMessage {
   height: number;
 }
 
+/**
+ * Render the worker's last HDR image through the current pipeline at scope
+ * resolution and send back float pixels (see Renderer.renderForScopes).
+ */
+export interface RenderForScopesMessage extends BaseWorkerMessage {
+  type: 'renderForScopes';
+  id: number;
+  width: number;
+  height: number;
+}
+
 /** Batch state sync: all dirty state in a single message. */
 export interface SyncStateMessage extends BaseWorkerMessage {
   type: 'syncState';
@@ -289,6 +310,15 @@ export interface RendererSyncState {
   ditherMode: number;
   quantizeBits: number;
   hdrHeadroom: number;
+  /** Full pipeline state from applyRenderState(); applied before the individual fields above. */
+  renderState: WireRenderState;
+  colorPrimaries: { input: ColorPrimaries | undefined; output: 'srgb' | 'display-p3' | 'rec2020' };
+  linearize: LinearizeState;
+  outOfRange: number;
+  channelSwizzle: ChannelSwizzle;
+  textureFilterMode: TextureFilterMode;
+  sphericalProjection: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number };
+  userTransform: { rotation: number; flipH: boolean; flipV: boolean };
 }
 
 /** Union of all main thread → worker messages. */
@@ -318,6 +348,7 @@ export type RenderWorkerMessage =
   | SetBackgroundPatternMessage
   | SetHDROutputModeMessage
   | ReadPixelMessage
+  | RenderForScopesMessage
   | SyncStateMessage
   | DisposeMessage;
 
@@ -358,6 +389,15 @@ export interface PixelDataResult extends BaseWorkerMessage {
   data: Float32Array | null;
 }
 
+/** Scope pixels response (RGBA float, rows top-to-bottom), or null on failure. */
+export interface ScopeDataResult extends BaseWorkerMessage {
+  type: 'scopeData';
+  id: number;
+  data: Float32Array | null;
+  width: number;
+  height: number;
+}
+
 /** WebGL context was lost. */
 export interface ContextLostResult extends BaseWorkerMessage {
   type: 'contextLost';
@@ -384,6 +424,7 @@ export type RenderWorkerResult =
   | RenderDoneResult
   | RenderErrorResult
   | PixelDataResult
+  | ScopeDataResult
   | ContextLostResult
   | ContextRestoredResult
   | ProtocolMismatchResult;

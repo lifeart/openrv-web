@@ -1122,4 +1122,128 @@ describe('renderWorker', () => {
       expect(__test__.getRenderer()).toBeNull();
     });
   });
+
+  // ==========================================================================
+  // Full RenderState sync and scope readback (review H1)
+  // ==========================================================================
+
+  describe('renderState sync and scopes', () => {
+    let postMessageSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      postMessageSpy = vi.spyOn(self, 'postMessage').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      // dispose resets the worker's cached image and decoder
+      __test__.setRenderer({ dispose: vi.fn() } as any);
+      handleMessage({ type: 'dispose' });
+      postMessageSpy.mockRestore();
+    });
+
+    function hdrMessage(id: number): RenderHDRMessage {
+      return {
+        type: 'renderHDR',
+        id,
+        imageData: new Float32Array(4).buffer,
+        width: 1,
+        height: 1,
+        dataType: DATA_TYPE_CODES.float32,
+        channels: 4,
+      };
+    }
+
+    it('RW-SYNC-001: renderState is applied before individual fields', () => {
+      const calls: string[] = [];
+      __test__.setRenderer({
+        applyRenderState: vi.fn(() => calls.push('applyRenderState')),
+        setOutOfRange: vi.fn(() => calls.push('setOutOfRange')),
+        setColorPrimaries: vi.fn(() => calls.push('setColorPrimaries')),
+      } as any);
+
+      applySyncState({
+        type: 'syncState',
+        state: {
+          outOfRange: 2,
+          colorPrimaries: { input: 'bt2020', output: 'srgb' },
+          renderState: {
+            state: {
+              lut: { data: null, size: 0, intensity: 0 },
+              colorAdjustments: {},
+              falseColor: { enabled: false, lut: null },
+            } as any,
+            reused: [],
+          },
+        },
+      });
+
+      expect(calls).toEqual(['applyRenderState', 'setColorPrimaries', 'setOutOfRange']);
+    });
+
+    it('RW-SYNC-002: renderer-only fields reach their Renderer setters', () => {
+      const renderer = {
+        setLinearize: vi.fn(),
+        setChannelSwizzle: vi.fn(),
+        setTextureFilterMode: vi.fn(),
+        setSphericalProjection: vi.fn(),
+        setUserTransform: vi.fn(),
+      };
+      __test__.setRenderer(renderer as any);
+      const linearize = { logType: 1 as const, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1, alphaType: 0 };
+      const spherical = { enabled: true, fov: 90, aspect: 1, yaw: 0, pitch: 0 };
+
+      applySyncState({
+        type: 'syncState',
+        state: {
+          linearize,
+          channelSwizzle: [2, 1, 0, 3],
+          textureFilterMode: 'nearest',
+          sphericalProjection: spherical,
+          userTransform: { rotation: 180, flipH: false, flipV: true },
+        },
+      });
+
+      expect(renderer.setLinearize).toHaveBeenCalledWith(linearize);
+      expect(renderer.setChannelSwizzle).toHaveBeenCalledWith([2, 1, 0, 3]);
+      expect(renderer.setTextureFilterMode).toHaveBeenCalledWith('nearest');
+      expect(renderer.setSphericalProjection).toHaveBeenCalledWith(spherical);
+      expect(renderer.setUserTransform).toHaveBeenCalledWith(180, false, true);
+    });
+
+    it('RW-SCOPE-001: renderForScopes re-renders the last HDR image with a sync readback', () => {
+      const data = new Float32Array(8 * 4 * 4);
+      const renderer = {
+        renderImage: vi.fn(),
+        renderForScopes: vi.fn(() => ({ data, width: 8, height: 4 })),
+      };
+      __test__.setRenderer(renderer as any);
+
+      handleMessage(hdrMessage(1));
+      postMessageSpy.mockClear();
+      handleMessage({ type: 'renderForScopes', id: 2, width: 8, height: 4 });
+
+      expect(renderer.renderForScopes).toHaveBeenCalledWith(__test__.getLastImage(), 8, 4, { sync: true });
+      const sent = postMessageSpy.mock.calls[0]![0] as any;
+      expect(sent).toMatchObject({ type: 'scopeData', id: 2, width: 8, height: 4 });
+      expect(sent.data).toBe(data);
+    });
+
+    it('RW-SCOPE-002: renderForScopes with no HDR image replies with null data', () => {
+      __test__.setRenderer({ renderForScopes: vi.fn() } as any);
+      handleMessage({ type: 'renderForScopes', id: 3, width: 8, height: 4 });
+
+      const sent = postMessageSpy.mock.calls[0]![0] as any;
+      expect(sent).toMatchObject({ type: 'scopeData', id: 3, data: null });
+    });
+
+    it('RW-SCOPE-003: an SDR frame clears the cached HDR image', () => {
+      __test__.setRenderer({ renderImage: vi.fn(), renderSDRFrame: vi.fn() } as any);
+      handleMessage(hdrMessage(4));
+      expect(__test__.getLastImage()).not.toBeNull();
+
+      const bitmap = { width: 2, height: 2, close: vi.fn() } as unknown as ImageBitmap;
+      handleMessage({ type: 'renderSDR', id: 5, bitmap, width: 2, height: 2 });
+      expect(__test__.getLastImage()).toBeNull();
+    });
+  });
 });

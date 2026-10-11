@@ -512,6 +512,9 @@ export class PixelSamplingManager {
 
         const result = glRenderer.renderForScopes(image, targetWidth, targetHeight);
         if (!result) {
+          // Worker renderer: the readback is in flight and scopes are re-read
+          // when it lands. This thread has no pixels to fall back to.
+          if (this.context.isAsyncRenderer()) return null;
           // WebGL scope readback failed (e.g. EXT_color_buffer_float unavailable).
           // Fall through to GL canvas readback below.
         } else {

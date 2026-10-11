@@ -23,6 +23,7 @@ import {
   COLOR_PRIMARIES_FROM_CODE,
   RENDER_WORKER_PROTOCOL_VERSION,
 } from '../render/renderWorker.messages';
+import { RenderStateDecoder } from '../render/renderStateTransport';
 import { Logger } from '../utils/Logger';
 
 const log = new Logger('RenderWorker');
@@ -36,6 +37,9 @@ const workerSelf = self as unknown as {
 let renderer: Renderer | null = null;
 let canvas: OffscreenCanvas | null = null;
 let isContextLost = false;
+/** Last HDR image rendered, kept so scope requests can re-render it at scope resolution. */
+let lastImage: IPImage | null = null;
+let renderStateDecoder = new RenderStateDecoder();
 
 /**
  * Post a message to the main thread.
@@ -163,6 +167,10 @@ function applySyncState(msg: RenderWorkerMessage): void {
   if (msg.type !== 'syncState' || !renderer) return;
   const state = msg.state;
 
+  // Full pipeline state first, so individual setters called after
+  // applyRenderState() on the main thread still win, as on the sync Renderer.
+  if (state.renderState) renderer.applyRenderState(renderStateDecoder.decode(state.renderState));
+
   if (state.colorAdjustments) renderer.setColorAdjustments(state.colorAdjustments);
   if (state.toneMappingState) renderer.setToneMappingState(state.toneMappingState);
   if (state.colorInversion !== undefined) renderer.setColorInversion(state.colorInversion);
@@ -216,6 +224,16 @@ function applySyncState(msg: RenderWorkerMessage): void {
   if (state.ditherMode !== undefined) renderer.setDitherMode(state.ditherMode);
   if (state.quantizeBits !== undefined) renderer.setQuantizeBits(state.quantizeBits);
   if (state.hdrHeadroom !== undefined) renderer.setHDRHeadroom(state.hdrHeadroom);
+  if (state.colorPrimaries) renderer.setColorPrimaries(state.colorPrimaries.input, state.colorPrimaries.output);
+  if (state.linearize) renderer.setLinearize(state.linearize);
+  if (state.outOfRange !== undefined) renderer.setOutOfRange(state.outOfRange);
+  if (state.channelSwizzle) renderer.setChannelSwizzle(state.channelSwizzle);
+  if (state.textureFilterMode) renderer.setTextureFilterMode(state.textureFilterMode);
+  if (state.sphericalProjection) renderer.setSphericalProjection(state.sphericalProjection);
+  if (state.userTransform) {
+    const { rotation, flipH, flipV } = state.userTransform;
+    renderer.setUserTransform(rotation, flipH, flipV);
+  }
 }
 
 /**
@@ -320,6 +338,7 @@ function handleMessage(msg: RenderWorkerMessage): void {
       try {
         // Use the ImageBitmap directly as texture source
         renderer.renderSDRFrame(msg.bitmap as unknown as HTMLCanvasElement);
+        lastImage = null;
         // Close the bitmap after use to prevent memory leaks
         safeCloseBitmap(msg.bitmap);
         post({ type: 'renderDone', id: msg.id });
@@ -350,6 +369,7 @@ function handleMessage(msg: RenderWorkerMessage): void {
       try {
         const image = reconstructIPImage(msg);
         renderer.renderImage(image, 0, 0, 1, 1);
+        lastImage = image;
         post({ type: 'renderDone', id: msg.id });
       } catch (error) {
         log.error('HDR render failed:', error);
@@ -377,6 +397,27 @@ function handleMessage(msg: RenderWorkerMessage): void {
     }
 
     // --- Fire-and-forget state setters ---
+
+    case 'renderForScopes': {
+      if (!renderer || isContextLost || !lastImage) {
+        post({ type: 'scopeData', id: msg.id, data: null, width: msg.width, height: msg.height });
+        return;
+      }
+      try {
+        const result = renderer.renderForScopes(lastImage, msg.width, msg.height, { sync: true });
+        if (result) {
+          post({ type: 'scopeData', id: msg.id, data: result.data, width: result.width, height: result.height }, [
+            result.data.buffer,
+          ]);
+        } else {
+          post({ type: 'scopeData', id: msg.id, data: null, width: msg.width, height: msg.height });
+        }
+      } catch (error) {
+        log.warn('Scope render failed:', error);
+        post({ type: 'scopeData', id: msg.id, data: null, width: msg.width, height: msg.height });
+      }
+      break;
+    }
 
     case 'setColorAdjustments':
       renderer?.setColorAdjustments(msg.adjustments);
@@ -461,6 +502,8 @@ function handleMessage(msg: RenderWorkerMessage): void {
       }
       canvas = null;
       isContextLost = false;
+      lastImage = null;
+      renderStateDecoder = new RenderStateDecoder();
       break;
     }
 
@@ -486,6 +529,7 @@ export const __test__ = {
     renderer = value;
   },
   getCanvas: () => canvas,
+  getLastImage: () => lastImage,
   isContextLost: () => isContextLost,
   reconstructIPImage,
   applySyncState,

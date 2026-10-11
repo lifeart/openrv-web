@@ -10,6 +10,8 @@ import { RenderWorkerProxy } from './RenderWorkerProxy';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 import type { RenderWorkerMessage, RenderWorkerResult, SyncStateMessage } from './renderWorker.messages';
+import type { RenderState } from './RenderState';
+import { IPImage } from '../core/image/Image';
 
 // Mock OffscreenCanvas for jsdom
 if (typeof globalThis.OffscreenCanvas === 'undefined') {
@@ -966,14 +968,15 @@ describe('RenderWorkerProxy', () => {
 
       const syncMsg = mockWorker.messageHistory.find((m) => m.type === 'syncState') as SyncStateMessage | undefined;
       expect(syncMsg).toBeTruthy();
-      expect(syncMsg!.state.gamutMapping).toEqual({
+      const forwarded = syncMsg!.state.renderState!.state;
+      expect(forwarded.gamutMapping).toEqual({
         mode: 'compress',
         sourceGamut: 'rec2020',
         targetGamut: 'display-p3',
       });
-      expect(syncMsg!.state.premultMode).toBe(2);
-      expect(syncMsg!.state.ditherMode).toBe(1);
-      expect(syncMsg!.state.quantizeBits).toBe(10);
+      expect(forwarded.premultMode).toBe(2);
+      expect(forwarded.ditherMode).toBe(1);
+      expect(forwarded.quantizeBits).toBe(10);
 
       const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderSDR');
       if (renderMsg && 'id' in renderMsg) {
@@ -1113,6 +1116,220 @@ describe('RenderWorkerProxy', () => {
       }
       await promise;
       warnSpy.mockRestore();
+    });
+  });
+
+  // --- Renderer surface used by ViewerGLRenderer (production-only crash, review H1) ---
+
+  describe('Renderer-only methods', () => {
+    function baseRenderState(): RenderState {
+      return {
+        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+        colorInversion: false,
+        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+        backgroundPattern: {} as RenderState['backgroundPattern'],
+        cdl: {} as RenderState['cdl'],
+        curvesLUT: null,
+        colorWheels: {} as RenderState['colorWheels'],
+        falseColor: { enabled: false, lut: null },
+        zebraStripes: {} as RenderState['zebraStripes'],
+        channelMode: 'rgb',
+        lut: { data: null, size: 0, intensity: 0 },
+        displayColor: { transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2 },
+        highlightsShadows: { highlights: 0, shadows: 0, whites: 0, blacks: 0 },
+        vibrance: { amount: 0, skinProtection: false },
+        clarity: 0,
+        sharpen: 0,
+        hslQualifier: {} as RenderState['hslQualifier'],
+      };
+    }
+
+    function syncMessages(): SyncStateMessage[] {
+      return mockWorker.messageHistory.filter((m): m is SyncStateMessage => m.type === 'syncState');
+    }
+
+    function createImage(): IPImage {
+      return new IPImage({ width: 2, height: 2, channels: 4, dataType: 'float32' });
+    }
+
+    it('RWP-SURF-001: isOCIOWasmActive is false (no OCIO WASM shader in the worker)', () => {
+      expect(proxy.isOCIOWasmActive()).toBe(false);
+    });
+
+    it('RWP-SURF-002: renderer-only setters are forwarded in syncState', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setColorPrimaries('bt2020', 'display-p3');
+      proxy.setLinearize({ logType: 1, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1, alphaType: 0 });
+      proxy.setOutOfRange(2);
+      proxy.setChannelSwizzle([2, 1, 0, 3]);
+      proxy.setSphericalProjection({ enabled: true, fov: 90, aspect: 1.5, yaw: 10, pitch: 5 });
+      proxy.setUserTransform(90, true, false);
+      proxy.setTextureFilterMode('nearest');
+
+      void proxy.renderHDRAsync(createImage()).catch(() => {});
+
+      const state = syncMessages()[0]!.state;
+      expect(state.colorPrimaries).toEqual({ input: 'bt2020', output: 'display-p3' });
+      expect(state.linearize?.logType).toBe(1);
+      expect(state.outOfRange).toBe(2);
+      expect(state.channelSwizzle).toEqual([2, 1, 0, 3]);
+      expect(state.sphericalProjection).toEqual({ enabled: true, fov: 90, aspect: 1.5, yaw: 10, pitch: 5 });
+      expect(state.userTransform).toEqual({ rotation: 90, flipH: true, flipV: false });
+      expect(state.textureFilterMode).toBe('nearest');
+      expect(proxy.getTextureFilterMode()).toBe('nearest');
+    });
+
+    it('RWP-SURF-003: applyRenderState forwards fields the old per-field path dropped', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const fileLUT = new Float32Array(8 * 3);
+      proxy.applyRenderState({
+        ...baseRenderState(),
+        fileLUT: { data: fileLUT, size: 2, intensity: 1, domainMin: [0, 0, 0], domainMax: [1, 1, 1] },
+        linearize: { logType: 2, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1, alphaType: 0 },
+        channelSwizzle: [0, 0, 0, 3],
+        deinterlace: { enabled: true, method: 2, fieldOrder: 0 },
+        cdlColorspace: 1,
+      });
+
+      void proxy.renderHDRAsync(createImage()).catch(() => {});
+
+      const forwarded = syncMessages()[0]!.state.renderState!.state;
+      expect(forwarded.fileLUT?.data).toBe(fileLUT);
+      expect(forwarded.linearize?.logType).toBe(2);
+      expect(forwarded.channelSwizzle).toEqual([0, 0, 0, 3]);
+      expect(forwarded.deinterlace).toEqual({ enabled: true, method: 2, fieldOrder: 0 });
+      expect(forwarded.cdlColorspace).toBe(1);
+    });
+
+    it('RWP-SURF-004: an unchanged LUT array is not re-sent on the next frame', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const lut = new Float32Array(8 * 3);
+
+      proxy.applyRenderState({ ...baseRenderState(), lut: { data: lut, size: 2, intensity: 1 } });
+      void proxy.renderHDRAsync(createImage()).catch(() => {});
+      proxy.applyRenderState({ ...baseRenderState(), lut: { data: lut, size: 2, intensity: 1 } });
+      void proxy.renderHDRAsync(createImage()).catch(() => {});
+
+      const [first, second] = syncMessages();
+      expect(first!.state.renderState!.state.lut.data).toBe(lut);
+      expect(first!.state.renderState!.reused).toEqual([]);
+      expect(second!.state.renderState!.state.lut.data).toBeNull();
+      expect(second!.state.renderState!.reused).toEqual(['lut']);
+    });
+
+    it('RWP-SURF-005: setters after applyRenderState win, setters before it are superseded', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setOutOfRange(1); // superseded by the RenderState below
+      proxy.applyRenderState({ ...baseRenderState(), outOfRange: 0 });
+      proxy.setColorPrimaries('p3', 'srgb'); // not part of RenderState, kept
+
+      void proxy.renderHDRAsync(createImage()).catch(() => {});
+
+      const state = syncMessages()[0]!.state;
+      expect(state.outOfRange).toBeUndefined();
+      expect(state.renderState!.state.outOfRange).toBe(0);
+      expect(state.colorPrimaries).toEqual({ input: 'p3', output: 'srgb' });
+    });
+
+    it('RWP-SURF-006: getHDRHeadroom reflects setHDRHeadroom', () => {
+      proxy.setHDRHeadroom(3.5);
+      expect(proxy.getHDRHeadroom()).toBe(3.5);
+    });
+  });
+
+  describe('renderForScopes (async readback)', () => {
+    function createImage(): IPImage {
+      return new IPImage({ width: 2, height: 2, channels: 4, dataType: 'float32' });
+    }
+
+    function scopeRequests(): Extract<RenderWorkerMessage, { type: 'renderForScopes' }>[] {
+      return mockWorker.messageHistory.filter(
+        (m): m is Extract<RenderWorkerMessage, { type: 'renderForScopes' }> => m.type === 'renderForScopes',
+      );
+    }
+
+    it('RWP-SCOPE-001: returns null and requests a readback of the image last sent to the worker', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const image = createImage();
+      void proxy.renderHDRAsync(image).catch(() => {});
+
+      expect(proxy.renderForScopes(image, 64, 32)).toBeNull();
+      expect(scopeRequests()).toHaveLength(1);
+      expect(scopeRequests()[0]).toMatchObject({ width: 64, height: 32 });
+
+      // A second call while the request is in flight does not post again.
+      proxy.renderForScopes(image, 64, 32);
+      expect(scopeRequests()).toHaveLength(1);
+    });
+
+    it('RWP-SCOPE-002: caches the worker reply, notifies, and serves it without a new request', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const onReady = vi.fn();
+      proxy.setOnScopeDataReady(onReady);
+      const image = createImage();
+      void proxy.renderHDRAsync(image).catch(() => {});
+      proxy.renderForScopes(image, 64, 32);
+
+      const data = new Float32Array(64 * 32 * 4).fill(0.5);
+      mockWorker.simulateMessage({ type: 'scopeData', id: scopeRequests()[0]!.id, data, width: 64, height: 32 });
+
+      expect(onReady).toHaveBeenCalledTimes(1);
+      const result = proxy.renderForScopes(image, 64, 32);
+      expect(result).toEqual({ data, width: 64, height: 32 });
+      expect(scopeRequests()).toHaveLength(1);
+    });
+
+    it('RWP-SCOPE-003: while scopes are being read, each new render requests a fresh readback', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const first = createImage();
+      void proxy.renderHDRAsync(first).catch(() => {});
+      proxy.renderForScopes(first, 64, 32);
+      const data = new Float32Array(64 * 32 * 4);
+      mockWorker.simulateMessage({ type: 'scopeData', id: scopeRequests()[0]!.id, data, width: 64, height: 32 });
+
+      // Scopes read the new frame before it is rendered: stale data, no request yet.
+      const second = createImage();
+      expect(proxy.renderForScopes(second, 64, 32)?.data).toBe(data);
+      expect(scopeRequests()).toHaveLength(1);
+
+      // The render of that frame triggers the refresh.
+      void proxy.renderHDRAsync(second).catch(() => {});
+      expect(scopeRequests()).toHaveLength(2);
+      const types = mockWorker.messageHistory.map((m) => m.type);
+      const renderIndex = types.lastIndexOf('renderHDR');
+      const scopeIndex = types.lastIndexOf('renderForScopes');
+      expect(scopeIndex).toBeGreaterThan(renderIndex);
+    });
+
+    it('RWP-SCOPE-004: stops requesting once scopes stop reading', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const image = createImage();
+      void proxy.renderHDRAsync(image).catch(() => {});
+      proxy.renderForScopes(image, 64, 32);
+      mockWorker.simulateMessage({
+        type: 'scopeData',
+        id: scopeRequests()[0]!.id,
+        data: new Float32Array(64 * 32 * 4),
+        width: 64,
+        height: 32,
+      });
+
+      void proxy.renderHDRAsync(createImage()).catch(() => {}); // consumes the pending want
+      void proxy.renderHDRAsync(createImage()).catch(() => {}); // nobody asked since
+      expect(scopeRequests()).toHaveLength(2);
+    });
+
+    it('RWP-SCOPE-005: a failed readback (null data) does not notify', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const onReady = vi.fn();
+      proxy.setOnScopeDataReady(onReady);
+      const image = createImage();
+      void proxy.renderHDRAsync(image).catch(() => {});
+      proxy.renderForScopes(image, 64, 32);
+      mockWorker.simulateMessage({ type: 'scopeData', id: scopeRequests()[0]!.id, data: null, width: 64, height: 32 });
+
+      expect(onReady).not.toHaveBeenCalled();
+      expect(proxy.renderForScopes(image, 64, 32)).toBeNull();
     });
   });
 });

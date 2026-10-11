@@ -95,6 +95,7 @@ function createMockContext(): GLRendererContext {
       targetGamut: 'srgb' as const,
     })),
     getNoiseReductionParams: vi.fn(() => ({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 })),
+    notifyScopeDataReady: vi.fn(),
     getLuminanceVisualization: vi.fn(() => ({
       getMode: () => 'off' as const,
       getState: () => ({

@@ -15,8 +15,15 @@
  * flushed as a single syncState message before each render call.
  */
 
-import type { IPImage } from '../core/image/Image';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type { IPImage, ColorPrimaries } from '../core/image/Image';
+import type {
+  ColorAdjustments,
+  ColorWheelsState,
+  ChannelMode,
+  ChannelSwizzle,
+  HSLQualifierState,
+  LinearizeState,
+} from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
 import type {
   ToneMappingState,
@@ -36,6 +43,8 @@ import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState } from './RenderState';
+import type { Renderer } from './Renderer';
+import { RenderStateEncoder } from './renderStateTransport';
 import type {
   RenderWorkerMessage,
   RenderWorkerResult,
@@ -68,7 +77,78 @@ export interface RenderWorkerProxyOptions {
   workerFactory?: () => Worker;
 }
 
-export class RenderWorkerProxy implements RendererBackend {
+/**
+ * Renderer methods that ViewerGLRenderer and PixelSamplingManager call on
+ * whichever renderer is active, without a typeof guard. ViewerGLRenderer
+ * hands the proxy out as a `Renderer`, so a method missing here is a
+ * TypeError in production builds only (dev and E2E skip the worker).
+ * Implementing this Pick makes the compiler catch the gap instead.
+ */
+export type WorkerProxyRendererSurface = Pick<
+  Renderer,
+  | 'isOCIOWasmActive'
+  | 'setColorPrimaries'
+  | 'renderForScopes'
+  | 'setLinearize'
+  | 'setOutOfRange'
+  | 'setChannelSwizzle'
+  | 'setSphericalProjection'
+  | 'setUserTransform'
+  | 'setTextureFilterMode'
+  | 'getTextureFilterMode'
+  | 'getHDRHeadroom'
+  | 'applyRenderState'
+  | 'hasPendingStateChanges'
+  | 'renderTiledImages'
+  | 'readPixelFloat'
+  | 'getContext'
+>;
+
+/**
+ * Sync-state fields that applyRenderState() always overwrites on the Renderer
+ * (ShaderBatchApplicator resets them even when the RenderState field is
+ * optional and absent). gamutMapping and textureFilterMode are only applied
+ * when present, so they are handled separately.
+ */
+const RENDER_STATE_COVERED_SYNC_KEYS: readonly (keyof RendererSyncState)[] = [
+  'colorAdjustments',
+  'toneMappingState',
+  'colorInversion',
+  'cdl',
+  'curvesLUT',
+  'colorWheels',
+  'highlightsShadows',
+  'vibrance',
+  'clarity',
+  'sharpen',
+  'hslQualifier',
+  'channelMode',
+  'falseColor',
+  'zebraStripes',
+  'lut',
+  'lookLUT',
+  'fileLUT',
+  'displayLUT',
+  'displayColorState',
+  'backgroundPattern',
+  'premultMode',
+  'ditherMode',
+  'quantizeBits',
+  'linearize',
+  'outOfRange',
+  'channelSwizzle',
+];
+
+/** Most recent scope readback received from the worker. */
+interface ScopeCacheEntry {
+  image: WeakRef<IPImage>;
+  generation: number;
+  data: Float32Array;
+  width: number;
+  height: number;
+}
+
+export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSurface {
   /** Whether this backend renders asynchronously. */
   readonly isAsync = true;
 
@@ -107,6 +187,28 @@ export class RenderWorkerProxy implements RendererBackend {
   private ditherMode = 0;
   private quantizeBits = 0;
   private _textureFilterMode: TextureFilterMode = 'linear';
+  private hdrHeadroom = 1.0;
+
+  // Full RenderState from the latest applyRenderState(), encoded at flush time
+  // so array dedup is relative to what was actually sent.
+  private pendingRenderState: RenderState | null = null;
+  private renderStateEncoder = new RenderStateEncoder();
+
+  // --- Scope readback (renderForScopes) ---
+  /** Incremented each time an HDR image is sent to the worker. */
+  private renderGeneration = 0;
+  private lastSentImage: WeakRef<IPImage> | null = null;
+  private scopeCache: ScopeCacheEntry | null = null;
+  private scopeRequest: {
+    id: number;
+    generation: number;
+    image: WeakRef<IPImage> | null;
+    width: number;
+    height: number;
+  } | null = null;
+  /** Scope dims last asked for; set while a consumer is reading scopes. */
+  private scopeDimsWanted: { width: number; height: number } | null = null;
+  private onScopeDataReady: (() => void) | null = null;
 
   // --- Batch state optimization ---
   private dirtyState: Partial<RendererSyncState> = {};
@@ -274,6 +376,10 @@ export class RenderWorkerProxy implements RendererBackend {
 
     this.canvas = null;
     this.offscreenCanvas = null;
+    this.scopeCache = null;
+    this.scopeRequest = null;
+    this.lastSentImage = null;
+    this.onScopeDataReady = null;
   }
 
   // ==========================================================================
@@ -355,7 +461,7 @@ export class RenderWorkerProxy implements RendererBackend {
     // Copy the data so we can transfer it
     const dataCopy = image.data.slice(0);
 
-    return new Promise<void>((resolve, reject) => {
+    const promise = new Promise<void>((resolve, reject) => {
       this.pendingRenders.set(id, { resolve, reject });
       this.postMessage(
         {
@@ -372,6 +478,19 @@ export class RenderWorkerProxy implements RendererBackend {
         [dataCopy],
       );
     });
+
+    this.renderGeneration++;
+    this.lastSentImage = new WeakRef(image);
+    // Keep scopes live while someone reads them: refresh right after each
+    // render. scopeDimsWanted is re-armed by the next renderForScopes() call,
+    // so this stops once scopes stop asking.
+    const wanted = this.scopeDimsWanted;
+    if (wanted) {
+      this.scopeDimsWanted = null;
+      this.requestScopeData(wanted.width, wanted.height);
+    }
+
+    return promise;
   }
 
   /**
@@ -412,6 +531,8 @@ export class RenderWorkerProxy implements RendererBackend {
     const id = this.nextId++;
     const width = bitmap.width;
     const height = bitmap.height;
+    // The worker drops its HDR image on an SDR frame; it can't serve scopes for it.
+    this.lastSentImage = null;
 
     return new Promise<void>((resolve, reject) => {
       this.pendingRenders.set(id, { resolve, reject });
@@ -580,8 +701,13 @@ export class RenderWorkerProxy implements RendererBackend {
   }
 
   setHDRHeadroom(headroom: number): void {
+    this.hdrHeadroom = headroom;
     this.dirtyState.hdrHeadroom = headroom;
     this.hasDirtyState = true;
+  }
+
+  getHDRHeadroom(): number {
+    return this.hdrHeadroom;
   }
 
   // ==========================================================================
@@ -777,42 +903,141 @@ export class RenderWorkerProxy implements RendererBackend {
 
   setTextureFilterMode(mode: TextureFilterMode): void {
     this._textureFilterMode = mode;
-    // Texture filter mode is applied locally by the Renderer instance in the worker.
-    // It is not part of the sync state protocol since it only affects texParameteri
-    // calls at render time, not shader uniforms.
+    this.dirtyState.textureFilterMode = mode;
+    this.hasDirtyState = true;
   }
 
   getTextureFilterMode(): TextureFilterMode {
     return this._textureFilterMode;
   }
 
+  /**
+   * Forward the full RenderState; the worker's Renderer applies it with the
+   * same diffing as the sync path, so every field (file/look/display LUTs,
+   * linearize, deinterlace, film emulation, perspective, ...) reaches it.
+   */
   applyRenderState(state: RenderState): void {
-    this.setColorAdjustments(state.colorAdjustments);
-    this.setColorInversion(state.colorInversion);
-    this.setToneMappingState(state.toneMappingState);
-    this.setBackgroundPattern(state.backgroundPattern);
-    this.setCDL(state.cdl);
-    this.setCurvesLUT(state.curvesLUT);
-    this.setColorWheels(state.colorWheels);
-    this.setFalseColor(state.falseColor);
-    this.setZebraStripes(state.zebraStripes);
-    this.setChannelMode(state.channelMode);
-    this.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
-    this.setDisplayColorState(state.displayColor);
-    this.setHighlightsShadows(state.highlightsShadows);
-    this.setVibrance({ vibrance: state.vibrance.amount, skinProtection: state.vibrance.skinProtection });
-    this.setClarity({ clarity: state.clarity });
-    this.setSharpen({ amount: state.sharpen });
-    this.setHSLQualifier(state.hslQualifier);
-    if (state.gamutMapping) {
-      this.setGamutMapping(state.gamutMapping);
-    }
-    this.setPremultMode(state.premultMode ?? 0);
-    this.setDitherMode(state.ditherMode ?? 0);
-    this.setQuantizeBits(state.quantizeBits ?? 0);
+    // Local caches for the getters.
+    this.colorAdjustments = { ...state.colorAdjustments };
+    this.colorInversionEnabled = state.colorInversion;
+    this.toneMappingState = { ...state.toneMappingState };
+    this.premultMode = state.premultMode ?? 0;
+    this.ditherMode = state.ditherMode ?? 0;
+    this.quantizeBits = state.quantizeBits ?? 0;
     if (state.textureFilterMode !== undefined) {
-      this.setTextureFilterMode(state.textureFilterMode);
+      this._textureFilterMode = state.textureFilterMode;
     }
+
+    // The worker applies renderState before individual fields. Drop fields that
+    // this state supersedes so last-call-wins matches the sync Renderer.
+    for (const key of RENDER_STATE_COVERED_SYNC_KEYS) {
+      delete this.dirtyState[key];
+    }
+    if (state.gamutMapping) delete this.dirtyState.gamutMapping;
+    if (state.textureFilterMode !== undefined) delete this.dirtyState.textureFilterMode;
+    this.pendingRenderState = { ...state };
+    this.hasDirtyState = true;
+  }
+
+  // ==========================================================================
+  // Renderer-only setters (forwarded through syncState)
+  // ==========================================================================
+
+  /**
+   * OCIO WASM shaders are only installed on the sync Renderer (setOCIOShader),
+   * never on the worker, so it is never active here.
+   */
+  isOCIOWasmActive(): boolean {
+    return false;
+  }
+
+  setColorPrimaries(
+    inputPrimaries: ColorPrimaries | undefined,
+    outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+  ): void {
+    this.dirtyState.colorPrimaries = { input: inputPrimaries, output: outputColorSpace };
+    this.hasDirtyState = true;
+  }
+
+  setLinearize(state: LinearizeState): void {
+    this.dirtyState.linearize = { ...state };
+    this.hasDirtyState = true;
+  }
+
+  setOutOfRange(mode: number): void {
+    this.dirtyState.outOfRange = mode;
+    this.hasDirtyState = true;
+  }
+
+  setChannelSwizzle(swizzle: ChannelSwizzle): void {
+    this.dirtyState.channelSwizzle = [...swizzle] as ChannelSwizzle;
+    this.hasDirtyState = true;
+  }
+
+  setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this.dirtyState.sphericalProjection = { ...state };
+    this.hasDirtyState = true;
+  }
+
+  setUserTransform(rotation: number, flipH: boolean, flipV: boolean): void {
+    this.dirtyState.userTransform = { rotation, flipH, flipV };
+    this.hasDirtyState = true;
+  }
+
+  // ==========================================================================
+  // Scopes
+  // ==========================================================================
+
+  /** Called when fresh scope pixels arrive from the worker. */
+  setOnScopeDataReady(callback: (() => void) | null): void {
+    this.onScopeDataReady = callback;
+  }
+
+  /**
+   * Scope pixels for `image`, with the same contract as Renderer.renderForScopes.
+   *
+   * The worker can't answer synchronously, so this returns the latest readback
+   * it has (which may be one render behind) and asks the worker for a fresh
+   * one; `onScopeDataReady` fires when it lands. Returns null until the first
+   * readback at these dimensions arrives.
+   */
+  renderForScopes(
+    image: IPImage,
+    targetWidth: number,
+    targetHeight: number,
+  ): { data: Float32Array; width: number; height: number } | null {
+    this.scopeDimsWanted = { width: targetWidth, height: targetHeight };
+
+    const cache = this.scopeCache;
+    const sameDims = cache !== null && cache.width === targetWidth && cache.height === targetHeight;
+    const fresh = sameDims && cache.generation === this.renderGeneration && cache.image.deref() === image;
+
+    // The worker can only re-render the image it was last sent. For any other
+    // image, the request goes out after that image's render (renderHDRAsync).
+    if (!fresh && this.lastSentImage?.deref() === image) {
+      this.requestScopeData(targetWidth, targetHeight);
+    }
+
+    return sameDims ? { data: cache.data, width: cache.width, height: cache.height } : null;
+  }
+
+  private requestScopeData(width: number, height: number): void {
+    if (this.disposed || !this.worker || this.contextLost) return;
+    const inFlight = this.scopeRequest;
+    if (
+      inFlight &&
+      inFlight.generation === this.renderGeneration &&
+      inFlight.width === width &&
+      inFlight.height === height
+    ) {
+      return;
+    }
+    // State changes since the last render are not drawn yet; send them so the
+    // scope matches what the next frame will show.
+    this.flushDirtyState();
+    const id = this.nextId++;
+    this.scopeRequest = { id, generation: this.renderGeneration, image: this.lastSentImage, width, height };
+    this.postMessage({ type: 'renderForScopes', id, width, height });
   }
 
   // ==========================================================================
@@ -842,6 +1067,11 @@ export class RenderWorkerProxy implements RendererBackend {
    */
   private flushDirtyState(): void {
     if (!this.hasDirtyState || !this.worker) return;
+
+    if (this.pendingRenderState) {
+      this.dirtyState.renderState = this.renderStateEncoder.encode(this.pendingRenderState);
+      this.pendingRenderState = null;
+    }
 
     // Collect transferables from dirty state
     const transferables: Transferable[] = [];
@@ -959,6 +1189,24 @@ export class RenderWorkerProxy implements RendererBackend {
         break;
       }
 
+      case 'scopeData': {
+        const request = this.scopeRequest;
+        if (!request || request.id !== msg.id) break;
+        this.scopeRequest = null;
+        const image = request.image?.deref();
+        if (msg.data && image) {
+          this.scopeCache = {
+            image: new WeakRef(image),
+            generation: request.generation,
+            data: msg.data,
+            width: msg.width,
+            height: msg.height,
+          };
+          this.onScopeDataReady?.();
+        }
+        break;
+      }
+
       case 'contextLost':
         this.contextLost = true;
         this.onContextLost?.();
@@ -989,6 +1237,7 @@ export class RenderWorkerProxy implements RendererBackend {
     }
     this.pendingPixelReads.clear();
 
+    this.scopeRequest = null;
     this.renderInFlight = false;
   };
 }

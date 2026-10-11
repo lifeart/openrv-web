@@ -5,12 +5,12 @@
  * Since Renderer requires WebGL2, these tests mock the internal methods.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ShaderStateManager, DIRTY_DISPLAY } from './ShaderStateManager';
 import type { DisplayColorConfig } from './RenderState';
 import { IPImage } from '../core/image/Image';
 import { ManagedVideoFrame } from '../core/image/ManagedVideoFrame';
-import { isHDRContent } from './Renderer';
+import { Renderer, isHDRContent } from './Renderer';
 
 // We test the Y-flip logic independently since it's the most error-prone part.
 // The renderForScopes method is integration-tested via e2e.
@@ -451,5 +451,45 @@ describe('Uint8 to Float32 conversion', () => {
     // After flip: row0 should be ~[0.502, 0.502, 0.502, 1.0]
     expect(result[0]).toBeCloseTo(128 / 255, 4);
     expect(result[4]).toBeCloseTo(0.0, 6);
+  });
+});
+
+describe('renderForScopes sync option', () => {
+  function createRendererWithFakeGL() {
+    const renderer = new Renderer();
+    const internals = renderer as any;
+    internals.gl = { getExtension: () => ({}) };
+    internals.displayShader = {};
+    internals.ensureScopeFBO = () => {
+      internals.scopeFBO = {};
+    };
+    const syncSpy = vi
+      .spyOn(internals, 'renderImageToFloatSync')
+      .mockImplementation(() => new Float32Array(2 * 2 * 4).fill(0.25));
+    const pboSpy = vi.spyOn(internals, 'ensureScopePBOs').mockImplementation(() => {});
+    return { renderer, syncSpy, pboSpy };
+  }
+
+  function createImage(): IPImage {
+    return new IPImage({ width: 2, height: 2, channels: 4, dataType: 'float32' });
+  }
+
+  it('RFS-SYNC-001: sync: true reads back through the scope FBO without the PBO ring', () => {
+    const { renderer, syncSpy, pboSpy } = createRendererWithFakeGL();
+    const result = renderer.renderForScopes(createImage(), 2, 2, { sync: true });
+
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+    expect(pboSpy).not.toHaveBeenCalled();
+    expect(result?.width).toBe(2);
+    expect(result?.data[0]).toBe(0.25);
+  });
+
+  it('RFS-SYNC-002: default (async) path uses the PBO ring', () => {
+    const { renderer, syncSpy, pboSpy } = createRendererWithFakeGL();
+    // With no PBOs allocated the async path falls back to sync, but only after trying the ring.
+    renderer.renderForScopes(createImage(), 2, 2);
+
+    expect(pboSpy).toHaveBeenCalledTimes(1);
+    expect(syncSpy).toHaveBeenCalledTimes(1);
   });
 });

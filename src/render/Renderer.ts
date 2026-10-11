@@ -1503,18 +1503,21 @@ export class Renderer implements RendererBackend {
    * @param image The IPImage to render
    * @param targetWidth Desired scope analysis width (e.g. 320 for playback, 640 for paused)
    * @param targetHeight Desired scope analysis height (e.g. 180 for playback, 360 for paused)
+   * @param options.sync Read back synchronously instead of through the PBO ring,
+   *   which otherwise returns the previous call's pixels
    * @returns Float32Array in RGBA top-to-bottom row order, or null on failure
    */
   renderForScopes(
     image: IPImage,
     targetWidth: number,
     targetHeight: number,
+    options?: { sync?: boolean },
   ): { data: Float32Array; width: number; height: number } | null {
     const gl = this.gl;
     if (!gl || !this.displayShader || this._contextLost) return null;
 
     // Use dedicated scope FBO/PBO pool (separate from display blit path)
-    const rawPixels = this.renderImageToFloatAsyncForScopes(image, targetWidth, targetHeight);
+    const rawPixels = this.renderImageToFloatAsyncForScopes(image, targetWidth, targetHeight, options?.sync === true);
     if (!rawPixels) return null;
 
     // Convert Uint8Array readback to Float32Array for downstream consumers,
@@ -1556,6 +1559,7 @@ export class Renderer implements RendererBackend {
     image: IPImage,
     width: number,
     height: number,
+    sync = false,
   ): Float32Array | Uint8Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader || this._contextLost) return null;
@@ -1574,6 +1578,12 @@ export class Renderer implements RendererBackend {
     // Ensure scope FBO exists and matches dimensions + format
     this.ensureScopeFBO(width, height, neededFormat);
     if (!this.scopeFBO) return null;
+
+    // Sync readback returns this call's frame instead of the previous one.
+    // The render worker uses it: a stall there does not block the UI thread.
+    if (sync) {
+      return this.renderImageToFloatSync(image, width, height, this.scopeFBO);
+    }
 
     // If dimensions or format changed, invalidate scope PBO state
     if (this.scopePBOWidth !== width || this.scopePBOHeight !== height || this.scopePBOFormat !== neededFormat) {
