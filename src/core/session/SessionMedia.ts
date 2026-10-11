@@ -64,6 +64,12 @@ export interface SessionMediaEvents extends EventMap {
   };
 }
 
+/** fps / out point set by a video load before its frame index was built. */
+interface ProvisionalVideoTiming {
+  fps: number;
+  outPoint: number;
+}
+
 export interface SessionMediaHost {
   /** Get current fps from playback */
   getFps(): number;
@@ -733,7 +739,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
           log.warn('Initial frame preload error:', err);
         });
 
-        this.detectVideoFpsAndDuration(source, videoSourceNode);
+        this.detectVideoFpsAndDuration(source, videoSourceNode, this.captureProvisionalTiming());
       }
 
       this.emit('sourceLoaded', source);
@@ -747,7 +753,20 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
   }
 
-  private async detectVideoFpsAndDuration(source: MediaSource, videoSourceNode: VideoSourceNode): Promise<void> {
+  /**
+   * Snapshot the fps / out point a video load set before its frame index is
+   * built, so the background detection can tell whether they were changed
+   * (by the user or a project restore) in the meantime.
+   */
+  private captureProvisionalTiming(): ProvisionalVideoTiming {
+    return { fps: this._host!.getFps(), outPoint: this._host!.getOutPoint() };
+  }
+
+  private async detectVideoFpsAndDuration(
+    source: MediaSource,
+    videoSourceNode: VideoSourceNode,
+    provisional: ProvisionalVideoTiming,
+  ): Promise<void> {
     try {
       const [detectedFps, actualFrameCount] = await Promise.all([
         videoSourceNode.getDetectedFps(),
@@ -771,19 +790,25 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       const isCurrentSource = this.currentSource === source;
 
       if (isCurrentSource) {
-        if (detectedFps !== null && detectedFps !== this._host!.getFps()) {
-          this._host!.setFps(detectedFps);
-          this._host!.emitFpsChanged(detectedFps);
+        // Only replace the provisional values; never clobber an fps or out
+        // point the user/project set while the index was being built.
+        const fpsUntouched = this._host.getFps() === provisional.fps;
+        if (detectedFps !== null && fpsUntouched && detectedFps !== this._host.getFps()) {
+          this._host.setFps(detectedFps);
+          this._host.emitFpsChanged(detectedFps);
         }
 
         if (actualFrameCount > 0) {
+          const currentOut = this._host.getOutPoint();
+          // Only move an out point that still sits at the estimated end; a
+          // range the user or a restored project set is kept, unless it now
+          // lies past the last real frame.
+          const outUntouched = currentOut === estimatedDuration || currentOut === provisional.outPoint;
+          const nextOut = outUntouched ? actualFrameCount : Math.min(currentOut, actualFrameCount);
           this.emit('durationChanged', actualFrameCount);
-          // Only extend/shrink an out point that still sits at the estimated
-          // end; a range the user or a restored project set is kept.
-          const outPoint = this._host!.getOutPoint();
-          if (outPoint === estimatedDuration || outPoint > actualFrameCount) {
-            this._host!.setOutPoint(actualFrameCount);
-            this._host!.emitInOutChanged(this._host!.getInPoint(), actualFrameCount);
+          if (nextOut !== currentOut) {
+            this._host.setOutPoint(nextOut);
+            this._host.emitInOutChanged(this._host.getInPoint(), nextOut);
           }
         }
       }
@@ -994,7 +1019,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
             const isCurrent = duration > 0 && this.applyAddedSourceRange(source, duration);
 
             if (node.isUsingMediabunny()) {
-              this.detectVideoFpsAndDuration(source, node);
+              this.detectVideoFpsAndDuration(source, node, this.captureProvisionalTiming());
             }
 
             this.emit('sourceLoaded', source);

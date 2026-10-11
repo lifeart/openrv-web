@@ -10,6 +10,7 @@ import {
   Input,
   BlobSource,
   CanvasSink,
+  EncodedPacketSink,
   VideoSampleSink,
   ALL_FORMATS,
   type InputVideoTrack,
@@ -461,11 +462,11 @@ export class MediabunnyFrameExtractor {
   }
 
   /**
-   * Build frame index by iterating through all frames once
-   * This maps frame numbers (1-based) to actual video timestamps
+   * Build frame index by iterating through all packets once (metadata only,
+   * no decoding). This maps frame numbers (1-based) to actual video timestamps.
    */
   private async buildFrameIndex(): Promise<void> {
-    if (this.frameIndexBuilt || !this.canvasSink) {
+    if (this.frameIndexBuilt || !this.canvasSink || !this.videoTrack) {
       return;
     }
 
@@ -475,17 +476,22 @@ export class MediabunnyFrameExtractor {
       return;
     }
 
+    const track = this.videoTrack;
     this.buildingFrameIndex = (async () => {
       this.frameIndex.clear();
 
-      // Collect all frames with their timestamps
-      // IMPORTANT: Videos with B-frames may return frames in DECODE order,
-      // but timestamps are in PRESENTATION order. We need to sort by timestamp
-      // to build a correct frame index.
+      // Collect every frame's presentation timestamp from the container's
+      // packet table. metadataOnly skips loading packet data and nothing is
+      // decoded, so indexing no longer costs a full-resolution decode of the
+      // whole file.
+      // IMPORTANT: Packets are yielded in DECODE order, but timestamps are in
+      // PRESENTATION order (B-frames). We sort by timestamp below to build a
+      // correct frame index.
       const frameTimestamps: number[] = [];
 
-      for await (const wrapped of this.canvasSink!.canvases()) {
-        frameTimestamps.push(wrapped.timestamp);
+      const packetSink = new EncodedPacketSink(track);
+      for await (const packet of packetSink.packets(undefined, undefined, { metadataOnly: true })) {
+        frameTimestamps.push(packet.timestamp);
       }
 
       // Sort timestamps to get presentation order
@@ -526,30 +532,6 @@ export class MediabunnyFrameExtractor {
         if (this.detectedFps) {
           this.metadata.fps = this.detectedFps;
           this.fps = this.detectedFps;
-        }
-      }
-
-      // IMPORTANT: Recreate the CanvasSink after building the frame index
-      // The full iteration leaves the decoder at the end of the video, and some
-      // decoders don't reset properly for subsequent seeks. Creating a fresh
-      // CanvasSink ensures clean state for random access.
-      if (this.videoTrack) {
-        this.canvasSink = new CanvasSink(this.videoTrack, {
-          width: this.videoTrack.displayWidth,
-          height: this.videoTrack.displayHeight,
-          fit: 'contain', // Required when both width and height are provided
-        });
-
-        // Recreate VideoSampleSink for HDR
-        if (this.metadata?.isHDR) {
-          try {
-            this.videoSampleSink = new VideoSampleSink(this.videoTrack);
-          } catch (e) {
-            log.warn('VideoSampleSink recreation failed after frame index build, falling back to SDR:', e);
-            this.videoSampleSink = null;
-            this.metadata.isHDR = false;
-            this.metadata.hdrDowngraded = true;
-          }
         }
       }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SessionMedia, type SessionMediaHost } from './SessionMedia';
 import type { MediaSource } from './Session';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
+import type { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 
 vi.mock('../../utils/media/SequenceLoader', () => ({
   // Simplified stand-in (real one is covered in SequenceLoader.test.ts).
@@ -902,6 +903,106 @@ describe('SessionMedia', () => {
       (media as any)._currentSourceIndex = 0;
 
       expect(media.getSequenceFrameSync(100)).toBeNull();
+    });
+  });
+
+  describe('detectVideoFpsAndDuration (frame index completion)', () => {
+    /** Host whose fps / in / out behave like real playback state. */
+    function makeStatefulHost(state: { fps: number; inPoint: number; outPoint: number }): SessionMediaHost {
+      const h = createMockHost();
+      h.getFps = vi.fn(() => state.fps);
+      h.setFps = vi.fn((v: number) => {
+        state.fps = v;
+      });
+      h.getInPoint = vi.fn(() => state.inPoint);
+      h.setInPoint = vi.fn((v: number) => {
+        state.inPoint = v;
+      });
+      h.getOutPoint = vi.fn(() => state.outPoint);
+      h.setOutPoint = vi.fn((v: number) => {
+        state.outPoint = v;
+      });
+      return h;
+    }
+
+    function makeIndexingNode(detectedFps: number | null, frameCount: number) {
+      let finish!: () => void;
+      const done = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const node = {
+        getDetectedFps: vi.fn(async () => {
+          await done;
+          return detectedFps;
+        }),
+        getActualFrameCount: vi.fn(async () => {
+          await done;
+          return frameCount;
+        }),
+      } as unknown as VideoSourceNode;
+      return { node, finish };
+    }
+
+    async function runDetection(
+      state: { fps: number; inPoint: number; outPoint: number },
+      detected: { fps: number | null; frames: number },
+      duringIndexing: (state: { fps: number; inPoint: number; outPoint: number }) => void,
+    ) {
+      const h = makeStatefulHost(state);
+      media.setHost(h);
+      const source = makeVideoSource({ duration: state.outPoint });
+      media.addSource(source);
+      const { node, finish } = makeIndexingNode(detected.fps, detected.frames);
+      const pending = media['detectVideoFpsAndDuration'](source, node, media['captureProvisionalTiming']());
+      duringIndexing(state);
+      finish();
+      await pending;
+      return { h, source };
+    }
+
+    it('SM-L11-001: updates provisional fps and out point when untouched', async () => {
+      const state = { fps: 24, inPoint: 1, outPoint: 240 };
+      const { h, source } = await runDetection(state, { fps: 25, frames: 250 }, () => {});
+      expect(state.fps).toBe(25);
+      expect(state.outPoint).toBe(250);
+      expect(h.emitFpsChanged).toHaveBeenCalledWith(25);
+      expect(h.emitInOutChanged).toHaveBeenCalledWith(1, 250);
+      expect(source.duration).toBe(250);
+      expect(source.fps).toBe(25);
+    });
+
+    it('SM-L11-002: keeps an fps and out point the user set while indexing', async () => {
+      const state = { fps: 24, inPoint: 1, outPoint: 240 };
+      const { h } = await runDetection(state, { fps: 25, frames: 250 }, (s) => {
+        s.fps = 30;
+        s.inPoint = 10;
+        s.outPoint = 100;
+      });
+      expect(state.fps).toBe(30);
+      expect(state.outPoint).toBe(100);
+      expect(h.setFps).not.toHaveBeenCalled();
+      expect(h.emitFpsChanged).not.toHaveBeenCalled();
+      expect(h.emitInOutChanged).not.toHaveBeenCalled();
+    });
+
+    it('SM-L11-003: clamps a user out point that lies past the real last frame', async () => {
+      const state = { fps: 24, inPoint: 1, outPoint: 240 };
+      const { h } = await runDetection(state, { fps: null, frames: 200 }, (s) => {
+        s.inPoint = 5;
+        s.outPoint = 230;
+      });
+      expect(state.outPoint).toBe(200);
+      expect(h.emitInOutChanged).toHaveBeenCalledWith(5, 200);
+    });
+
+    it('SM-L11-004: does not touch playback state when the source is no longer current', async () => {
+      const state = { fps: 24, inPoint: 1, outPoint: 240 };
+      const { h } = await runDetection(state, { fps: 25, frames: 250 }, () => {
+        media.addSource(makeImageSource());
+      });
+      expect(state.fps).toBe(24);
+      expect(state.outPoint).toBe(240);
+      expect(h.emitInOutChanged).not.toHaveBeenCalled();
     });
   });
 

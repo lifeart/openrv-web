@@ -8,7 +8,7 @@
  * the jsdom/node test environment.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 
 // Mock the mediabunny module (required: WebCodecs APIs unavailable in test env)
 vi.mock('mediabunny', () => {
@@ -34,6 +34,15 @@ vi.mock('mediabunny', () => {
     VideoSampleSink: class MockVideoSampleSink {
       getSample = vi.fn().mockResolvedValue(null);
     },
+    EncodedPacketSink: vi.fn(function MockEncodedPacketSink() {
+      return {
+        packets: vi.fn(() => ({
+          [Symbol.asyncIterator]: async function* () {
+            yield { timestamp: 0, isMetadataOnly: true };
+          },
+        })),
+      };
+    }),
     ALL_FORMATS: [],
   };
 });
@@ -47,7 +56,7 @@ import {
   _probeInternals,
   type FrameResult,
 } from './MediabunnyFrameExtractor';
-import { Input, CanvasSink, VideoSampleSink } from 'mediabunny';
+import { Input, CanvasSink, VideoSampleSink, EncodedPacketSink } from 'mediabunny';
 
 describe('MediabunnyFrameExtractor', () => {
   beforeEach(() => {
@@ -1183,5 +1192,45 @@ describe('MediabunnyFrameExtractor', () => {
 
     // MFE-FPS-002 and MFE-FPS-003 removed: duplicate of initialization state tests
     // (getFrameImageData/getFrameBlob reject-before-load already covered above)
+  });
+
+  // L11: indexing must read packet metadata only, never decode the file.
+  describe('frame index uses packet metadata (L11)', () => {
+    beforeEach(() => {
+      vi.stubGlobal('VideoDecoder', class {});
+      vi.stubGlobal('VideoEncoder', class {});
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('MFE-L11-001: builds the index from metadata-only packets without decoding', async () => {
+      // Decode order with B-frames: I P B B ... (timestamps out of order)
+      const decodeOrder = [0, 3, 1, 2, 4].map((n) => n / 25);
+      const packets = vi.fn(() => ({
+        [Symbol.asyncIterator]: async function* () {
+          for (const timestamp of decodeOrder) {
+            yield { timestamp, isMetadataOnly: true };
+          }
+        },
+      }));
+      vi.mocked(EncodedPacketSink).mockImplementationOnce(function () {
+        return { packets } as never;
+      });
+
+      const extractor = new MediabunnyFrameExtractor();
+      await extractor.load(new File(['test'], 'test.mp4', { type: 'video/mp4' }), 24);
+      const sinkAfterLoad = extractor['canvasSink'] as unknown as { canvases: Mock };
+      expect(await extractor.getActualFrameCount()).toBe(5);
+      expect(await extractor.getDetectedFps()).toBe(25);
+      expect(extractor.isFrameIndexReady()).toBe(true);
+
+      expect(packets).toHaveBeenCalledWith(undefined, undefined, { metadataOnly: true });
+      // No decode pass: canvases() is never iterated and the sink is not recreated.
+      expect(sinkAfterLoad.canvases).not.toHaveBeenCalled();
+      expect(extractor['canvasSink']).toBe(sinkAfterLoad);
+      expect(extractor.getMetadata()?.frameCount).toBe(5);
+    });
   });
 });
