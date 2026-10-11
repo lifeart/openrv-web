@@ -14,6 +14,8 @@ const mockGetGeneralPrefs = vi.fn(() => ({ userName: '' }));
 vi.mock('../../core/PreferencesManager', () => ({
   getCorePreferencesManager: () => ({
     getGeneralPrefs: mockGetGeneralPrefs,
+    setGeneralPrefs: vi.fn(),
+    on: vi.fn(() => () => {}),
   }),
 }));
 
@@ -521,6 +523,15 @@ describe('NotePanel', () => {
       panel.addNoteAtCurrentFrame();
       const notes = session.noteManager.getNotes();
       expect(notes[0]?.author).toBe('User');
+    });
+
+    it('renders an Author field prefilled from preferences (U5)', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: 'Jane Doe' });
+      const fresh = new NotePanel(session);
+      const input = fresh.getElement().querySelector('[data-testid="note-author-name-input"]') as HTMLInputElement;
+      expect(input).toBeTruthy();
+      expect(input.value).toBe('Jane Doe');
+      fresh.dispose();
     });
 
     it('falls back to "User" when userName is whitespace-only', () => {

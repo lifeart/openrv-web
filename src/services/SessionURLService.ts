@@ -21,6 +21,7 @@ import type { AddRepresentationConfig, MediaRepresentation } from '../core/types
 // ---------------------------------------------------------------------------
 
 import { Logger } from '../utils/Logger';
+import { getPreferredUserName } from '../core/UserIdentity';
 
 const logger = new Logger('SessionURLService');
 /** Subset of Session used by URL state management. */
@@ -451,7 +452,7 @@ export class SessionURLService {
         handledServerlessOffer = true;
         const answerToken = await networkSyncManager.joinServerlessRoomFromOfferToken(
           webrtcSignalToken,
-          'User',
+          getPreferredUserName(),
           pinCode ?? signal.pinCode,
         );
         if (answerToken) {
@@ -488,7 +489,7 @@ export class SessionURLService {
     }
 
     if (!handledServerlessOffer && roomCode) {
-      networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
+      networkSyncManager.joinRoom(roomCode.toUpperCase(), getPreferredUserName(), pinCode ?? undefined);
     }
 
     const locationHash = this.deps.getLocationHash();

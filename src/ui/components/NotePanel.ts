@@ -17,10 +17,8 @@ import { type Note, type NoteStatus, type NotePriority } from '../../core/sessio
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
-import { getCorePreferencesManager } from '../../core/PreferencesManager';
-import { Logger } from '../../utils/Logger';
-
-const logger = new Logger('NotePanel');
+import { getPreferredUserName } from '../../core/UserIdentity';
+import { createUserNameField, type UserNameField } from './UserNameField';
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
 import { showAlert } from './shared/Modal';
 import { Z_INDEX } from './shared/theme';
@@ -55,6 +53,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   private announcer: AriaAnnouncer;
   private noteCountEl!: HTMLElement;
   private badgeElement: HTMLElement | null = null;
+  private authorField: UserNameField;
 
   // Bound event handlers for cleanup
   private boundOnNotesChanged: () => void;
@@ -210,6 +209,13 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     `;
     this.buildFilterBar();
 
+    // Author name row (persisted in GeneralPrefs.userName; shared with the
+    // collaboration panel)
+    this.authorField = createUserNameField({ testId: 'note-author-name-input', label: 'Author', inline: true });
+    this.authorField.element.style.padding = '6px 12px';
+    this.authorField.element.style.borderBottom = '1px solid var(--overlay-border)';
+    this.authorField.element.style.background = 'var(--bg-secondary)';
+
     // Entries container
     this.entriesContainer = document.createElement('div');
     this.entriesContainer.className = 'note-entries';
@@ -223,6 +229,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
     this.container.appendChild(this.headerElement);
     this.container.appendChild(this.filterContainer);
+    this.container.appendChild(this.authorField.element);
     this.container.appendChild(this.entriesContainer);
 
     // Subscribe to session events
@@ -985,14 +992,9 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
   /** Get the current author name from preferences, falling back to 'User'. */
   private getAuthorName(): string {
-    try {
-      const name = getCorePreferencesManager().getGeneralPrefs().userName;
-      if (name && name.trim()) return name.trim();
-    } catch (error) {
-      // PreferencesManager not wired — fall back
-      logger.debug('getAuthorName: PreferencesManager unavailable; using default', { error });
-    }
-    return 'User';
+    // Commit a name that is still being typed so the new note picks it up.
+    this.authorField.commit();
+    return getPreferredUserName('User');
   }
 
   private formatTimestamp(iso: string): string {
@@ -1019,6 +1021,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     }
     this.container.removeEventListener('keydown', this.boundOnKeyDown);
     this.subs.dispose();
+    this.authorField.dispose();
     this.announcer.dispose();
     this.removeAllListeners();
   }
