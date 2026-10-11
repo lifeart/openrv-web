@@ -24,6 +24,8 @@ export interface VersionGroup {
   shotName: string; // e.g., 'ABC_0010'
   versions: VersionEntry[]; // Ordered by versionNumber ascending
   activeVersionIndex: number; // Currently displayed version
+  /** Created by autoDetectGroups (re-detected on each load); manual groups omit it. */
+  autoDetected?: boolean;
 }
 
 /**
@@ -311,6 +313,7 @@ export class VersionManager {
         shotName,
         versions,
         activeVersionIndex: versions.length - 1,
+        autoDetected: true,
       };
 
       this._groups.set(group.id, group);

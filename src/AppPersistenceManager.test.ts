@@ -677,4 +677,115 @@ describe('AppPersistenceManager', () => {
       }).not.toThrow();
     });
   });
+  // -----------------------------------------------------------------------
+  // Crash recovery (#396, #397, #399) and project UI sync
+  // -----------------------------------------------------------------------
+  describe('crash recovery', () => {
+    const entry = (id: string) => ({
+      id,
+      name: `Session ${id}`,
+      savedAt: new Date().toISOString(),
+      cleanShutdown: false,
+      version: 1,
+      size: 1024,
+    });
+
+    /** Run init() while emitting recoveryAvailable with the given entries. */
+    async function initWithRecovery(entries: ReturnType<typeof entry>[]): Promise<void> {
+      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
+        const onCalls = fullCtx._autoSaveManager.on.mock.calls as unknown as [string, (...args: any[]) => any][];
+        const handler = onCalls.find((c) => c[0] === 'recoveryAvailable')?.[1];
+        await handler?.({ entries });
+        return true;
+      });
+      await manager.init();
+    }
+
+    it('APM-396a: Discard deletes only the prompted entry', async () => {
+      vi.mocked(showConfirm).mockResolvedValue(false);
+
+      await initWithRecovery([entry('newest'), entry('older')]);
+
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('newest');
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledTimes(1);
+    });
+
+    it('APM-396b: Discard never clears the whole auto-save history', async () => {
+      vi.mocked(showConfirm).mockResolvedValue(false);
+
+      await initWithRecovery([entry('newest'), entry('older')]);
+
+      expect(fullCtx._autoSaveManager.clearAll).not.toHaveBeenCalled();
+    });
+
+    it('APM-397a: a state-only recovery shows an info alert', async () => {
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({ version: 1, name: 'x' } as any);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValueOnce({ loadedMedia: 0, warnings: [] });
+      vi.mocked(showConfirm).mockResolvedValue(true);
+
+      await initWithRecovery([entry('a')]);
+
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('state only'),
+        expect.objectContaining({ type: 'info' }),
+      );
+    });
+
+    it('APM-397b: a recovery with media shows the success alert', async () => {
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({ version: 1, name: 'x' } as any);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValueOnce({ loadedMedia: 2, warnings: [] });
+      vi.mocked(showConfirm).mockResolvedValue(true);
+
+      await initWithRecovery([entry('a')]);
+
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining('2 media file'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    it('APM-100: normal recovery restores and deletes the recovered entry', async () => {
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({ version: 1, name: 'x' } as any);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+
+      await initWithRecovery([entry('a')]);
+
+      expect(SessionSerializer.fromJSON).toHaveBeenCalledTimes(1);
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('a');
+    });
+
+    it('APM-101: a vanished entry shows an error alert', async () => {
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+
+      await initWithRecovery([entry('gone')]);
+
+      expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
+      expect(showAlert).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ type: 'error' }));
+    });
+
+    it('APM-102: the vanished-entry message is user-friendly', async () => {
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+
+      await initWithRecovery([entry('gone')]);
+
+      expect(showAlert).toHaveBeenCalledWith(
+        'Auto-save entry not found. Recovery data may have been lost.',
+        expect.objectContaining({ title: 'Recovery Error' }),
+      );
+    });
+
+    it('APM-L8: opening an .orvproject syncs the UI controls from the restored state', async () => {
+      vi.mocked(SessionSerializer.loadFromFile).mockResolvedValueOnce({
+        version: 1,
+        name: 'p',
+        color: { exposure: 1.5 },
+      } as any);
+
+      await manager.openProject(new File(['{}'], 'shot.orvproject'));
+
+      expect(fullCtx.colorControls.setAdjustments).toHaveBeenCalledWith({ exposure: 1.5 });
+    });
+  });
 });

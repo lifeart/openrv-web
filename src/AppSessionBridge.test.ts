@@ -607,3 +607,32 @@ describe('AppSessionBridge', () => {
     });
   });
 });
+
+describe('AppSessionBridge version auto-detection (review L20)', () => {
+  it('ASB-L20: loading media keeps manual version groups and re-detects auto groups', async () => {
+    const { VersionManager } = await import('./core/session/VersionManager');
+    const ctx = createContext();
+    const versionManager = new VersionManager();
+    Object.assign(ctx._session, { versionManager });
+    ctx._session.allSources = [
+      { name: 'hero_v001.exr' },
+      { name: 'hero_v002.exr' },
+      { name: 'plate_a.exr' },
+      { name: 'plate_b.exr' },
+    ];
+    const manual = versionManager.createGroup('plates', [2, 3]);
+    const bridge = new AppSessionBridge(ctx.context);
+    bridge.bindSessionEvents();
+
+    ctx._session.emit('sourceLoaded', {} as any);
+    ctx._session.allSources.push({ name: 'hero_v003.exr' });
+    ctx._session.emit('sourceLoaded', {} as any);
+
+    const groups = versionManager.getGroups();
+    expect(groups.find((g) => g.id === manual.id)?.versions.map((v) => v.sourceIndex)).toEqual([2, 3]);
+    const auto = groups.filter((g) => g.autoDetected);
+    expect(auto).toHaveLength(1);
+    expect(auto[0]!.versions.map((v) => v.sourceIndex)).toEqual([0, 1, 4]);
+    bridge.dispose();
+  });
+});
