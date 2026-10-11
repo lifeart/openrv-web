@@ -18,6 +18,7 @@ import { MatteOverlaySettingsMenu } from '../../ui/components/MatteOverlaySettin
 import { ReferenceComparisonSettingsMenu } from '../../ui/components/ReferenceComparisonSettingsMenu';
 import { SpotlightOverlaySettingsMenu } from '../../ui/components/SpotlightOverlaySettingsMenu';
 import { PANEL_WIDTHS, Z_INDEX } from '../../ui/components/shared/theme';
+import { ToolbarPopover, type OverflowItem } from '../../ui/components/shared/ToolbarOverflow';
 
 export interface BuildViewTabDeps {
   registry: AppControlRegistry;
@@ -30,6 +31,10 @@ export interface BuildViewTabResult {
   element: HTMLElement;
   convergenceButton: HTMLButtonElement;
   floatingWindowButton: HTMLButtonElement;
+  /** "Overlays" dropdown holding the viewer overlay toggles (panel lives on document.body). */
+  overlaysMenu: ToolbarPopover;
+  /** Controls that may move into the toolbar "More" menu, least important first. */
+  overflowItems: OverflowItem[];
 }
 
 export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
@@ -634,6 +639,32 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   );
   viewContent.appendChild(timelineEditorButton);
 
+  // --- Overlays dropdown: groups the viewer overlay toggles (U2) ---
+  const overlaysMenu = new ToolbarPopover({
+    triggerTestId: 'view-overlays-button',
+    panelTestId: 'view-overlays-menu',
+    icon: 'eye',
+    label: 'Overlays',
+    showCaret: true,
+    title: 'Viewer overlays — spotlight, matte, bug, EXR window, info strip, timecode, FPS',
+    panelLabel: 'Viewer overlays',
+  });
+  viewContent.appendChild(overlaysMenu.trigger);
+  addUnsubscriber(() => overlaysMenu.dispose());
+  const overlayButtons: HTMLButtonElement[] = [];
+  /** Highlight the Overlays trigger while any overlay is enabled. */
+  const updateOverlaysTrigger = () => {
+    setButtonActive(
+      overlaysMenu.trigger,
+      overlayButtons.some((b) => b.classList.contains('active')),
+      'ghost',
+    );
+  };
+  const setOverlayActive = (button: HTMLButtonElement, active: boolean) => {
+    setButtonActive(button, active, 'icon');
+    updateOverlaysTrigger();
+  };
+
   // Spotlight Tool toggle button
   const spotlightButton = ContextToolbar.createIconButton(
     'sun',
@@ -643,7 +674,8 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     { title: 'Spotlight (Shift+Q) — Right-click for settings' },
   );
   spotlightButton.dataset.testid = 'spotlight-toggle-btn';
-  viewContent.appendChild(spotlightButton);
+  overlaysMenu.addItem(spotlightButton, 'Spotlight');
+  overlayButtons.push(spotlightButton);
 
   const spotlightSettingsMenu = new SpotlightOverlaySettingsMenu(viewer.getSpotlightOverlay());
   spotlightButton.addEventListener('contextmenu', (e) => {
@@ -654,7 +686,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(
     viewer.getSpotlightOverlay().on('stateChanged', (state) => {
-      setButtonActive(spotlightButton, state.enabled, 'icon');
+      setOverlayActive(spotlightButton, state.enabled);
     }),
   );
 
@@ -666,7 +698,8 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     { title: 'Toggle matte overlay — Right-click for settings' },
   );
   matteOverlayButton.dataset.testid = 'matte-overlay-toggle-btn';
-  viewContent.appendChild(matteOverlayButton);
+  overlaysMenu.addItem(matteOverlayButton, 'Matte');
+  overlayButtons.push(matteOverlayButton);
 
   const matteOverlaySettingsMenu = new MatteOverlaySettingsMenu(matteOverlay);
   matteOverlayButton.addEventListener('contextmenu', (e) => {
@@ -677,7 +710,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(
     matteOverlay.on('settingsChanged', (settings) => {
-      setButtonActive(matteOverlayButton, settings.show, 'icon');
+      setOverlayActive(matteOverlayButton, settings.show);
     }),
   );
 
@@ -694,7 +727,8 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     { title: 'Toggle bug overlay — Click to configure when empty, right-click for settings' },
   );
   bugOverlayButton.dataset.testid = 'bug-overlay-toggle-btn';
-  viewContent.appendChild(bugOverlayButton);
+  overlaysMenu.addItem(bugOverlayButton, 'Bug overlay');
+  overlayButtons.push(bugOverlayButton);
 
   const bugOverlaySettingsMenu = new BugOverlaySettingsMenu(bugOverlay);
   bugOverlayButton.addEventListener('contextmenu', (e) => {
@@ -705,7 +739,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(
     bugOverlay.on('stateChanged', (state) => {
-      setButtonActive(bugOverlayButton, state.enabled, 'icon');
+      setOverlayActive(bugOverlayButton, state.enabled);
     }),
   );
 
@@ -718,7 +752,8 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     { title: 'Toggle EXR window overlay — Right-click for settings' },
   );
   exrWindowButton.dataset.testid = 'exr-window-overlay-toggle-btn';
-  viewContent.appendChild(exrWindowButton);
+  overlaysMenu.addItem(exrWindowButton, 'EXR data window');
+  overlayButtons.push(exrWindowButton);
 
   const exrWindowSettingsMenu = new EXRWindowOverlaySettingsMenu(exrWindowOverlay);
   exrWindowButton.addEventListener('contextmenu', (e) => {
@@ -729,7 +764,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(
     exrWindowOverlay.on('stateChanged', (state) => {
-      setButtonActive(exrWindowButton, state.enabled, 'icon');
+      setOverlayActive(exrWindowButton, state.enabled);
     }),
   );
 
@@ -742,7 +777,8 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     { title: 'Toggle info strip overlay (F7) — Right-click for settings' },
   );
   infoStripButton.dataset.testid = 'info-strip-toggle-btn';
-  viewContent.appendChild(infoStripButton);
+  overlaysMenu.addItem(infoStripButton, 'Info strip');
+  overlayButtons.push(infoStripButton);
 
   const infoStripSettingsMenu = new InfoStripSettingsMenu(infoStripOverlay);
   infoStripButton.addEventListener('contextmenu', (e) => {
@@ -753,7 +789,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(
     infoStripOverlay.on('stateChanged', (state) => {
-      setButtonActive(infoStripButton, state.enabled, 'icon');
+      setOverlayActive(infoStripButton, state.enabled);
     }),
   );
 
@@ -765,7 +801,8 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     { title: 'Toggle timecode overlay (Alt+Shift+T) — Right-click for settings' },
   );
   timecodeOverlayButton.dataset.testid = 'timecode-overlay-toggle-btn';
-  viewContent.appendChild(timecodeOverlayButton);
+  overlaysMenu.addItem(timecodeOverlayButton, 'Timecode');
+  overlayButtons.push(timecodeOverlayButton);
 
   const timecodeOverlaySettingsMenu = new TimecodeOverlaySettingsMenu(timecodeOverlay);
   timecodeOverlayButton.addEventListener('contextmenu', (e) => {
@@ -776,7 +813,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(
     timecodeOverlay.on('stateChanged', (state) => {
-      setButtonActive(timecodeOverlayButton, state.enabled, 'icon');
+      setOverlayActive(timecodeOverlayButton, state.enabled);
     }),
   );
 
@@ -789,7 +826,8 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     { title: 'Toggle FPS indicator (Ctrl+Shift+F) — Right-click for settings' },
   );
   fpsIndicatorButton.dataset.testid = 'fps-indicator-toggle-btn';
-  viewContent.appendChild(fpsIndicatorButton);
+  overlaysMenu.addItem(fpsIndicatorButton, 'FPS indicator');
+  overlayButtons.push(fpsIndicatorButton);
 
   const fpsIndicatorSettingsMenu = new FPSIndicatorSettingsMenu(fpsIndicator);
   fpsIndicatorButton.addEventListener('contextmenu', (e) => {
@@ -800,9 +838,36 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(
     fpsIndicator.on('stateChanged', (state) => {
-      setButtonActive(fpsIndicatorButton, state.enabled, 'icon');
+      setOverlayActive(fpsIndicatorButton, state.enabled);
     }),
   );
 
-  return { element: viewContent, convergenceButton, floatingWindowButton };
+  updateOverlaysTrigger();
+
+  // Overflow priority for the toolbar "More" menu (least important first).
+  // The zoom control never overflows; stereo per-eye controls stay inline.
+  const overflowItems: OverflowItem[] = [
+    { element: sphericalButton, label: '360 view' },
+    { element: refWipeSlider },
+    { element: refOpacitySlider },
+    { element: refModeContainer },
+    { element: toggleRefButton, label: 'Reference comparison' },
+    { element: captureRefButton, label: 'Capture reference' },
+    { element: registry.layoutControl.render() },
+    { element: convergenceButton, label: 'Convergence measurement' },
+    { element: floatingWindowButton, label: 'Floating window check' },
+    { element: timelineEditorButton, label: 'Timeline editor' },
+    { element: missingFrameContainer },
+    { element: registry.backgroundPatternControl.render() },
+    { element: registry.parControl.render() },
+    { element: registry.stackControl.render() },
+    { element: registry.ghostFrameControl.render() },
+    // Only reached on very narrow screens:
+    { element: overlaysMenu.trigger },
+    { element: registry.stereoControl.render() },
+    { element: registry.compareControl.render() },
+    { element: registry.channelSelect.render() },
+  ];
+
+  return { element: viewContent, convergenceButton, floatingWindowButton, overlaysMenu, overflowItems };
 }

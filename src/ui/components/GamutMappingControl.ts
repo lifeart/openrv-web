@@ -5,6 +5,7 @@ import type { GamutMappingState, GamutMappingMode, GamutIdentifier } from '../..
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
+import { computeAnchoredPanelPosition } from './shared/anchorPosition';
 
 export { DEFAULT_GAMUT_MAPPING_STATE };
 export type { GamutMappingState };
@@ -137,9 +138,10 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     // Reposition on scroll/resize
     this.boundHandleReposition = () => {
       if (this.isPanelOpen) {
-        const rect = this.button.getBoundingClientRect();
-        this.panel.style.top = `${rect.bottom + 4}px`;
-        this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
+        // Falls back to top-right under the header when the button is hidden.
+        const pos = computeAnchoredPanelPosition(this.button, 240, 'right');
+        this.panel.style.top = `${pos.top}px`;
+        this.panel.style.left = `${pos.left}px`;
       }
     };
   }
@@ -372,9 +374,10 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     if (!document.body.contains(this.panel)) {
       document.body.appendChild(this.panel);
     }
-    const rect = this.button.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
+    // Falls back to top-right under the header when the button is hidden.
+    const pos = computeAnchoredPanelPosition(this.button, 240, 'right');
+    this.panel.style.top = `${pos.top}px`;
+    this.panel.style.left = `${pos.left}px`;
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
     this.button.setAttribute('aria-expanded', 'true');

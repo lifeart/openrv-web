@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { createButton, setButtonActive } from './shared/Button';
 import { createPanel, type Panel } from './shared/Panel';
+import { PANEL_WIDTHS } from './shared/theme';
 import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 import { DEFAULT_PERSPECTIVE_PARAMS, isPerspectiveActive } from '../../transform/PerspectiveCorrection';
 
@@ -54,7 +55,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-expanded', 'false');
 
-    this.panel = createPanel({ width: '260px', align: 'right' });
+    this.panel = createPanel({ width: PANEL_WIDTHS.mediumWide, align: 'right' });
     this.panel.element.classList.add('perspective-panel');
     this.panel.element.dataset.testid = 'perspective-panel';
     this.panel.element.setAttribute('role', 'dialog');

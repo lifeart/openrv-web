@@ -61,7 +61,8 @@ const DARK_THEME: ThemeColors = {
 
   textPrimary: '#e0e0e0',
   textSecondary: '#b0b0b0',
-  textMuted: '#666666',
+  // #999999 keeps >= 4.5:1 (WCAG AA) on bgPrimary/bgSecondary/bgTertiary
+  textMuted: '#999999',
 
   borderPrimary: '#444444',
   borderSecondary: '#333333',
@@ -91,7 +92,8 @@ const LIGHT_THEME: ThemeColors = {
 
   textPrimary: '#1a1a1a',
   textSecondary: '#4a4a4a',
-  textMuted: '#999999',
+  // #666666 keeps >= 4.5:1 (WCAG AA) on bgPrimary/bgSecondary/bgTertiary/viewerBg
+  textMuted: '#666666',
 
   borderPrimary: '#d0d0d0',
   borderSecondary: '#e0e0e0',

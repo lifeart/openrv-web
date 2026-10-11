@@ -269,12 +269,69 @@ describe('buildViewTab', () => {
     document.body.innerHTML = '';
   });
 
+  it('U2: groups the viewer overlay toggles under an Overlays dropdown', () => {
+    const deps = createTestDeps();
+    const result = buildViewTab(deps);
+
+    const trigger = result.element.querySelector<HTMLButtonElement>('[data-testid="view-overlays-button"]');
+    expect(trigger).not.toBeNull();
+    expect(trigger!.getAttribute('aria-haspopup')).toBe('true');
+    for (const id of [
+      'spotlight-toggle-btn',
+      'matte-overlay-toggle-btn',
+      'bug-overlay-toggle-btn',
+      'exr-window-overlay-toggle-btn',
+      'info-strip-toggle-btn',
+      'timecode-overlay-toggle-btn',
+      'fps-indicator-toggle-btn',
+    ]) {
+      expect(result.element.querySelector(`[data-testid="${id}"]`)).toBeNull();
+      expect(result.overlaysMenu.panel.querySelector(`[data-testid="${id}"]`)).not.toBeNull();
+    }
+
+    trigger!.click();
+    expect(result.overlaysMenu.isOpen()).toBe(true);
+    expect(document.body.contains(result.overlaysMenu.panel)).toBe(true);
+    expect(trigger!.getAttribute('aria-expanded')).toBe('true');
+    result.overlaysMenu.close();
+  });
+
+  it('U2: highlights the Overlays trigger while any overlay is enabled', () => {
+    const deps = createTestDeps();
+    const result = buildViewTab(deps);
+    const trigger = result.overlaysMenu.trigger;
+    const settings = { show: true, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] };
+
+    deps.matteOverlay.emit('settingsChanged', settings);
+    expect(trigger.classList.contains('active')).toBe(true);
+
+    deps.matteOverlay.emit('settingsChanged', { ...settings, show: false });
+    expect(trigger.classList.contains('active')).toBe(false);
+  });
+
+  it('U2: exposes overflow candidates, least important first', () => {
+    const deps = createTestDeps();
+    const result = buildViewTab(deps);
+    const elements = result.overflowItems.map((i) => i.element);
+    expect(elements.length).toBeGreaterThan(5);
+    // Primary controls (Overlays trigger) only overflow after all secondary ones.
+    const triggerIdx = elements.indexOf(result.overlaysMenu.trigger);
+    const timelineIdx = elements.findIndex((el) => el.dataset.testid === 'timeline-editor-toggle-button');
+    expect(triggerIdx).toBeGreaterThan(timelineIdx);
+    const ids = elements.map((el) => el.dataset.testid);
+    expect(ids[0]).toBe('spherical-projection-btn');
+    expect(ids).toContain('timeline-editor-toggle-button');
+    expect(ids).toContain('missing-frame-mode-select');
+  });
+
   it('adds a matte overlay toggle button wired to the overlay', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
 
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]');
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="matte-overlay-toggle-btn"]',
+    );
     expect(button).not.toBeNull();
 
     button!.click();
@@ -285,7 +342,9 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="matte-overlay-toggle-btn"]',
+    )!;
 
     button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 14, clientY: 26 }));
 
@@ -298,7 +357,9 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="matte-overlay-toggle-btn"]',
+    )!;
 
     expect(button.classList.contains('active')).toBe(false);
 
@@ -316,7 +377,9 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="matte-overlay-toggle-btn"]',
+    )!;
 
     deps.matteOverlay.emit('settingsChanged', {
       show: true,
@@ -342,7 +405,7 @@ describe('buildViewTab', () => {
 
     const result = buildViewTab(deps);
 
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]');
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]');
     expect(button).not.toBeNull();
 
     button!.click();
@@ -358,7 +421,7 @@ describe('buildViewTab', () => {
     await deps.bugOverlay.loadImage('data:image/png;base64,Zm9v');
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]');
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]');
     expect(button).not.toBeNull();
 
     button!.click();
@@ -369,7 +432,9 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="bug-overlay-toggle-btn"]',
+    )!;
 
     button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 22 }));
 
@@ -395,7 +460,7 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="spotlight-toggle-btn"]');
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>('[data-testid="spotlight-toggle-btn"]');
     expect(button).not.toBeNull();
 
     button!.click();
@@ -406,7 +471,7 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="spotlight-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>('[data-testid="spotlight-toggle-btn"]')!;
 
     button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 22, clientY: 34 }));
 
@@ -442,7 +507,7 @@ describe('buildViewTab', () => {
 
     const result = buildViewTab(deps);
 
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="info-strip-toggle-btn"]');
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>('[data-testid="info-strip-toggle-btn"]');
     expect(button).not.toBeNull();
 
     button!.click();
@@ -453,7 +518,9 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="exr-window-overlay-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="exr-window-overlay-toggle-btn"]',
+    )!;
 
     button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 8, clientY: 16 }));
 
@@ -466,7 +533,7 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="info-strip-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>('[data-testid="info-strip-toggle-btn"]')!;
 
     button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 24 }));
 
@@ -480,7 +547,9 @@ describe('buildViewTab', () => {
 
     const result = buildViewTab(deps);
 
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="timecode-overlay-toggle-btn"]');
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="timecode-overlay-toggle-btn"]',
+    );
     expect(button).not.toBeNull();
 
     button!.click();
@@ -491,7 +560,9 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="timecode-overlay-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="timecode-overlay-toggle-btn"]',
+    )!;
 
     button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }));
 
@@ -504,7 +575,9 @@ describe('buildViewTab', () => {
     const deps = createTestDeps();
 
     const result = buildViewTab(deps);
-    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="fps-indicator-toggle-btn"]')!;
+    const button = result.overlaysMenu.panel.querySelector<HTMLButtonElement>(
+      '[data-testid="fps-indicator-toggle-btn"]',
+    )!;
 
     button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 30 }));
 

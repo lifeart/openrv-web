@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVideoFile, getInfoPanelState, getSessionState, waitForTestHelper } from './fixtures';
+import { loadVideoFile, getInfoPanelState, getSessionState, waitForTestHelper, revealToolbarControl } from './fixtures';
 
 type InfoPanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -175,7 +175,9 @@ test.describe('Info Panel UI Controls', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    // Look for info panel toggle button (icon-only button)
+    // Look for info panel toggle button (icon-only button). On narrow
+    // viewports the header panel toggles may sit in the "More" menu.
+    await revealToolbarControl(page, '[data-testid="info-panel-toggle"]');
     const control = page.locator('[data-testid="info-panel-toggle"]');
     await expect(control).toBeVisible();
   });

@@ -427,7 +427,7 @@ describe('AppControlRegistry', () => {
     }
 
     function createSetupDeps() {
-      const contextToolbar = { setTabContent: vi.fn() } as any;
+      const contextToolbar = { setTabContent: vi.fn(), setTabOverflowItems: vi.fn() } as any;
       const viewer = {
         getSafeAreasOverlay: vi.fn(() => ({})),
         getFalseColor: vi.fn(() => createMockOverlay()),

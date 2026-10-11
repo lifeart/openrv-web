@@ -57,8 +57,11 @@ export const PANEL_WIDTHS = {
   panel: '300px',
   panelWide: '320px',
   wide: '340px',
+  wideMedium: '360px',
+  extraWide: '380px',
   dialog: '400px',
   dialogWide: '420px',
+  dialogExtraWide: '500px',
 } as const;
 
 // Box-shadow tokens

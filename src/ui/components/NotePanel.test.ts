@@ -925,6 +925,28 @@ describe('NotePanel', () => {
 
       expect(mockExclusive.hide).not.toHaveBeenCalled();
     });
+
+    it('U9: show() closes every registered exclusive panel, not only the last one', () => {
+      const markers = { isVisible: vi.fn().mockReturnValue(true), hide: vi.fn() };
+      const history = { isVisible: vi.fn().mockReturnValue(true), hide: vi.fn() };
+      panel.setExclusiveWith(markers);
+      panel.setExclusiveWith(history);
+
+      panel.show();
+
+      expect(markers.hide).toHaveBeenCalledTimes(1);
+      expect(history.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('U9: registering the same partner twice hides it only once', () => {
+      const markers = { isVisible: vi.fn().mockReturnValue(true), hide: vi.fn() };
+      panel.setExclusiveWith(markers);
+      panel.setExclusiveWith(markers);
+
+      panel.show();
+
+      expect(markers.hide).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('priority and category display', () => {

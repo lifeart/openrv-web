@@ -84,6 +84,11 @@ export interface GeneralPrefs {
   autoPlayOnLoad: boolean;
   /** Deferred — no welcome dialog component exists yet. */
   showWelcome: boolean;
+  /**
+   * When true, unfinished features (External Presentation window, Quad View)
+   * are shown in the UI. Off by default. Toggled from the Help menu.
+   */
+  experimentalFeatures: boolean;
 }
 
 export interface PreferencesExportPayload {
@@ -138,6 +143,7 @@ export const DEFAULT_GENERAL_PREFS: GeneralPrefs = {
   defaultFps: 24,
   autoPlayOnLoad: false,
   showWelcome: true,
+  experimentalFeatures: false,
 };
 
 export interface FPSIndicatorPrefs {
@@ -238,6 +244,9 @@ function sanitizeGeneralPrefs(value: unknown): GeneralPrefs {
   }
   if (typeof value.showWelcome === 'boolean') {
     out.showWelcome = value.showWelcome;
+  }
+  if (typeof value.experimentalFeatures === 'boolean') {
+    out.experimentalFeatures = value.experimentalFeatures;
   }
 
   return out;

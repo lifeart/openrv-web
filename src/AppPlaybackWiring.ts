@@ -461,7 +461,11 @@ async function handleSequenceExport(
   // closable: false — only the Cancel button can dismiss the dialog. This
   // preserves the legacy behavior where Escape did nothing during export and
   // ensures the export task can drive teardown explicitly when it finishes.
-  const modalHandle = showModal(progressBody, { title: 'Export Frames', closable: false, width: '360px' });
+  const modalHandle = showModal(progressBody, {
+    title: 'Export Frames',
+    closable: false,
+    width: PANEL_WIDTHS.wideMedium,
+  });
 
   // Store current frame to restore later
   const originalFrame = session.currentFrame;

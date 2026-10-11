@@ -13,7 +13,7 @@ import type { ColorPrimaries, TransferFunction } from '../../core/image/Image';
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { createButton } from './shared/Button';
 import { createPanel, type Panel } from './shared/Panel';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export interface LUTPipelinePanelEvents extends EventMap {
@@ -54,7 +54,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
     // Create panel container via shared createPanel for consistent z-index
     // and chrome. The panel docks fixed at right:8 top:60 (no anchor) so we
     // override position-related styles after construction.
-    this.panelHandle = createPanel({ width: '320px' });
+    this.panelHandle = createPanel({ width: PANEL_WIDTHS.panelWide });
     this.panel = this.panelHandle.element;
     this.panel.dataset.testid = 'lut-pipeline-panel';
     this.panel.style.right = '8px';
@@ -531,7 +531,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
       border-radius: 6px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
       z-index: ${Z_INDEX.dropdown};
-      width: 280px;
+      width: ${PANEL_WIDTHS.standard};
       font-size: 11px;
       color: var(--text-primary, #eee);
       line-height: 1.5;

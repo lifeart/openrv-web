@@ -5,6 +5,7 @@ import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/u
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
 import { DEFAULT_STABILIZATION_PARAMS } from '../../filters/StabilizeMotion';
 import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
+import { computeAnchoredPanelPosition } from './shared/anchorPosition';
 
 export { DEFAULT_STABILIZATION_PARAMS };
 export type { StabilizationParams };
@@ -310,9 +311,10 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     if (!document.body.contains(this.panel)) {
       document.body.appendChild(this.panel);
     }
-    const rect = this.button.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 280)}px`;
+    // Falls back to top-right under the header when the button is hidden.
+    const pos = computeAnchoredPanelPosition(this.button, 280, 'right');
+    this.panel.style.top = `${pos.top}px`;
+    this.panel.style.left = `${pos.left}px`;
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
     this.button.setAttribute('aria-expanded', 'true');

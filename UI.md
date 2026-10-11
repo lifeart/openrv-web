@@ -1134,6 +1134,13 @@ The View tab uses a grouped layout pattern to reduce visual clutter and horizont
 - `CompareControl` shows active modes: "H-Wipe + B"
 - Icon-only buttons highlight with accent color when enabled
 
+### Overlays Dropdown and "More" Overflow (`shared/ToolbarOverflow.ts`)
+
+- The View tab viewer-overlay toggles (spotlight, matte, bug, EXR window, info strip, timecode, FPS) live in an **Overlays ▾** `ToolbarPopover` (`data-testid="view-overlays-button"` / `"view-overlays-menu"`). The trigger is highlighted while any overlay is on. The original button test ids are unchanged.
+- The header and the View tab use `ToolbarOverflowController`: a ResizeObserver moves registered low-priority controls (live elements, not clones) into a **⋯ More** popover only when the bar does not fit (`header-overflow-button` / `context-toolbar-overflow-button`). Play controls and Open media are never registered, so they never move.
+- To make a new header/toolbar control overflowable, add it to the priority list (`HeaderBar.createOverflowMenu()` or `buildViewTab()`'s `overflowItems`), least important first.
+- E2E: use `openViewOverlaysMenu(page)` / `revealToolbarControl(page, selector)` from `e2e/fixtures.ts` before clicking controls that may sit inside a popover.
+
 ---
 
 ## Notes

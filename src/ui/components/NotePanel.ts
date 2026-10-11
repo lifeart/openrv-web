@@ -21,7 +21,7 @@ import { getPreferredUserName } from '../../core/UserIdentity';
 import { createUserNameField, type UserNameField } from './UserNameField';
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
 import { showAlert } from './shared/Modal';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 export interface NotePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -49,7 +49,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   private lastHighlightedFrame: number | null = null;
   private focusedNoteIndex = -1;
   private filterContainer: HTMLElement;
-  private exclusivePanel: ExclusivePanelRef | null = null;
+  private readonly exclusivePanels = new Set<ExclusivePanelRef>();
   private announcer: AriaAnnouncer;
   private noteCountEl!: HTMLElement;
   private badgeElement: HTMLElement | null = null;
@@ -83,7 +83,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       position: absolute;
       right: 10px;
       top: 60px;
-      width: 340px;
+      width: ${PANEL_WIDTHS.wide};
       max-height: 500px;
       background: var(--overlay-bg);
       border: 1px solid var(--overlay-border);
@@ -258,15 +258,20 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     return this.container;
   }
 
-  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  /**
+   * Register another panel for mutual exclusion - opening this panel will close it.
+   * May be called multiple times; every registered partner is closed on show().
+   */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanel = panel;
+    if (panel !== this) this.exclusivePanels.add(panel);
   }
 
   show(): void {
-    // Close exclusive panel if it is open
-    if (this.exclusivePanel?.isVisible()) {
-      this.exclusivePanel.hide();
+    // Close exclusive panels if they are open
+    for (const ep of this.exclusivePanels) {
+      if (ep.isVisible()) {
+        ep.hide();
+      }
     }
     this.visible = true;
     this.container.style.display = 'flex';

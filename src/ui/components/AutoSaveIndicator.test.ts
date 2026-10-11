@@ -186,7 +186,7 @@ describe('AutoSaveIndicator', () => {
       indicator.setStatus('disabled');
       const element = indicator.render();
       const icon = element.querySelector('[data-testid="autosave-icon"]') as HTMLElement;
-      expect(icon.style.color).toBe('var(--text-muted, #666)');
+      expect(icon.style.color).toBe('var(--text-muted, #999)');
     });
 
     it('AUTOSAVE-UI-017: saving status has pulse animation', () => {
