@@ -50,8 +50,13 @@ vi.mock('./ui/components/shared/Modal', () => ({
   showConfirm: vi.fn(async () => false),
 }));
 
+vi.mock('./ui/components/shared/Toast', () => ({
+  showToast: vi.fn(),
+}));
+
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
+import { showToast } from './ui/components/shared/Toast';
 
 // ---------------------------------------------------------------------------
 // Context factory
@@ -333,7 +338,7 @@ describe('AppPersistenceManager', () => {
     it('APM-041: createQuickSnapshot shows success alert', async () => {
       await manager.createQuickSnapshot();
 
-      expect(showAlert).toHaveBeenCalledWith(
+      expect(showToast).toHaveBeenCalledWith(
         expect.stringContaining('Snapshot'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -366,7 +371,7 @@ describe('AppPersistenceManager', () => {
         expect.anything(),
         undefined,
       );
-      expect(showAlert).toHaveBeenCalledWith(
+      expect(showToast).toHaveBeenCalledWith(
         expect.stringContaining('My Named Snapshot'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -481,7 +486,7 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx.cropControl.setState).toHaveBeenCalledWith(mockState.crop);
       expect(fullCtx.lensControl.setParams).toHaveBeenCalledWith(mockState.lens);
       expect(fullCtx.snapshotPanel.hide).toHaveBeenCalledTimes(1);
-      expect(showAlert).toHaveBeenCalledWith(
+      expect(showToast).toHaveBeenCalledWith(
         expect.stringContaining('My Snapshot'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -584,7 +589,7 @@ describe('AppPersistenceManager', () => {
       await manager.openProject(file);
 
       expect(fullCtx.session.loadEDL).toHaveBeenCalledWith('edl-text');
-      expect(showAlert).toHaveBeenCalledWith(
+      expect(showToast).toHaveBeenCalledWith(
         expect.stringContaining('EDL loaded'),
         expect.objectContaining({ type: 'success' }),
       );
