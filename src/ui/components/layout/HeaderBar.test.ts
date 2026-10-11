@@ -228,6 +228,18 @@ describe('HeaderBar', () => {
       expect(loopBtn).not.toBeUndefined();
     });
 
+    it('HDR-U035b: loop and save tooltips name the real shortcuts from the registry', () => {
+      const el = headerBar.render();
+      const buttons = Array.from(el.querySelectorAll('button'));
+      const loopBtn = buttons.find((btn) => btn.title?.includes('loop mode'))!;
+      // timeline.cycleLoopMode is Ctrl+L (bare L is playback.faster)
+      expect(loopBtn.title).toContain('(Ctrl+L)');
+      expect(loopBtn.title).not.toContain('(L)');
+      const saveBtn = buttons.find((btn) => btn.title?.startsWith('Save project'))!;
+      // Ctrl+Shift+S is "create snapshot", not save project
+      expect(saveBtn.title).not.toContain('Ctrl+Shift+S');
+    });
+
     it('HDR-U036: has direction button', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
@@ -352,19 +364,19 @@ describe('HeaderBar', () => {
       const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
 
       // Default mode is loop
-      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (Ctrl+L)');
 
       // Cycle to pingpong
       loopBtn.click();
-      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (Ctrl+L)');
 
       // Cycle to once
       loopBtn.click();
-      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (Ctrl+L)');
 
       // Cycle back to loop
       loopBtn.click();
-      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (Ctrl+L)');
     });
 
     it('HDR-U053: loop button tooltip updates on loopModeChanged event', () => {
@@ -374,15 +386,15 @@ describe('HeaderBar', () => {
 
       session.loopMode = 'pingpong';
       session.emit('loopModeChanged', 'pingpong');
-      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (Ctrl+L)');
 
       session.loopMode = 'once';
       session.emit('loopModeChanged', 'once');
-      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (Ctrl+L)');
 
       session.loopMode = 'loop';
       session.emit('loopModeChanged', 'loop');
-      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (Ctrl+L)');
     });
   });
 

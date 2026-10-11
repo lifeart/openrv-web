@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { shortcutTooltip } from '../../utils/input/KeyBindings';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
@@ -151,7 +152,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     // Button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'network-sync-button';
-    this.button.title = 'Network Sync (Shift+N)';
+    this.button.title = shortcutTooltip('Network Sync', 'network.togglePanel');
     this.button.setAttribute('aria-haspopup', 'true');
     this.button.setAttribute('aria-expanded', 'false');
     this.button.setAttribute('aria-label', 'Network Sync');

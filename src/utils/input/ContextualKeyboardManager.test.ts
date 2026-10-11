@@ -513,4 +513,28 @@ describe('ContextualKeyboardManager', () => {
       expect(fitHandler).not.toHaveBeenCalled();
     });
   });
+
+  describe('user overrides', () => {
+    it('CKM-OVR-001: overridden actions no longer resolve on their built-in combo', () => {
+      const overridden = new Set<string>();
+      keyManager.setOverriddenActionCheck((action) => overridden.has(action));
+      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'global');
+      keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
+
+      expect(keyManager.resolve({ code: 'KeyR' })?.action).toBe('timeline.resetInOut');
+      overridden.add('timeline.resetInOut');
+      expect(keyManager.resolve({ code: 'KeyR' })).toBeNull();
+
+      contextManager.setContext('paint');
+      expect(keyManager.resolve({ code: 'KeyR' })?.action).toBe('paint.rectangle');
+      overridden.add('paint.rectangle');
+      expect(keyManager.resolve({ code: 'KeyR' })).toBeNull();
+    });
+
+    it('CKM-OVR-002: getActiveContext reflects the context manager', () => {
+      expect(keyManager.getActiveContext()).toBe('global');
+      contextManager.setContext('transform');
+      expect(keyManager.getActiveContext()).toBe('transform');
+    });
+  });
 });

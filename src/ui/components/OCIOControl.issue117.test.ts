@@ -36,12 +36,12 @@ describe('OCIOControl - issue #117', () => {
     control.dispose();
   });
 
-  it('toggle button tooltip shows correct shortcut (O)', () => {
+  it('toggle button tooltip shows the registered shortcut (Shift+O)', () => {
     const el = control.render();
     const button = el.querySelector('[data-testid="ocio-panel-button"]') as HTMLButtonElement;
     expect(button).not.toBeNull();
-    expect(button.title).toContain('(O)');
-    // Should NOT contain Shift+O
-    expect(button.title).not.toContain('Shift+O');
+    // panel.ocio is bound to Shift+O; bare O sets the out point.
+    expect(button.title).toContain('(Shift+O)');
+    expect(button.title).not.toContain('(O)');
   });
 });

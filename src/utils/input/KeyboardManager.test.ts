@@ -4,8 +4,10 @@
  * Tests for the centralized keyboard shortcut management system.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { KeyboardManager, type KeyCombination } from './KeyboardManager';
+import { ActiveContextManager } from './ActiveContextManager';
+import { ContextualKeyboardManager } from './ContextualKeyboardManager';
 
 describe('KeyboardManager', () => {
   let keyboardManager: KeyboardManager;
@@ -305,6 +307,7 @@ describe('KeyboardManager', () => {
 
       const mockContextualManager = {
         resolve: vi.fn().mockReturnValue({ handler: contextualHandler, description: 'Context R' }),
+        getActiveContext: () => 'global',
       };
 
       keyboardManager.setContextualManager(mockContextualManager as any);
@@ -1199,5 +1202,201 @@ describe('KeyboardManager', () => {
       keyboardManager['handleKeydown'](eventOnBody);
       expect(mockHandler).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('KeyboardManager double-fire / precedence fixes', () => {
+  let km: KeyboardManager;
+  let contexts: ActiveContextManager;
+  let contextual: ContextualKeyboardManager;
+  // Listen on an isolated root so managers leaked onto `document` by the
+  // legacy tests above cannot interfere.
+  let root: HTMLElement;
+
+  beforeEach(() => {
+    root = document.createElement('div');
+    document.body.appendChild(root);
+    km = new KeyboardManager();
+    contexts = new ActiveContextManager();
+    contextual = new ContextualKeyboardManager(contexts);
+    km.setContextualManager(contextual);
+    km.attach(root);
+    // Keep the events from bubbling to listeners leaked onto `document`.
+    root.addEventListener('keydown', (e) => e.stopPropagation());
+  });
+
+  afterEach(() => {
+    km.detach(root);
+    root.remove();
+  });
+
+  function press(target: EventTarget, code: string, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', { code, key, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  function mount<T extends HTMLElement>(el: T, parent: HTMLElement = root): T {
+    parent.appendChild(el);
+    return el;
+  }
+
+  it('KBM-DP-001: skips events already defaultPrevented by a focused widget', () => {
+    const step = vi.fn();
+    km.register({ code: 'ArrowRight' }, step);
+    const list = mount(document.createElement('div'));
+    list.tabIndex = 0;
+    const listHandler = (e: KeyboardEvent) => e.preventDefault();
+    list.addEventListener('keydown', listHandler);
+
+    press(list, 'ArrowRight', 'ArrowRight');
+    expect(step).not.toHaveBeenCalled();
+
+    press(root, 'ArrowRight', 'ArrowRight');
+    expect(step).toHaveBeenCalledTimes(1);
+  });
+
+  it('KBM-DP-002: preventDefaults keys it handles', () => {
+    km.register({ code: 'KeyF' }, vi.fn());
+    const handled = press(root, 'KeyF', 'f');
+    expect(handled.defaultPrevented).toBe(true);
+    const unhandled = press(root, 'KeyQ', 'q');
+    expect(unhandled.defaultPrevented).toBe(false);
+  });
+
+  it('KBM-DP-003: skips events inside an open modal dialog', () => {
+    const handler = vi.fn();
+    km.register({ code: 'KeyF' }, handler);
+    const dialog = mount(document.createElement('div'));
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    const btn = mount(document.createElement('button'), dialog);
+
+    press(btn, 'KeyF', 'f');
+    expect(handler).not.toHaveBeenCalled();
+
+    // A non-modal dialog (e.g. the cheat sheet) does not block shortcuts
+    dialog.removeAttribute('aria-modal');
+    press(btn, 'KeyF', 'f');
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('KBM-DP-004: Space on a mouse-focused button plays instead of activating it', () => {
+    const toggle = vi.fn();
+    km.register({ code: 'Space' }, toggle);
+    const btn = mount(document.createElement('button'));
+    btn.focus();
+    // Simulate focus from a mouse click: browsers do not match :focus-visible
+    const matches = btn.matches.bind(btn);
+    vi.spyOn(btn, 'matches').mockImplementation((sel: string) => (sel === ':focus-visible' ? false : matches(sel)));
+
+    const ev = press(btn, 'Space', ' ');
+    expect(toggle).toHaveBeenCalledTimes(1);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(document.activeElement).not.toBe(btn);
+  });
+
+  it('KBM-DP-005: Space / Enter on a keyboard-focused button activate the button', () => {
+    const toggle = vi.fn();
+    km.register({ code: 'Space' }, toggle);
+    km.register({ code: 'Enter' }, toggle);
+    const btn = mount(document.createElement('button'));
+    btn.focus(); // jsdom: programmatic focus matches :focus-visible
+
+    const space = press(btn, 'Space', ' ');
+    const enter = press(btn, 'Enter', 'Enter');
+    expect(toggle).not.toHaveBeenCalled();
+    expect(space.defaultPrevented).toBe(false);
+    expect(enter.defaultPrevented).toBe(false);
+  });
+
+  it('KBM-DP-006: arrow keys inside listbox / menu widgets are left to the widget', () => {
+    const step = vi.fn();
+    km.register({ code: 'ArrowDown' }, step);
+    for (const role of ['listbox', 'menu', 'tree', 'grid']) {
+      const widget = mount(document.createElement('div'));
+      widget.setAttribute('role', role);
+      const item = mount(document.createElement('div'), widget);
+      item.tabIndex = 0;
+      press(item, 'ArrowDown', 'ArrowDown');
+    }
+    expect(step).not.toHaveBeenCalled();
+  });
+
+  it('KBM-DP-007: range sliders keep their arrow keys', () => {
+    const step = vi.fn();
+    km.register({ code: 'ArrowRight' }, step);
+    const range = mount(document.createElement('input'));
+    range.type = 'range';
+    press(range, 'ArrowRight', 'ArrowRight');
+    expect(step).not.toHaveBeenCalled();
+  });
+
+  it('KBM-DP-008: a mouse-clicked tab does not swallow arrow keys', () => {
+    const step = vi.fn();
+    km.register({ code: 'ArrowRight' }, step);
+    const tablist = mount(document.createElement('div'));
+    tablist.setAttribute('role', 'tablist');
+    const tab = mount(document.createElement('button'), tablist);
+    tab.setAttribute('role', 'tab');
+    // Not focused / not focus-visible -> treated as pointer interaction
+    press(tab, 'ArrowRight', 'ArrowRight');
+    expect(step).toHaveBeenCalledTimes(1);
+
+    tab.focus(); // keyboard focus (jsdom matches :focus-visible)
+    press(tab, 'ArrowRight', 'ArrowRight');
+    expect(step).toHaveBeenCalledTimes(1);
+  });
+
+  it('KBM-CTX-001: context-scoped bindings only fire in their context', () => {
+    const pen = vi.fn();
+    km.register({ code: 'KeyP' }, pen, 'Pen', { context: 'paint' });
+
+    contexts.setContext('viewer');
+    expect(press(root, 'KeyP', 'p').defaultPrevented).toBe(false);
+    expect(pen).not.toHaveBeenCalled();
+
+    contexts.setContext('paint');
+    press(root, 'KeyP', 'p');
+    expect(pen).toHaveBeenCalledTimes(1);
+  });
+
+  it('KBM-CTX-002: scoped and global bindings on the same key coexist', () => {
+    const global = vi.fn();
+    const paint = vi.fn();
+    km.register({ code: 'KeyB' }, global);
+    km.register({ code: 'KeyB' }, paint, 'Brush', { context: 'paint' });
+
+    press(root, 'KeyB', 'b');
+    expect(global).toHaveBeenCalledTimes(1);
+    contexts.setContext('paint');
+    press(root, 'KeyB', 'b');
+    expect(paint).toHaveBeenCalledTimes(1);
+    expect(global).toHaveBeenCalledTimes(1);
+
+    km.unregister({ code: 'KeyB' });
+    expect(km.isRegistered({ code: 'KeyB' })).toBe(false);
+  });
+
+  it('KBM-PRI-001: priority (user custom) bindings beat the contextual resolver', () => {
+    const builtIn = vi.fn();
+    const custom = vi.fn();
+    contextual.register('timeline.setOutPoint', { code: 'KeyO' }, builtIn, 'global');
+    km.register({ code: 'KeyO' }, custom, 'Custom', { priority: true });
+
+    press(root, 'KeyO', 'o');
+    expect(custom).toHaveBeenCalledTimes(1);
+    expect(builtIn).not.toHaveBeenCalled();
+  });
+
+  it('KBM-PRI-002: non-priority bindings still yield to the contextual resolver', () => {
+    const builtIn = vi.fn();
+    const plain = vi.fn();
+    contextual.register('timeline.setOutPoint', { code: 'KeyO' }, builtIn, 'global');
+    km.register({ code: 'KeyO' }, plain);
+
+    press(root, 'KeyO', 'o');
+    expect(builtIn).toHaveBeenCalledTimes(1);
+    expect(plain).not.toHaveBeenCalled();
   });
 });

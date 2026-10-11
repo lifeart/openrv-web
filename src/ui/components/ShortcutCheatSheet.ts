@@ -11,6 +11,135 @@
 
 import { buildActionGroups, type ShortcutEditorManager } from './ShortcutEditor';
 import { outsideClickRegistry } from '../../utils/ui/OutsideClickRegistry';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
+/** Id of the shared <style> element holding the cheat sheet rules. */
+export const CHEATSHEET_STYLE_ID = 'shortcut-cheatsheet-styles';
+
+/**
+ * Build the cheat sheet stylesheet. Colors come from theme CSS variables and
+ * stacking / widths from the shared theme tokens so the overlay follows the
+ * active theme and sits on the modal layer.
+ */
+export function buildCheatSheetStyles(): string {
+  return `
+.cheatsheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: ${Z_INDEX.modal};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: var(--overlay-bg, rgba(0, 0, 0, 0.75));
+  font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+}
+.cheatsheet-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1200px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: ${SHADOWS.modal};
+  overflow: hidden;
+}
+.cheatsheet-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-secondary);
+  flex-shrink: 0;
+}
+.cheatsheet-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.cheatsheet-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.cheatsheet-columns {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  column-width: ${PANEL_WIDTHS.standard};
+  column-gap: 24px;
+}
+.cheatsheet-group {
+  break-inside: avoid;
+  margin: 0 0 14px;
+}
+.cheatsheet-group-header {
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  border-bottom: 1px solid var(--border-secondary);
+}
+.cheatsheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cheatsheet-description {
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cheatsheet-combo {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: var(--font-mono, 'SF Mono', 'Fira Code', monospace);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cheatsheet-customized .cheatsheet-combo {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.cheatsheet-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+`;
+}
+
+function ensureCheatSheetStyles(): void {
+  if (typeof document === 'undefined' || document.getElementById(CHEATSHEET_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = CHEATSHEET_STYLE_ID;
+  style.textContent = buildCheatSheetStyles();
+  document.head.appendChild(style);
+}
 
 // ---------------------------------------------------------------------------
 // ShortcutCheatSheet DOM component
@@ -34,6 +163,7 @@ export class ShortcutCheatSheet {
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-label', 'Keyboard shortcuts');
     this.overlay.style.display = 'none';
+    ensureCheatSheetStyles();
     this.container.appendChild(this.overlay);
   }
 
@@ -43,13 +173,19 @@ export class ShortcutCheatSheet {
 
   show(): void {
     if (this.disposed) return;
-    this.render();
     this.overlay.style.display = '';
+    this.render();
+  }
 
-    // The cheat sheet is dismissed when the user clicks the overlay backdrop
-    // (anywhere outside the columns content). Register the inner content as
-    // the "inside" element so clicks on it do not dismiss.
-    const content = this.overlay.querySelector<HTMLElement>('.cheatsheet-columns');
+  /**
+   * The cheat sheet is dismissed when the user clicks the overlay backdrop
+   * (anywhere outside the panel). Register the current panel as the "inside"
+   * element so clicks on it do not dismiss. Re-run after every render because
+   * rendering replaces the panel element.
+   */
+  private registerDismiss(): void {
+    this.deregisterDismiss?.();
+    const content = this.overlay.querySelector<HTMLElement>('.cheatsheet-panel');
     this.deregisterDismiss = outsideClickRegistry.register({
       elements: [content],
       onDismiss: () => this.hide(),
@@ -123,6 +259,21 @@ export class ShortcutCheatSheet {
   private render(): void {
     this.overlay.innerHTML = '';
 
+    const panel = document.createElement('div');
+    panel.className = 'cheatsheet-panel';
+
+    const headerBar = document.createElement('div');
+    headerBar.className = 'cheatsheet-header';
+    const title = document.createElement('h2');
+    title.className = 'cheatsheet-title';
+    title.textContent = 'Keyboard Shortcuts';
+    const hint = document.createElement('span');
+    hint.className = 'cheatsheet-hint';
+    hint.textContent = 'Press ? or Esc to close';
+    headerBar.appendChild(title);
+    headerBar.appendChild(hint);
+    panel.appendChild(headerBar);
+
     const columnsWrapper = document.createElement('div');
     columnsWrapper.className = 'cheatsheet-columns';
 
@@ -181,7 +332,19 @@ export class ShortcutCheatSheet {
       columnsWrapper.appendChild(section);
     }
 
-    this.overlay.appendChild(columnsWrapper);
+    if (columnsWrapper.childElementCount === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'cheatsheet-empty';
+      empty.textContent = 'No matching shortcuts';
+      columnsWrapper.appendChild(empty);
+    }
+
+    panel.appendChild(columnsWrapper);
+    this.overlay.appendChild(panel);
+
+    if (this.isVisible()) {
+      this.registerDismiss();
+    }
   }
 
   // -------------------------------------------------------------------------

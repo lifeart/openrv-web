@@ -14,12 +14,99 @@ export interface KeyCombination {
 }
 
 import type { ContextualKeyboardManager } from './ContextualKeyboardManager';
+import type { BindingContext } from './ActiveContextManager';
+import { probe } from '../probe';
 
 export interface KeyBinding {
   combo: KeyCombination;
   handler: () => void;
   description?: string;
   enabled?: boolean;
+  /**
+   * Context in which the binding is active. Bindings scoped to a non-global
+   * context only fire while that context is active (e.g. paint tools only on
+   * the Annotate tab). Defaults to 'global'.
+   */
+  context?: BindingContext;
+  /**
+   * User-customized binding. Priority bindings are dispatched before the
+   * contextual resolver so a user rebind is never shadowed by a built-in
+   * context-dependent default on the same key.
+   */
+  priority?: boolean;
+}
+
+/** Extra registration options. */
+export interface KeyBindingOptions {
+  context?: BindingContext;
+  priority?: boolean;
+}
+
+/**
+ * ARIA roles whose widgets own navigation/activation keys (arrows, Home/End,
+ * Space, Enter, PageUp/PageDown). When focus is inside one of these, those keys
+ * are left to the widget instead of being treated as app shortcuts.
+ */
+const NAVIGATION_WIDGET_ROLES = new Set([
+  'listbox',
+  'menu',
+  'menubar',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'option',
+  'tree',
+  'treeitem',
+  'grid',
+  'gridcell',
+  'radiogroup',
+  'radio',
+  'tablist',
+  'tab',
+  'slider',
+  'spinbutton',
+  'combobox',
+]);
+
+const NAVIGATION_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+]);
+
+/**
+ * Widget roles that behave like plain buttons when clicked with the mouse:
+ * they only own navigation keys while keyboard-focused.
+ */
+const POINTER_RELEASED_ROLES = new Set(['tablist', 'tab', 'radiogroup', 'radio']);
+
+/** Selector matching an open modal dialog (see shared/Modal.ts). */
+const OPEN_MODAL_SELECTOR = '[role="dialog"][aria-modal="true"]';
+
+function isElement(target: EventTarget | null): target is Element {
+  return typeof Element !== 'undefined' && target instanceof Element;
+}
+
+/**
+ * True when `el` is focused via keyboard navigation (Tab / arrows) rather than
+ * by a mouse click. Browsers only match `:focus-visible` on buttons after
+ * keyboard interaction, so a button that merely received focus from a click
+ * does not count.
+ */
+export function isKeyboardFocused(el: Element): boolean {
+  if (typeof document !== 'undefined' && document.activeElement !== el) return false;
+  // Older engines may not support :focus-visible; assume keyboard focus so
+  // native keyboard behavior is preserved.
+  return probe('focus-visible', () => el.matches(':focus-visible')) ?? true;
+}
+
+function isButtonLike(el: Element): boolean {
+  return el instanceof HTMLButtonElement || el.getAttribute('role') === 'button';
 }
 
 export class KeyboardManager {
@@ -51,12 +138,13 @@ export class KeyboardManager {
   /**
    * Register a keyboard shortcut
    */
-  register(key: string | KeyCombination, handler: () => void, description?: string): void;
+  register(key: string | KeyCombination, handler: () => void, description?: string, options?: KeyBindingOptions): void;
   register(binding: KeyCombination & { description: string }, handler: () => void): void;
   register(
     keyOrBinding: string | KeyCombination | (KeyCombination & { description: string }),
     handler: () => void,
     description?: string,
+    options?: KeyBindingOptions,
   ): void {
     let combo: KeyCombination;
     let desc: string | undefined;
@@ -72,14 +160,23 @@ export class KeyboardManager {
       desc = description;
     }
 
-    const id = this.comboToId(combo);
+    const context = options?.context ?? 'global';
+    const id = this.bindingKey(this.comboToId(combo), context);
 
-    this.bindings.set(id, {
+    const binding: KeyBinding = {
       combo,
       handler,
       description: desc,
       enabled: true,
-    });
+    };
+    if (context !== 'global') binding.context = context;
+    if (options?.priority) binding.priority = true;
+    this.bindings.set(id, binding);
+  }
+
+  /** Map key: global bindings use the bare combo id, scoped ones add `@context`. */
+  private bindingKey(comboId: string, context: BindingContext): string {
+    return context === 'global' ? comboId : `${comboId}@${context}`;
   }
 
   /**
@@ -88,7 +185,10 @@ export class KeyboardManager {
   unregister(key: string | KeyCombination): void {
     const combo = typeof key === 'string' ? this.parseKeyString(key) : key;
     const id = this.comboToId(combo);
-    this.bindings.delete(id);
+    // Remove the global binding and any context-scoped variants of the combo.
+    for (const key of [...this.bindings.keys()]) {
+      if (key === id || key.startsWith(`${id}@`)) this.bindings.delete(key);
+    }
   }
 
   /**
@@ -104,7 +204,11 @@ export class KeyboardManager {
   isRegistered(key: string | KeyCombination): boolean {
     const combo = typeof key === 'string' ? this.parseKeyString(key) : key;
     const id = this.comboToId(combo);
-    return this.bindings.has(id);
+    if (this.bindings.has(id)) return true;
+    for (const key of this.bindings.keys()) {
+      if (key.startsWith(`${id}@`)) return true;
+    }
+    return false;
   }
 
   /**
@@ -171,12 +275,20 @@ export class KeyboardManager {
   private handleKeydown(e: KeyboardEvent): void {
     if (!this.enabled) return;
 
+    // A focused widget (roving toolbar, notes list, modal, ...) already
+    // consumed this key - never double-fire a global shortcut on top of it.
+    if (e.defaultPrevented) return;
+
     // Check key suppression FIRST, before any other processing.
     // This allows the virtual slider (and other external systems) to
     // prevent specific keys from triggering bindings.
     if (this.allKeysSuppressed || this.suppressedKeys.has(e.code)) {
       return;
     }
+
+    // App shortcuts never fire while a modal dialog (confirm/prompt, shortcut
+    // editor, ...) owns the keyboard.
+    if (this.isInsideOpenModal(e.target)) return;
 
     // Skip if typing in input fields (except for specific global keys)
     if (this.shouldSkipEvent(e)) return;
@@ -189,28 +301,77 @@ export class KeyboardManager {
       meta: e.metaKey && !e.ctrlKey, // Only set meta if ctrl is not pressed
     };
 
+    const binding = this.findActiveBinding(this.comboToId(combo));
+
+    // 1. User-customized bindings win over everything else, including the
+    //    built-in context resolver's defaults on the same key.
+    if (binding?.priority) {
+      this.dispatch(e, binding.handler);
+      return;
+    }
+
+    // 2. Context-aware resolution of keys shared by several actions.
     if (this.contextualResolver) {
       const resolved = this.contextualResolver.resolve(combo);
       if (resolved) {
-        e.preventDefault();
-        resolved.handler();
+        this.dispatch(e, resolved.handler);
         return;
       }
     }
 
-    const id = this.comboToId(combo);
-    const binding = this.bindings.get(id);
-
-    if (binding && binding.enabled) {
-      e.preventDefault();
-      binding.handler();
+    // 3. Plain bindings.
+    if (binding) {
+      this.dispatch(e, binding.handler);
     }
+  }
+
+  /**
+   * Find the enabled binding for a combo id, preferring one scoped to the
+   * active context over the global one. Context-scoped bindings whose context
+   * is not active are ignored.
+   */
+  private findActiveBinding(comboId: string): KeyBinding | null {
+    const active = this.getActiveContext();
+    const candidates: Array<KeyBinding | undefined> = [];
+    if (active !== null && active !== 'global') {
+      candidates.push(this.bindings.get(this.bindingKey(comboId, active)));
+    }
+    candidates.push(this.bindings.get(comboId));
+    if (active === null) {
+      // No context information available: accept any scoped binding.
+      for (const [key, b] of this.bindings) {
+        if (key.startsWith(`${comboId}@`)) candidates.push(b);
+      }
+    }
+    const usable = candidates.filter((b): b is KeyBinding => !!b && b.enabled !== false);
+    return usable.find((b) => b.priority) ?? usable[0] ?? null;
+  }
+
+  /** Active context from the contextual resolver, or null when none is attached. */
+  private getActiveContext(): BindingContext | null {
+    return this.contextualResolver ? this.contextualResolver.getActiveContext() : null;
+  }
+
+  private dispatch(e: KeyboardEvent, handler: () => void): void {
+    e.preventDefault();
+    // A button that only has focus because it was clicked must not also be
+    // activated by Space (activation happens on keyup). Drop that stray focus.
+    const target = e.target;
+    if (e.key === ' ' && isElement(target) && isButtonLike(target) && target instanceof HTMLElement) {
+      target.blur();
+    }
+    handler();
+  }
+
+  private isInsideOpenModal(target: EventTarget | null): boolean {
+    return isElement(target) && typeof target.closest === 'function' && target.closest(OPEN_MODAL_SELECTOR) !== null;
   }
 
   /**
    * Determine if the event should be skipped (when typing in inputs)
    */
   private shouldSkipEvent(e: KeyboardEvent): boolean {
+    if (!isElement(e.target)) return false;
     const target = e.target as HTMLElement;
 
     // Check if target is a text input or textarea FIRST
@@ -246,14 +407,44 @@ export class KeyboardManager {
       return true;
     }
 
-    // Allow Space and Enter to trigger focused buttons
-    if (target instanceof HTMLButtonElement || target.getAttribute('role') === 'button') {
-      const isBareKey = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
-      if (isBareKey && (e.key === ' ' || e.key === 'Enter')) {
-        return true;
-      }
+    const isBareKey = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+    const isNavKey = NAVIGATION_KEYS.has(e.key);
+    const isActivationKey = e.key === ' ' || e.key === 'Enter';
+
+    // Range sliders own their arrow / Home / End / PageUp / PageDown keys.
+    if (target instanceof HTMLInputElement && target.type === 'range' && isBareKey && isNavKey) {
+      return true;
     }
 
+    // Composite widgets (listbox, menu, tablist, tree, ...) own their
+    // navigation and activation keys.
+    if (isBareKey && (isNavKey || isActivationKey) && this.isInsideNavigationWidget(target)) {
+      return true;
+    }
+
+    // Buttons: Enter always activates the button. Space activates it only when
+    // the button was reached by keyboard; after a mouse click the stray focus
+    // must not steal Space from play/pause.
+    if (isButtonLike(target) && isBareKey) {
+      if (e.key === 'Enter') return true;
+      if (e.key === ' ' && isKeyboardFocused(target)) return true;
+    }
+
+    return false;
+  }
+
+  private isInsideNavigationWidget(target: Element): boolean {
+    let el: Element | null = target;
+    while (el) {
+      const role = el.getAttribute('role');
+      if (role && NAVIGATION_WIDGET_ROLES.has(role)) {
+        // Tabs / radio toggles are clicked like plain buttons; after a mouse
+        // click they should not keep swallowing playback keys.
+        if (POINTER_RELEASED_ROLES.has(role) && !isKeyboardFocused(target)) return false;
+        return true;
+      }
+      el = el.parentElement;
+    }
     return false;
   }
 
@@ -269,14 +460,14 @@ export class KeyboardManager {
     if (parts.length === 0) {
       throw new Error('Invalid key string');
     }
-    const combo: KeyCombination = { code: this.keyToCode(parts[parts.length - 1]!) };
+    const combo: KeyCombination = { code: this.keyToCode(parts[parts.length - 1] ?? '') };
 
     if (!combo.code) {
       throw new Error('Invalid key string');
     }
 
     for (let i = 0; i < parts.length - 1; i++) {
-      const modifier = parts[i]!.toLowerCase();
+      const modifier = (parts[i] ?? '').toLowerCase();
       switch (modifier) {
         case 'ctrl':
         case 'control':

@@ -7,6 +7,7 @@
 
 import { EventEmitter, type EventMap } from '../../../utils/EventEmitter';
 import { getIconSvg, type IconName } from '../shared/Icons';
+import { isKeyboardFocused } from '../../../utils/input/KeyboardManager';
 
 export type TabId = 'view' | 'color' | 'effects' | 'transform' | 'annotate' | 'qc';
 
@@ -81,9 +82,12 @@ export class TabBar extends EventEmitter<TabBarEvents> {
 
     // Arrow-key navigation per WAI-ARIA tabs pattern
     this.container.addEventListener('keydown', (e: KeyboardEvent) => {
+      // After a mouse click the tab keeps focus; arrows then belong to the
+      // global shortcuts (frame stepping), not to tab switching.
+      if (e.target instanceof Element && e.target !== this.container && !isKeyboardFocused(e.target)) return;
       const tabIds = TABS.map((t) => t.id);
       const currentIndex = tabIds.indexOf(this._activeTab);
-      let nextIndex: number | null = null;
+      let nextIndex: number;
 
       switch (e.key) {
         case 'ArrowRight':
@@ -103,7 +107,8 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       }
 
       e.preventDefault();
-      const nextId = tabIds[nextIndex]!;
+      const nextId = tabIds[nextIndex];
+      if (nextId === undefined) return;
       this.setActiveTab(nextId);
       this.tabButtons.get(nextId)?.focus();
     });
