@@ -17,6 +17,7 @@ import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { Z_INDEX } from './shared/theme';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export type { WheelValues, ColorWheelsState } from '../../core/types/color';
@@ -55,7 +56,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       id: 'color-wheels',
       title: 'Color Wheels',
       initialPosition: { bottom: '10px', left: '10px' },
-      zIndex: 100,
+      zIndex: Z_INDEX.viewerOverlayHigh,
       onClose: () => this.hide(),
       testId: 'color-wheels-container',
     });

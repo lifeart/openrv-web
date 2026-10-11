@@ -18,7 +18,7 @@ import type {
   ParticipantPermission,
 } from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 /**
  * Validate that a color string is a safe CSS color value.
@@ -222,7 +222,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.panel.dataset.testid = 'network-panel';
     this.panel.style.cssText = `
       position: fixed;
-      width: 280px;
+      width: ${PANEL_WIDTHS.standard};
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 8px;

@@ -23,7 +23,7 @@ import { Logger } from '../../utils/Logger';
 const logger = new Logger('NotePanel');
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
 import { showAlert } from './shared/Modal';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 export interface NotePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -84,7 +84,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       position: absolute;
       right: 10px;
       top: 60px;
-      width: 340px;
+      width: ${PANEL_WIDTHS.wide};
       max-height: 500px;
       background: var(--overlay-bg);
       border: 1px solid var(--overlay-border);

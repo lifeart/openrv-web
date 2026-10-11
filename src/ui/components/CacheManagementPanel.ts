@@ -13,7 +13,7 @@
 import { EventEmitter } from '../../utils/EventEmitter';
 import type { EventMap } from '../../utils/EventEmitter';
 import type { MediaCacheManager, CacheStats } from '../../cache/MediaCacheManager';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // Events
@@ -61,7 +61,7 @@ export class CacheManagementPanel extends EventEmitter<CacheManagementPanelEvent
       position: absolute;
       right: 10px;
       top: 60px;
-      width: 280px;
+      width: ${PANEL_WIDTHS.standard};
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 8px;

@@ -6,7 +6,7 @@
 
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../../utils/ui/OutsideClickRegistry';
 import { getIconSvg } from './Icons';
-import { SHADOWS, Z_INDEX } from './theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './theme';
 
 export type PanelVisibilityListener = (visible: boolean) => void;
 
@@ -27,7 +27,7 @@ export interface Panel {
 }
 
 export function createPanel(options: PanelOptions = {}): Panel {
-  const { width = '280px', maxHeight = '400px', align = 'left' } = options;
+  const { width = PANEL_WIDTHS.standard, maxHeight = '400px', align = 'left' } = options;
 
   const panel = document.createElement('div');
   panel.className = 'dropdown-panel';

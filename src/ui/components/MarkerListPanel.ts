@@ -16,7 +16,7 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { showAlert, showConfirm } from './shared/Modal';
 import type { ExclusivePanelRef } from './NotePanel';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 /**
  * Marker export JSON structure
@@ -73,7 +73,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       position: absolute;
       right: 10px;
       top: 60px;
-      width: 320px;
+      width: ${PANEL_WIDTHS.panelWide};
       max-height: 450px;
       background: var(--overlay-bg);
       border: 1px solid var(--overlay-border);

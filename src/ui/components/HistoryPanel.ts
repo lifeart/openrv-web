@@ -14,7 +14,7 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getIconSvg } from './shared/Icons';
 import { showConfirm } from './shared/Modal';
-import { OPACITY, Z_INDEX } from './shared/theme';
+import { OPACITY, PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import type { ExclusivePanelRef } from './NotePanel';
 
 export interface HistoryPanelEvents extends EventMap {
@@ -46,7 +46,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       position: absolute;
       right: 10px;
       top: 60px;
-      width: 280px;
+      width: ${PANEL_WIDTHS.standard};
       max-height: 400px;
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);

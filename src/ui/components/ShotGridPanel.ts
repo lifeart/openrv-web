@@ -14,7 +14,7 @@ import { mapStatusFromShotGrid, type ShotGridVersion } from '../../integrations/
 import type { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 // ---------------------------------------------------------------------------
 // URL parsing
@@ -135,7 +135,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
       position: fixed;
       right: 16px;
       top: 60px;
-      width: 380px;
+      width: ${PANEL_WIDTHS.extraWide};
       max-height: calc(100vh - 120px);
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
