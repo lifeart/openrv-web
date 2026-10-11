@@ -54,8 +54,7 @@ describe('LUTPresets', () => {
         const data = lut!.data;
         let min = Infinity;
         let max = -Infinity;
-        for (let i = 0; i < data.length; i++) {
-          const v = data[i];
+        for (const v of data) {
           if (!(v >= min)) min = v;
           if (!(v <= max)) max = v;
         }
