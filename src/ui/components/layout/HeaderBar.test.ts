@@ -127,6 +127,14 @@ describe('HeaderBar', () => {
       expect(input).not.toBeNull();
     });
 
+    it('HDR-U020b: openMediaFileDialog opens the media file picker', () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+      const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+      headerBar.openMediaFileDialog();
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('HDR-U021: file input accepts images, videos, and session files', () => {
       const el = headerBar.render();
       const input = el.querySelector('input[type="file"]') as HTMLInputElement;

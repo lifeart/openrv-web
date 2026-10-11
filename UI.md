@@ -624,6 +624,21 @@ const { close } = showModal(contentElement, {
 });
 ```
 
+### Toast (`src/ui/components/shared/Toast.ts`)
+
+Non-blocking, auto-dismissing notifications. **Use for success / informational confirmations** ("Snapshot created", "Exported 120 frames"); keep `showAlert` for errors and warnings the user must acknowledge.
+
+```typescript
+import { showToast } from './shared/Toast';
+
+showToast('Snapshot "Shot 10" created', { type: 'success' });   // 4s default
+showToast('Export cancelled', { type: 'info', duration: 2000 });
+const handle = showToast('Working...', { duration: 0 });         // sticky
+handle.dismiss();
+```
+
+Toasts stack top-center (`z-index: Z_INDEX.toast`), live in an `aria-live="polite"` region, dismiss on click, and carry `data-testid="toast"` + `data-toast-type` for e2e selectors.
+
 ### FormElements (`src/ui/components/shared/FormElements.ts`)
 
 Shared helpers for control-panel form rows. Used by the 11 `*SettingsMenu` components and most control panels — do not re-implement section headers, separators, or slider/checkbox rows privately.
@@ -1295,6 +1310,7 @@ Common tiers (see `theme.ts` for the full list):
 | `dropdown`            | 9999  | Dropdown panels, control panels                      |
 | `modal`               | 10000 | Modals                                               |
 | `tooltip`             | 10001 | Tooltips                                             |
+| `toast`               | 10002 | Non-blocking toast notifications (`shared/Toast.ts`) |
 | `a11ySkipLink`        | 100000| Accessibility skip link (always on top)              |
 
 If a needed tier is missing, add it ONCE to `theme.ts` with a clear name; do not introduce a literal in feature code.

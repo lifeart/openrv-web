@@ -7,50 +7,7 @@ import { type ColorAdjustments } from './ColorControls';
 import { type Transform2D } from './TransformControl';
 import { type CropState, type CropRegion } from './CropControl';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
-import { VIEWER_PLACEHOLDER_SUPPORT_LINES } from '../../utils/media/SupportedMediaFormats';
 import { MAX_CANVAS_DIMENSION } from './ScalePresets';
-
-function getFontSizePx(font: string, fallback: number): number {
-  const match = font.match(/(\d+(?:\.\d+)?)px/);
-  if (!match) return fallback;
-  const parsed = Number.parseFloat(match[1] ?? '');
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function getTextWidth(ctx: CanvasRenderingContext2D, text: string): number {
-  const maybeMeasureText = (ctx as unknown as { measureText?: (input: string) => { width: number } }).measureText;
-  if (typeof maybeMeasureText === 'function') {
-    return maybeMeasureText.call(ctx, text).width;
-  }
-  // Fallback for mocked contexts in tests.
-  const fontSize = getFontSizePx(ctx.font, 14);
-  return text.length * fontSize * 0.56;
-}
-
-function wrapTextToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-
-  const words = trimmed.split(/\s+/);
-  const lines: string[] = [];
-  let currentLine = '';
-
-  for (const word of words) {
-    const candidate = currentLine ? `${currentLine} ${word}` : word;
-    if (getTextWidth(ctx, candidate) <= maxWidth || currentLine.length === 0) {
-      currentLine = candidate;
-      continue;
-    }
-    lines.push(currentLine);
-    currentLine = word;
-  }
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return lines;
-}
 
 /**
  * Draw image/video with rotation and flip transforms applied.
@@ -343,62 +300,10 @@ export function drawPlaceholder(
     }
   }
 
-  // Draw text (scale font with zoom)
-  const baseFontSize = 24;
-  const fontSize = Math.max(10, Math.floor(baseFontSize * zoom));
-  const horizontalPadding = Math.max(16, Math.floor(24 * zoom));
-  const maxBalancedTextWidth = Math.max(180, Math.min(Math.floor(w * 0.72), 780));
-  const textMaxWidth = Math.max(180, Math.min(w - horizontalPadding * 2, maxBalancedTextWidth));
-  const textX = Math.max(horizontalPadding, Math.floor((w - textMaxWidth) / 2));
-  ctx.fillStyle = getCSSColor('--text-secondary', '#666');
-  ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const titleLines = wrapTextToWidth(ctx, 'Drop media or session files here', textMaxWidth);
-
-  const smallFontSize = Math.max(8, Math.floor(13 * zoom));
-  const smallLineHeight = Math.max(10, Math.floor(smallFontSize * 1.4));
-  const titleLineHeight = Math.max(14, Math.floor(fontSize * 1.22));
-  const sectionGap = Math.max(6, Math.floor(smallFontSize * 0.7));
-
-  ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  const supportLines = VIEWER_PLACEHOLDER_SUPPORT_LINES.flatMap((line) => wrapTextToWidth(ctx, line, textMaxWidth));
-
-  const showTip = h >= 240;
-  const tipLines = showTip
-    ? wrapTextToWidth(ctx, 'Tip: drop numbered frames to auto-detect a sequence', textMaxWidth)
-    : [];
-
-  const totalHeight =
-    titleLines.length * titleLineHeight +
-    sectionGap +
-    supportLines.length * smallLineHeight +
-    (tipLines.length > 0 ? sectionGap + tipLines.length * smallLineHeight : 0);
-
-  let y = h / 2 - totalHeight / 2 + titleLineHeight / 2;
-  ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.fillStyle = getCSSColor('--text-secondary', '#666');
-  for (const line of titleLines) {
-    ctx.fillText(line, textX, y);
-    y += titleLineHeight;
-  }
-
-  y += sectionGap;
-  ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.fillStyle = getCSSColor('--text-muted', '#555');
-  for (const line of supportLines) {
-    ctx.fillText(line, textX, y);
-    y += smallLineHeight;
-  }
-
-  if (tipLines.length > 0) {
-    y += sectionGap;
-    ctx.fillStyle = getCSSColor('--text-secondary', '#666');
-    for (const line of tipLines) {
-      ctx.fillText(line, textX, y);
-      y += smallLineHeight;
-    }
-  }
+  // The "drop files here" copy and supported-format hints are rendered as an
+  // accessible DOM overlay (ViewerEmptyState) rather than painted here, so
+  // they can be read by screen readers and offer a clickable "Open file"
+  // action. Keep this canvas to the neutral checkerboard only.
 }
 
 /**

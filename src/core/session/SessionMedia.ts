@@ -25,6 +25,7 @@ import { detectMediaTypeFromFile, detectMediaTypeFromFileBytes } from '../../uti
 import { MediaRepresentationManager } from './MediaRepresentationManager';
 import type { MediaCacheManager, CacheEntryMeta } from '../../cache/MediaCacheManager';
 import { computeCacheKey } from '../../cache/MediaCacheKey';
+import { imageLoadFailedMessage, videoLoadFailedMessage } from './mediaLoadErrorMessages';
 import type {
   AddRepresentationConfig,
   MediaRepresentation,
@@ -436,7 +437,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     if (type === 'unknown') {
       const ext = file.name.includes('.') ? file.name.split('.').pop() : '(none)';
       log.warn(`Unsupported file type: ${file.name} (extension: .${ext})`);
-      throw new Error(`Unsupported file type: ${file.name}`);
+      throw new Error(
+        `Unsupported file type: ${file.name} (.${ext} is not a recognized image or video format, and the file contents were not recognized either)`,
+      );
     }
 
     if (type === 'video') {
@@ -482,7 +485,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
       img.onerror = () => {
         this.emit('sourceLoadFailed', { name });
-        reject(new Error(`Failed to load image: ${url}`));
+        reject(new Error(imageLoadFailedMessage(name)));
       };
 
       img.src = url;
@@ -537,8 +540,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
           // createObjectURL failed — loadImage was never called
           this.emit('sourceLoadFailed', { name: file.name });
         }
-        // If url exists, loadImage already emitted sourceLoadFailed
-        throw fallbackErr;
+        // If url exists, loadImage already emitted sourceLoadFailed.
+        // Surface the file name and the primary decoder's reason instead of
+        // the fallback loader's opaque blob-URL error.
+        throw new Error(imageLoadFailedMessage(file.name, err), { cause: fallbackErr });
       } finally {
         this._suppressNextLoadingStarted = false;
       }
@@ -629,7 +634,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       video.onerror = (e) => {
         log.error('Video load error:', e);
         this.emit('sourceLoadFailed', { name });
-        reject(new Error(`Failed to load video: ${url}`));
+        reject(new Error(videoLoadFailedMessage(name, video.error)));
       };
 
       video.src = url;
@@ -676,7 +681,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
           video.oncanplay = null;
           resolve();
         };
-        video.onerror = () => reject(new Error('Failed to load video element'));
+        video.onerror = () => reject(new Error(videoLoadFailedMessage(file.name, video.error)));
         video.src = url;
         video.load();
       });

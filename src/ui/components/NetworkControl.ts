@@ -19,6 +19,8 @@ import type {
 } from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
 import { Z_INDEX } from './shared/theme';
+import { getPreferredUserName } from '../../core/UserIdentity';
+import { createUserNameField, type UserNameField } from './UserNameField';
 
 /**
  * Validate that a color string is a safe CSS color value.
@@ -98,6 +100,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private responseTokenSection!: HTMLElement;
   private responseTokenInput!: HTMLInputElement;
   private roomCodeInput!: HTMLInputElement;
+  private userNameField: UserNameField | null = null;
   private pinCodeInput!: HTMLInputElement;
   private reconnectPanel!: HTMLElement;
   private errorDisplay!: HTMLElement;
@@ -388,6 +391,11 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     panel.dataset.testid = 'network-disconnected-panel';
     panel.style.cssText = 'padding: 12px;';
 
+    // Display name (persisted in GeneralPrefs.userName)
+    this.userNameField = createUserNameField({ testId: 'network-user-name-input' });
+    this.userNameField.element.style.marginBottom = '12px';
+    panel.appendChild(this.userNameField.element);
+
     // PIN section
     const pinSection = document.createElement('div');
     pinSection.style.cssText = 'margin-bottom: 12px;';
@@ -440,7 +448,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
         digits.length >= 4
       ) {
         this.state.linkedRoomAutoJoinArmed = false;
-        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: 'User' });
+        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: this.resolveUserName('User') });
       }
     });
     pinSection.appendChild(this.pinCodeInput);
@@ -473,7 +481,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     });
     createBtn.addEventListener('click', () => {
       this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
-      this.emit('createRoom', { userName: this.state.syncSettings ? 'Host' : 'User' });
+      this.emit('createRoom', { userName: this.resolveUserName(this.state.syncSettings ? 'Host' : 'User') });
     });
     createSection.appendChild(createBtn);
     panel.appendChild(createSection);
@@ -1066,7 +1074,17 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       return;
     }
     this.hideError();
-    this.emit('joinRoom', { roomCode: code, userName: 'User' });
+    this.emit('joinRoom', { roomCode: code, userName: this.resolveUserName('User') });
+  }
+
+  /**
+   * The display name to announce when creating/joining a room: the name typed
+   * in the panel (persisted to preferences), else the stored preference, else
+   * `fallback` (the historical 'User' / 'Host' defaults).
+   */
+  private resolveUserName(fallback: string): string {
+    this.userNameField?.commit();
+    return getPreferredUserName(fallback);
   }
 
   // ---- State Updates ----
@@ -1572,6 +1590,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   dispose(): void {
     this.resolveMediaPrompt(false);
     this.closePanel();
+    this.userNameField?.dispose();
+    this.userNameField = null;
     if (document.body.contains(this.panel)) {
       document.body.removeChild(this.panel);
     }

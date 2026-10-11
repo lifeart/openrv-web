@@ -29,6 +29,7 @@ import type { WatermarkControl } from './ui/components/WatermarkControl';
 import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
+import { showToast } from './ui/components/shared/Toast';
 
 import { Logger } from './utils/Logger';
 
@@ -179,7 +180,7 @@ export class AppPersistenceManager {
       );
       const resolvedName = name || `Snapshot ${new Date().toLocaleTimeString()}`;
       await snapshotManager.createSnapshot(resolvedName, state, description);
-      showAlert(`Snapshot "${resolvedName}" created`, { type: 'success', title: 'Snapshot Created' });
+      showToast(`Snapshot "${resolvedName}" created`, { type: 'success' });
     } catch (err) {
       logger.error('Failed to create snapshot:', err);
       showAlert(`Failed to create snapshot: ${err}`, { type: 'error', title: 'Snapshot Error' });
@@ -321,7 +322,7 @@ export class AppPersistenceManager {
       snapshotPanel.hide();
 
       const metadata = await snapshotManager.getSnapshotMetadata(id);
-      showAlert(`Restored "${metadata?.name || 'snapshot'}"`, { type: 'success', title: 'Snapshot Restored' });
+      showToast(`Restored "${metadata?.name || 'snapshot'}"`, { type: 'success' });
     } catch (err) {
       logger.error('Failed to restore snapshot:', err);
       showAlert(`Failed to restore snapshot: ${err}`, { type: 'error', title: 'Restore Error' });
@@ -444,15 +445,9 @@ export class AppPersistenceManager {
             title: 'Project Loaded',
           });
         } else if (result.loadedMedia > 0) {
-          showAlert(`Project loaded successfully (${result.loadedMedia} media files)`, {
-            type: 'success',
-            title: 'Project Loaded',
-          });
+          showToast(`Project loaded successfully (${result.loadedMedia} media files)`, { type: 'success' });
         } else {
-          showAlert('Project loaded (no media files - state only)', {
-            type: 'info',
-            title: 'Project Loaded',
-          });
+          showToast('Project loaded (no media files - state only)', { type: 'info' });
         }
       } else if (ext === 'rv' || ext === 'gto') {
         const content = await file.arrayBuffer();
@@ -462,7 +457,7 @@ export class AppPersistenceManager {
       } else if (ext === 'rvedl') {
         const text = await file.text();
         session.loadEDL(text);
-        showAlert(`EDL loaded from ${file.name}`, { type: 'success', title: 'EDL Loaded' });
+        showToast(`EDL loaded from ${file.name}`, { type: 'success' });
       } else {
         showAlert(
           `Unable to open as project. Expected .orvproject, .rv, .gto, or .rvedl but got .${ext}. Use the Open Media button to load media files.`,
@@ -561,10 +556,7 @@ export class AppPersistenceManager {
             type: 'warning',
           });
         } else if (loadedMedia > 0) {
-          showAlert(`Session recovered successfully with ${loadedMedia} media file(s).`, {
-            title: 'Recovery Complete',
-            type: 'success',
-          });
+          showToast(`Session recovered successfully with ${loadedMedia} media file(s).`, { type: 'success' });
         }
 
         // Clear the recovered entry

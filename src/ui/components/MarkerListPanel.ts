@@ -15,6 +15,7 @@ import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { showAlert, showConfirm } from './shared/Modal';
+import { showToast } from './shared/Toast';
 import type { ExclusivePanelRef } from './NotePanel';
 import { Z_INDEX } from './shared/theme';
 
@@ -416,7 +417,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       parts.push(`${collisionCount} marker${collisionCount > 1 ? 's' : ''} skipped due to frame collisions.`);
     }
 
-    await showAlert(parts.join(' '));
+    const skipped = invalidCount > 0 || (mode === 'merge' && collisionCount > 0);
+    showToast(parts.join(' '), { type: skipped ? 'info' : 'success', duration: skipped ? 6000 : undefined });
   }
 
   /**

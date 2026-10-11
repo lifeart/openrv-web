@@ -4,6 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkControl } from './NetworkControl';
+import { resetCorePreferencesManagerForTests } from '../../core/PreferencesManager';
+import { getPreferredUserName, setPreferredUserName } from '../../core/UserIdentity';
 import type { SyncUser, ParticipantPermission } from '../../network/types';
 import {
   resetOutsideClickRegistry,
@@ -914,5 +916,68 @@ describe('NetworkControl', () => {
       const state: import('../../network/types').ConnectionState = 'conflict';
       expect(state).toBe('conflict');
     });
+  });
+});
+
+describe('NetworkControl user name (U5)', () => {
+  let control: NetworkControl;
+
+  beforeEach(() => {
+    localStorage.clear();
+    resetCorePreferencesManagerForTests();
+    resetOutsideClickRegistry();
+  });
+
+  afterEach(() => {
+    control.dispose();
+    document.querySelectorAll('[data-testid="network-panel"]').forEach((el) => el.remove());
+    resetOutsideClickRegistry();
+    localStorage.clear();
+    resetCorePreferencesManagerForTests();
+  });
+
+  function mount(): void {
+    control = new NetworkControl();
+    document.body.appendChild(control.render());
+    control.openPanel();
+  }
+
+  it('NCC-NAME-001: disconnected panel has a name input prefilled from preferences', () => {
+    setPreferredUserName('Alice');
+    mount();
+    const input = document.querySelector('[data-testid="network-user-name-input"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    expect(input.value).toBe('Alice');
+  });
+
+  it('NCC-NAME-002: joinRoom uses the stored name', () => {
+    setPreferredUserName('Alice');
+    mount();
+    const handler = vi.fn();
+    control.on('joinRoom', handler);
+    const input = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
+    input.value = 'ABCD-1234';
+    (document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement).click();
+    expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'Alice' });
+  });
+
+  it('NCC-NAME-003: createRoom uses a name typed in the panel and persists it', () => {
+    mount();
+    const handler = vi.fn();
+    control.on('createRoom', handler);
+    const nameInput = document.querySelector('[data-testid="network-user-name-input"]') as HTMLInputElement;
+    nameInput.value = 'Bob';
+    nameInput.dispatchEvent(new Event('input'));
+    (document.querySelector('[data-testid="network-create-room-button"]') as HTMLButtonElement).click();
+    expect(handler).toHaveBeenCalledWith({ userName: 'Bob' });
+    expect(getPreferredUserName()).toBe('Bob');
+  });
+
+  it('NCC-NAME-004: createRoom falls back to "Host" when no name is set', () => {
+    mount();
+    const handler = vi.fn();
+    control.on('createRoom', handler);
+    (document.querySelector('[data-testid="network-create-room-button"]') as HTMLButtonElement).click();
+    expect(handler).toHaveBeenCalledWith({ userName: 'Host' });
   });
 });
