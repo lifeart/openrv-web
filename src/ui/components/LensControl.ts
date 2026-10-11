@@ -3,6 +3,7 @@ import { type LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams } f
 import { getIconSvg } from './shared/Icons';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
+import { computeAnchoredPanelPosition } from './shared/anchorPosition';
 
 export interface LensControlEvents extends EventMap {
   lensChanged: LensDistortionParams;
@@ -374,9 +375,10 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     }
 
     // Position relative to button
-    const rect = this.lensButton.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 270)}px`;
+    // Falls back to top-right under the header when the button is hidden.
+    const pos = computeAnchoredPanelPosition(this.lensButton, 270, 'right');
+    this.panel.style.top = `${pos.top}px`;
+    this.panel.style.left = `${pos.left}px`;
 
     this.isPanelOpen = true;
     this.panel.style.display = 'block';

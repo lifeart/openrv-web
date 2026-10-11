@@ -4,6 +4,7 @@ import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { createColorSliderRow } from './shared/FormElements';
+import { computeAnchoredPanelPosition } from './shared/anchorPosition';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
@@ -623,10 +624,11 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       document.body.appendChild(this.panel);
     }
 
-    // Position relative to button
-    const rect = this.toggleButton.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.min(rect.left, window.innerWidth - 300)}px`;
+    // Position relative to button; when the button is hidden (panel opened
+    // via shortcut from another tab) fall back to top-right under the header.
+    const { top, left } = computeAnchoredPanelPosition(this.toggleButton, parseInt(PANEL_WIDTHS.panel));
+    this.panel.style.top = `${top}px`;
+    this.panel.style.left = `${left}px`;
 
     this.isExpanded = true;
     this.panel.style.display = 'block';
