@@ -64,6 +64,7 @@ vi.mock('./AppEffectsWiring', () => ({ wireEffectsControls: vi.fn() }));
 vi.mock('./AppTransformWiring', () => ({ wireTransformControls: vi.fn() }));
 vi.mock('./AppPlaybackWiring', () => ({ wirePlaybackControls: vi.fn() }));
 vi.mock('./AppStackWiring', () => ({ wireStackControls: vi.fn() }));
+vi.mock('./AppViewerLoadStateWiring', () => ({ wireViewerLoadState: vi.fn() }));
 vi.mock('./AppDCCWiring', () => ({ wireDCCBridge: vi.fn() }));
 
 import { App, TAB_CONTEXT_MAP } from './App';

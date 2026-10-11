@@ -1739,6 +1739,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.layoutButton.title = activePreset ? `${baseTitle} (Current: ${activePreset.label})` : baseTitle;
   }
 
+  /**
+   * Open the media file picker — the same action as the header "Open media
+   * file" button. Used by the viewer's empty-state "Open file…" button.
+   */
+  openMediaFileDialog(): void {
+    this.fileInput.click();
+  }
+
   // Public accessors for child controls
   getVolumeControl(): VolumeControl {
     return this.volumeControl;

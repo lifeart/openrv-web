@@ -51,6 +51,7 @@ import type { AppWiringContext, StatefulWiringResult } from './AppWiringContext'
 
 // Wiring modules
 import { wireViewControls } from './AppViewWiring';
+import { wireViewerLoadState } from './AppViewerLoadStateWiring';
 import { wireTransformControls } from './AppTransformWiring';
 import { wireStackControls } from './AppStackWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
@@ -663,6 +664,7 @@ export class App {
         getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
       }),
       wireStackControls(wiringCtx),
+      wireViewerLoadState(wiringCtx),
     ];
     for (const result of wiringResults) {
       if (result?.subscriptions) {

@@ -573,36 +573,21 @@ describe('ViewerRenderingUtils', () => {
       expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(1);
     });
 
-    it('should draw placeholder text', () => {
+    it('does not paint empty-state text (rendered by the accessible DOM overlay instead)', () => {
       drawPlaceholder(ctx, 800, 600, 1);
 
-      expect(ctx.fillText).toHaveBeenCalled();
-      const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.some((call: unknown[]) => (call[0] as string).includes('Drop'))).toBe(true);
+      expect(ctx.fillText).not.toHaveBeenCalled();
     });
 
-    it('should left-align placeholder text with padding', () => {
-      drawPlaceholder(ctx, 800, 600, 1);
+    it('should scale checkerboard cells with zoom', () => {
+      const small = createMockContext();
+      drawPlaceholder(small, 200, 200, 1);
+      const large = createMockContext();
+      drawPlaceholder(large, 200, 200, 2);
 
-      expect(ctx.textAlign).toBe('left');
-      const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.every((call: unknown[]) => call[1] === 112)).toBe(true);
-    });
-
-    it('should render support info in multiple lines for readability', () => {
-      drawPlaceholder(ctx, 800, 600, 1);
-
-      const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
-      const rendered = calls.map((call: unknown[]) => String(call[0]));
-      expect(rendered.some((line: string) => line.includes('Images:'))).toBe(true);
-      expect(rendered.some((line: string) => line.includes('Video:'))).toBe(true);
-    });
-
-    it('should scale with zoom', () => {
-      drawPlaceholder(ctx, 800, 600, 2);
-
-      // Font should be scaled
-      expect(ctx.font).toContain('px');
+      const smallCells = (small.fillRect as ReturnType<typeof vi.fn>).mock.calls.length;
+      const largeCells = (large.fillRect as ReturnType<typeof vi.fn>).mock.calls.length;
+      expect(largeCells).toBeLessThan(smallCells);
     });
 
     it('should handle small zoom values', () => {
