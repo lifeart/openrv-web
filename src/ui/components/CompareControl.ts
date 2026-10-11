@@ -27,6 +27,7 @@ import {
 // Re-export types so external consumers don't need to change imports
 
 import { Logger } from '../../utils/Logger';
+import { isExperimentalFeaturesEnabled, onExperimentalFeaturesChange } from '../../core/experimentalFeatures';
 
 const logger = new Logger('CompareControl');
 export type { WipeMode, ABSource, ComparisonBlendMode, BlendModeState, CompareState, QuadViewState };
@@ -59,6 +60,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   private isOpen = false;
   private boundHandleReposition: () => void;
   private deregisterDismiss: OutsideClickDeregister | null = null;
+  private quadViewDivider: HTMLElement | null = null;
+  private quadViewSection: HTMLElement | null = null;
+  private unsubscribeExperimental: (() => void) | null = null;
 
   constructor() {
     super();
@@ -680,7 +684,20 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     quadSection.appendChild(quadSourcesContainer);
     this.dropdown.appendChild(quadSection);
 
+    // Quad View is not wired to the viewer yet: only show it when the user
+    // opted into experimental features.
+    this.quadViewDivider = divider4;
+    this.quadViewSection = quadSection;
+    this.applyExperimentalVisibility(isExperimentalFeaturesEnabled());
+    this.unsubscribeExperimental?.();
+    this.unsubscribeExperimental = onExperimentalFeaturesChange((enabled) => this.applyExperimentalVisibility(enabled));
+
     this.updateDropdownStates();
+  }
+
+  private applyExperimentalVisibility(enabled: boolean): void {
+    if (this.quadViewDivider) this.quadViewDivider.style.display = enabled ? 'block' : 'none';
+    if (this.quadViewSection) this.quadViewSection.style.display = enabled ? 'flex' : 'none';
   }
 
   private createBlendModeButton(mode: ComparisonBlendMode, label: string, icon: IconName): HTMLButtonElement {
@@ -1283,6 +1300,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   dispose(): void {
+    this.unsubscribeExperimental?.();
+    this.unsubscribeExperimental = null;
     this.manager.dispose();
     this.closeDropdown();
     if (document.body.contains(this.dropdown)) {

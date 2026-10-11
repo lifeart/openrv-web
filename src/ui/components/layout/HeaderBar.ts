@@ -32,6 +32,11 @@ import type { VersionGroup } from '../../../core/session/VersionManager';
 import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
 
 import { Logger } from '../../../utils/Logger';
+import {
+  isExperimentalFeaturesEnabled,
+  onExperimentalFeaturesChange,
+  setExperimentalFeaturesEnabled,
+} from '../../../core/experimentalFeatures';
 
 const logger = new Logger('HeaderBar');
 export interface HeaderBarEvents extends EventMap {
@@ -103,6 +108,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private fadeRight!: HTMLElement;
   private _scrollHandler: (() => void) | null = null;
   private _resizeHandler: (() => void) | null = null;
+  private externalPresentationButton: HTMLButtonElement | null = null;
+  private _unsubscribeExperimental: (() => void) | null = null;
 
   /**
    * Optional callback invoked when an `.otio` file is opened via the file picker.
@@ -427,6 +434,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       'External Presentation (Ctrl+Shift+Alt+P)',
     );
     externalPresentationButton.dataset.testid = 'external-presentation-button';
+    // Experimental: the secondary window is not finished yet, so the button
+    // is only shown when "Experimental features" is enabled (Help menu).
+    this.externalPresentationButton = externalPresentationButton;
+    this.applyExperimentalVisibility(isExperimentalFeaturesEnabled());
+    this._unsubscribeExperimental = onExperimentalFeaturesChange((enabled) =>
+      this.applyExperimentalVisibility(enabled),
+    );
     utilityGroup.appendChild(externalPresentationButton);
 
     // Fullscreen button
@@ -468,6 +482,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     this.container.appendChild(utilityGroup);
     this.updateLayoutButtonState();
+  }
+
+  private applyExperimentalVisibility(enabled: boolean): void {
+    if (this.externalPresentationButton) {
+      this.externalPresentationButton.style.display = enabled ? '' : 'none';
+    }
   }
 
   private createGroup(): HTMLElement {
@@ -1247,8 +1267,52 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.appendChild(item);
     }
 
+    // Experimental features toggle (persisted preference, default off)
+    const experimentalItem = document.createElement('button');
+    experimentalItem.setAttribute('role', 'menuitemcheckbox');
+    experimentalItem.dataset.testid = 'help-menu-experimental';
+    experimentalItem.tabIndex = -1;
+    experimentalItem.title = 'Show unfinished features (External Presentation, Quad View)';
+    const experimentalOn = isExperimentalFeaturesEnabled();
+    experimentalItem.setAttribute('aria-checked', String(experimentalOn));
+    experimentalItem.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 6px 12px;
+      background: transparent;
+      color: var(--text-primary);
+      border: none;
+      border-top: 1px solid var(--border-secondary);
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      outline: none;
+    `;
+    const experimentalIcon = document.createElement('span');
+    experimentalIcon.innerHTML = getIconSvg(experimentalOn ? 'check' : 'sparkles', 'sm');
+    experimentalIcon.style.cssText = 'display: flex; align-items: center;';
+    experimentalItem.appendChild(experimentalIcon);
+    const experimentalLabel = document.createElement('span');
+    experimentalLabel.textContent = 'Experimental features';
+    experimentalItem.appendChild(experimentalLabel);
+    const setHover = (on: boolean) => {
+      experimentalItem.style.background = on ? 'var(--bg-hover)' : 'transparent';
+    };
+    experimentalItem.addEventListener('pointerenter', () => setHover(true));
+    experimentalItem.addEventListener('pointerleave', () => setHover(false));
+    experimentalItem.addEventListener('focus', () => setHover(true));
+    experimentalItem.addEventListener('blur', () => setHover(false));
+    experimentalItem.addEventListener('click', () => {
+      removeMenu();
+      setExperimentalFeaturesEnabled(!isExperimentalFeaturesEnabled());
+    });
+    menu.appendChild(experimentalItem);
+
     // Keyboard navigation
-    const getMenuItems = (): HTMLElement[] => Array.from(menu.querySelectorAll('[role="menuitem"]'));
+    const getMenuItems = (): HTMLElement[] =>
+      Array.from(menu.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"]'));
 
     menu.addEventListener('keydown', (e: KeyboardEvent) => {
       const menuItems = getMenuItems();
@@ -1768,6 +1832,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // outsideClickRegistry and removes the menu DOM, transparently replacing
     // the previous setTimeout-based cleanup.
     this.closeAllHeaderMenus();
+
+    this._unsubscribeExperimental?.();
+    this._unsubscribeExperimental = null;
 
     // Remove procedural sources dropdown
     if (this._sourcesMenu) {

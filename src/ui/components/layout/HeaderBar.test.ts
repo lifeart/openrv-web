@@ -10,6 +10,7 @@ import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import * as Modal from '../shared/Modal';
 import type { LayoutPreset } from '../../layout/LayoutStore';
 import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
+import { isExperimentalFeaturesEnabled, setExperimentalFeaturesEnabled } from '../../../core/experimentalFeatures';
 import {
   dispatchOutsideClick,
   dispatchOutsideEscape,
@@ -2510,6 +2511,36 @@ describe('HeaderBar', () => {
         expect(callback).toHaveBeenCalledTimes(1);
       });
       expect(loadFileSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('experimental features (U16)', () => {
+    afterEach(() => {
+      setExperimentalFeaturesEnabled(false);
+      document.querySelectorAll('[data-testid="help-menu-dropdown"]').forEach((m) => m.remove());
+    });
+
+    it('HDR-EXP-001: external presentation button is hidden by default', () => {
+      const el = headerBar.render();
+      const btn = el.querySelector('[data-testid="external-presentation-button"]') as HTMLButtonElement;
+      expect(btn).not.toBeNull();
+      expect(btn.style.display).toBe('none');
+    });
+
+    it('HDR-EXP-002: help menu toggle enables experimental features and shows the button', () => {
+      const el = headerBar.render();
+      const btn = el.querySelector('[data-testid="external-presentation-button"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement).click();
+      const item = document.querySelector('[data-testid="help-menu-experimental"]') as HTMLButtonElement;
+      expect(item).not.toBeNull();
+      expect(item.getAttribute('role')).toBe('menuitemcheckbox');
+      expect(item.getAttribute('aria-checked')).toBe('false');
+
+      item.click();
+
+      expect(isExperimentalFeaturesEnabled()).toBe(true);
+      expect(btn.style.display).toBe('');
+      expect(document.querySelector('[data-testid="help-menu-dropdown"]')).toBeNull();
     });
   });
 });
