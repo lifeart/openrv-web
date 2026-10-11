@@ -142,7 +142,7 @@ A sync status indicator in the header bar shows the current connection state:
 - **Red warning**: Conflict detected, manual intervention may be needed
 - **Gray icon**: Disconnected / offline
 
-**Quick disconnect**: Press `Shift+Ctrl+N` to disconnect from the current room immediately.
+**Quick disconnect**: Press `Ctrl+Shift+Alt+N` to disconnect from the current room immediately.
 
 ---
 

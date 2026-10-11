@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter, type EventMap } from '../../../utils/EventEmitter';
+import { shortcutTooltip } from '../../../utils/input/KeyBindings';
 import { type Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import type { LoopMode } from '../../../core/types/session';
 import { filterImageFiles, inferSequenceFromSingleFile, getBestSequence } from '../../../utils/media/SequenceLoader';
@@ -254,9 +255,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
 
     // Save Project button — icon-only
-    fileGroup.appendChild(
-      this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'),
-    );
+    fileGroup.appendChild(this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project'));
 
     // Open Project button — icon-only
     fileGroup.appendChild(this.createIconButton('layers', '', () => this.projectInput.click(), 'Open project'));
@@ -284,7 +283,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     ]);
     const sourcesButton = this.createCompactButton(
       'Sources',
-      () => this._sourcesMenu!.toggle(sourcesButton),
+      () => this._sourcesMenu?.toggle(sourcesButton),
       'Load procedural test pattern',
       'image',
     );
@@ -348,7 +347,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
 
     // Loop mode button
-    this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
+    this.loopButton = this.createCompactButton(
+      '',
+      () => this.cycleLoopMode(),
+      shortcutTooltip('Cycle loop mode', 'timeline.cycleLoopMode'),
+    );
     this.loopButton.style.minWidth = '28px';
     this.loopButton.style.marginLeft = '8px';
     playbackGroup.appendChild(this.loopButton);
@@ -729,8 +732,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     menu.appendChild(header);
 
     let activeItem: HTMLButtonElement | null = null;
-    for (let i = 0; i < group.versions.length; i++) {
-      const version = group.versions[i]!;
+    for (const [i, version] of group.versions.entries()) {
       const isActive = i === group.activeVersionIndex;
       const item = document.createElement('button');
       item.setAttribute('role', 'menuitemradio');
@@ -803,7 +805,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private cycleLoopMode(): void {
     const modes: LoopMode[] = ['once', 'loop', 'pingpong'];
     const currentIndex = modes.indexOf(this.session.loopMode);
-    this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
+    this.session.loopMode = modes[(currentIndex + 1) % modes.length] ?? 'loop';
   }
 
   private toggleDirection(): void {
@@ -1551,8 +1553,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const iconName = icons[this.session.loopMode];
     const label = labels[this.session.loopMode];
     this.loopButton.innerHTML = getIconSvg(iconName, 'sm');
-    this.loopButton.title = `${label} — Cycle loop mode (L)`;
-    this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode (L)`);
+    const tooltip = `${label} — ${shortcutTooltip('Cycle loop mode', 'timeline.cycleLoopMode')}`;
+    this.loopButton.title = tooltip;
+    this.loopButton.setAttribute('aria-label', tooltip);
   }
 
   private updateDirectionButton(): void {
@@ -1677,8 +1680,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
 
     // Single image file - try to infer a sequence from available files
-    if (imageFiles.length === 1) {
-      const singleFile = imageFiles[0]!;
+    const singleFile = imageFiles.length === 1 ? imageFiles[0] : undefined;
+    if (singleFile) {
       try {
         // Try to infer sequence from the single file and all available files
         const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);

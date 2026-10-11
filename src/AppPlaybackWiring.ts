@@ -49,6 +49,8 @@ export interface PlaybackWiringDeps {
   getKeyboardHandler: () => AppKeyboardHandler;
   getFullscreenManager: () => FullscreenManager | undefined;
   getAudioMixer?: () => AudioMixer;
+  /** Read-only shortcut cheat sheet overlay (Help > Keyboard Shortcuts). */
+  getShortcutCheatSheet?: () => { show(): void } | null;
 }
 
 /**
@@ -60,7 +62,19 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   let videoExportInProgress = false;
 
   // HeaderBar events
-  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
+  // Help > Keyboard Shortcuts opens the read-only cheat sheet (same as `?`);
+  // Help > Custom Key Bindings opens the rebinding editor. Fall back to the
+  // editor only when the cheat sheet is not available (e.g. before layout).
+  subs.add(
+    headerBar.on('showShortcuts', () => {
+      const sheet = deps.getShortcutCheatSheet?.() ?? null;
+      if (sheet) {
+        sheet.show();
+      } else {
+        deps.getKeyboardHandler().showCustomBindingsDialog();
+      }
+    }),
+  );
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
   subs.add(

@@ -35,6 +35,7 @@ import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { PaintEngine } from './paint/PaintEngine';
 import { KeyboardManager } from './utils/input/KeyboardManager';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
+import { DEFAULT_KEY_BINDINGS, setShortcutComboResolver } from './utils/input/KeyBindings';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { Logger } from './utils/Logger';
 import { getThemeManager } from './utils/ui/ThemeManager';
@@ -283,7 +284,7 @@ export class App {
     // Initialize keyboard handler (manages shortcuts, dialogs)
     this.keyboardHandler = new AppKeyboardHandler(this.keyboardManager, this.customKeyBindingsManager, {
       getActionHandlers: () => this.getActionHandlers(),
-      getContainer: () => this.container!,
+      getContainer: () => this.container ?? document.body,
     });
     this.keyboardHandler.setup();
 
@@ -292,6 +293,19 @@ export class App {
 
     // Hook up contextual keyboard manager to the global keyboard manager
     this.keyboardManager.setContextualManager(this.contextualKeyboardManager);
+
+    // User-customized actions are dispatched directly (with priority) on
+    // their custom combo; their built-in contextual default must not keep
+    // answering to the old key.
+    this.contextualKeyboardManager.setOverriddenActionCheck((action) =>
+      this.customKeyBindingsManager.hasCustomBinding(action),
+    );
+
+    // Tooltips that name a shortcut resolve the effective (customized) combo.
+    setShortcutComboResolver((action) =>
+      action in DEFAULT_KEY_BINDINGS ? this.customKeyBindingsManager.getEffectiveCombo(action) : undefined,
+    );
+    this.wiringSubscriptions.add(() => setShortcutComboResolver(null));
 
     // Register conflicting key bindings with the contextual keyboard manager
     // so that context-aware resolution can pick the right action based on
@@ -337,6 +351,22 @@ export class App {
       () => this.controls.paintToolbar.handleKeyboard('l'),
       'paint',
       'Select line tool',
+    );
+
+    // KeyN: view.toggleFilterMode (global) vs notes.addNote (paint / Annotate tab)
+    this.contextualKeyboardManager.register(
+      'view.toggleFilterMode',
+      { code: 'KeyN' },
+      () => this.viewer.toggleFilterMode(),
+      'global',
+      'Toggle nearest-neighbor / bilinear filtering',
+    );
+    this.contextualKeyboardManager.register(
+      'notes.addNote',
+      { code: 'KeyN' },
+      () => this.controls.notePanel.addNoteAtCurrentFrame(),
+      'paint',
+      'Add note at current frame',
     );
 
     // KeyG: navigation.gotoFrame (global) vs paint.toggleGhost (paint) vs panel.gamutDiagram (panel)
@@ -661,6 +691,7 @@ export class App {
         getKeyboardHandler: () => this.keyboardHandler,
         getFullscreenManager: () => this.fullscreenManager ?? undefined,
         getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
+        getShortcutCheatSheet: () => this.shortcutCheatSheet,
       }),
       wireStackControls(wiringCtx),
     ];

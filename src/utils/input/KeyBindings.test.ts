@@ -4,9 +4,18 @@
  * Tests for the keyboard shortcuts configuration and utility functions.
  */
 
-import { describe, it, expect } from 'vitest';
-import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './KeyBindings';
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  DEFAULT_KEY_BINDINGS,
+  UNBOUND_CODE,
+  describeKeyCombo,
+  formatActionShortcut,
+  isUnboundCombo,
+  setShortcutComboResolver,
+  shortcutTooltip,
+} from './KeyBindings';
 import type { KeyCombination } from './KeyboardManager';
+import keyboardShortcutsDoc from '../../../docs/reference/keyboard-shortcuts.md?raw';
 
 describe('KeyBindings', () => {
   describe('DEFAULT_KEY_BINDINGS', () => {
@@ -548,13 +557,7 @@ describe('KeyBindings', () => {
 
   describe('shortcut reference doc has no duplicate key assignments (Issue #349)', () => {
     it('KB-U107: keyboard-shortcuts.md does not list the same shortcut for two different actions in the same section', async () => {
-      // @ts-ignore -- Node modules available in test environment
-      const fs = await import('fs');
-      // @ts-ignore -- Node modules available in test environment
-      const path = await import('path');
-      // @ts-ignore -- __dirname available in test environment
-      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
-      const content = fs.readFileSync(docPath, 'utf-8');
+      const content = keyboardShortcutsDoc;
 
       // Split into sections by ## headings
       const sections = content.split(/^## /m).slice(1); // skip preamble before first ##
@@ -563,7 +566,7 @@ describe('KeyBindings', () => {
       // Annotations section uses bare keys that overlap with global shortcuts on purpose
       // (context-dependent). We check for duplicates within each section.
       for (const section of sections) {
-        const sectionName = section.split('\n')[0].trim();
+        const sectionName = (section.split('\n')[0] ?? '').trim();
         const shortcutRowRegex = /^\|\s*`([^`]+)`\s*\|(.+)\|$/gm;
         const seen = new Map<string, string>();
 
@@ -592,13 +595,7 @@ describe('KeyBindings', () => {
     });
 
     it('KB-U109: keyboard-shortcuts.md cross-section duplicates are only contextual shortcuts', async () => {
-      // @ts-ignore -- Node modules available in test environment
-      const fs = await import('fs');
-      // @ts-ignore -- Node modules available in test environment
-      const path = await import('path');
-      // @ts-ignore -- __dirname available in test environment
-      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
-      const content = fs.readFileSync(docPath, 'utf-8');
+      const content = keyboardShortcutsDoc;
 
       // Modifier shortcuts may appear in multiple sections when they are contextual
       // (same key does different things on different tabs). The Contextual Shortcuts
@@ -618,7 +615,7 @@ describe('KeyBindings', () => {
       ]);
 
       for (const section of sections) {
-        const sectionName = section.split('\n')[0].trim();
+        const sectionName = (section.split('\n')[0] ?? '').trim();
         // Skip Mouse Controls section (different table format)
         if (sectionName === 'Mouse Controls') continue;
 
@@ -651,13 +648,7 @@ describe('KeyBindings', () => {
     });
 
     it('KB-U108: contextual channel shortcuts are documented with tab-specific notes', async () => {
-      // @ts-ignore -- Node modules available in test environment
-      const fs = await import('fs');
-      // @ts-ignore -- Node modules available in test environment
-      const path = await import('path');
-      // @ts-ignore -- __dirname available in test environment
-      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
-      const content = fs.readFileSync(docPath, 'utf-8');
+      const content = keyboardShortcutsDoc;
 
       // Channel shortcuts (Shift+R/B/N) are global but overridden on specific tabs.
       // The docs should list them in the Channel View section AND document
@@ -671,7 +662,7 @@ describe('KeyBindings', () => {
       // Verify they appear in the Channel View section
       const channelSectionMatch = content.match(/## Channel View\s*\n([\s\S]*?)(?=\n## |\n>|$)/);
       expect(channelSectionMatch).not.toBeNull();
-      const channelSection = channelSectionMatch![1];
+      const channelSection = channelSectionMatch?.[1] ?? '';
 
       for (const { combo, label } of contextualShortcuts) {
         const rowPattern = new RegExp(`^\\|\\s*\`${combo.replace('+', '\\+')}\`\\s*\\|`, 'm');
@@ -704,6 +695,52 @@ describe('KeyBindings', () => {
       const snapshotBinding = DEFAULT_KEY_BINDINGS['panel.snapshots']!;
       const historyBinding = DEFAULT_KEY_BINDINGS['panel.history']!;
       expect(describeKeyCombo(snapshotBinding)).not.toBe(describeKeyCombo(historyBinding));
+    });
+  });
+
+  describe('browser-reserved combos', () => {
+    it('KB-RSV-001: nothing is bound to Ctrl+Shift+N (reserved by Chromium)', () => {
+      const offenders = Object.entries(DEFAULT_KEY_BINDINGS).filter(
+        ([, b]) => b.code === 'KeyN' && b.ctrl && b.shift && !b.alt && !b.meta,
+      );
+      expect(offenders).toEqual([]);
+    });
+
+    it('KB-RSV-002: network.disconnect uses a free combo', () => {
+      expect(describeKeyCombo(DEFAULT_KEY_BINDINGS['network.disconnect']!)).toBe('Ctrl+Shift+Alt+N');
+      const sameCombo = Object.entries(DEFAULT_KEY_BINDINGS).filter(
+        ([action, b]) => action !== 'network.disconnect' && describeKeyCombo(b) === 'Ctrl+Shift+Alt+N',
+      );
+      expect(sameCombo).toEqual([]);
+    });
+  });
+
+  describe('shortcut labels for tooltips', () => {
+    afterEach(() => setShortcutComboResolver(null));
+
+    it('KB-TT-001: formatActionShortcut formats the registry combo', () => {
+      expect(formatActionShortcut('timeline.cycleLoopMode')).toBe('Ctrl+L');
+      expect(formatActionShortcut('panel.ocio')).toBe('Shift+O');
+      expect(formatActionShortcut('does.not.exist')).toBe('');
+    });
+
+    it('KB-TT-002: shortcutTooltip appends the key and names the tab for scoped bindings', () => {
+      expect(shortcutTooltip('Cycle loop mode', 'timeline.cycleLoopMode')).toBe('Cycle loop mode (Ctrl+L)');
+      expect(shortcutTooltip('Network Sync', 'network.togglePanel')).toBe('Network Sync (Shift+N on QC tab)');
+      expect(shortcutTooltip('Unknown', 'does.not.exist')).toBe('Unknown');
+    });
+
+    it('KB-TT-003: a resolver supplies customized combos; unbound shows no key', () => {
+      setShortcutComboResolver((action) =>
+        action === 'panel.ocio' ? { code: 'KeyK', alt: true } : { code: UNBOUND_CODE },
+      );
+      expect(formatActionShortcut('panel.ocio')).toBe('Alt+K');
+      expect(shortcutTooltip('Loop', 'timeline.cycleLoopMode')).toBe('Loop');
+    });
+
+    it('KB-TT-004: describeKeyCombo labels the unbound sentinel', () => {
+      expect(isUnboundCombo({ code: UNBOUND_CODE })).toBe(true);
+      expect(describeKeyCombo({ code: UNBOUND_CODE })).toBe('Unbound');
     });
   });
 });

@@ -12,6 +12,8 @@ export interface FocusZone {
   orientation: 'horizontal' | 'vertical';
 }
 
+import { isKeyboardFocused } from '../../utils/input/KeyboardManager';
+
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [tabindex="0"], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]';
 
@@ -53,9 +55,7 @@ export class FocusManager {
     const savedIdx = this.rovingIndices.get(zoneName) ?? 0;
     const activeIdx = Math.min(savedIdx, items.length - 1);
 
-    for (let i = 0; i < items.length; i++) {
-      items[i]!.setAttribute('tabindex', i === activeIdx ? '0' : '-1');
-    }
+    items.forEach((item, i) => item.setAttribute('tabindex', i === activeIdx ? '0' : '-1'));
 
     this.rovingIndices.set(zoneName, activeIdx);
   }
@@ -67,7 +67,8 @@ export class FocusManager {
     const len = this.zones.length;
     for (let attempt = 0; attempt < len; attempt++) {
       const wrapped = ((index % len) + len) % len;
-      const zone = this.zones[wrapped]!;
+      const zone = this.zones[wrapped];
+      if (!zone) return;
 
       // Skip hidden zones (e.g. timeline in image mode)
       // Check display:none, visibility:hidden, and detached elements
@@ -109,9 +110,7 @@ export class FocusManager {
 
     // Focus the first focusable element inside the trap
     const focusable = this.getTrapFocusable();
-    if (focusable.length > 0) {
-      focusable[0]!.focus();
-    }
+    focusable[0]?.focus();
   }
 
   releaseFocus(): void {
@@ -173,8 +172,9 @@ export class FocusManager {
       return;
     }
 
-    const first = focusable[0]!;
-    const last = focusable[focusable.length - 1]!;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
     const active = document.activeElement;
 
     // If focus is outside the trap, snap it back to first (or last if shift)
@@ -197,7 +197,7 @@ export class FocusManager {
         const idx = focusable.indexOf(active as HTMLElement);
         if (idx > 0) {
           e.preventDefault();
-          focusable[idx - 1]!.focus();
+          focusable[idx - 1]?.focus();
         }
       }
     } else {
@@ -209,7 +209,7 @@ export class FocusManager {
         const idx = focusable.indexOf(active as HTMLElement);
         if (idx !== -1 && idx < focusable.length - 1) {
           e.preventDefault();
-          focusable[idx + 1]!.focus();
+          focusable[idx + 1]?.focus();
         }
       }
     }
@@ -228,6 +228,11 @@ export class FocusManager {
 
     const currentIdx = items.indexOf(activeEl);
     if (currentIdx === -1) return;
+
+    // A toolbar button that only holds focus because it was clicked with the
+    // mouse is not being keyboard-navigated: leave arrows / Home / End to the
+    // global shortcuts (frame stepping, go to start/end) instead of moving focus.
+    if (!isKeyboardFocused(activeEl)) return;
 
     const isHorizontal = zone.orientation === 'horizontal';
     const prevKey = isHorizontal ? 'ArrowLeft' : 'ArrowUp';
@@ -248,9 +253,11 @@ export class FocusManager {
     if (newIdx !== -1) {
       e.preventDefault();
       // Update tabindex: old becomes -1, new becomes 0
-      items[currentIdx]!.setAttribute('tabindex', '-1');
-      items[newIdx]!.setAttribute('tabindex', '0');
-      items[newIdx]!.focus();
+      const next = items[newIdx];
+      if (!next) return;
+      activeEl.setAttribute('tabindex', '-1');
+      next.setAttribute('tabindex', '0');
+      next.focus();
       this.rovingIndices.set(zone.name, newIdx);
     }
   }

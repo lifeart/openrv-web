@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FocusManager, type FocusZone } from './FocusManager';
 
 function createButtons(count: number): HTMLButtonElement[] {
@@ -431,5 +431,46 @@ describe('FocusManager', () => {
     // Next zone should skip B and go to C
     fm.focusNextZone();
     expect(document.activeElement).toBe(buttonsC[0]);
+  });
+});
+
+describe('FocusManager pointer-focused buttons (U7)', () => {
+  let fm: FocusManager;
+
+  beforeEach(() => {
+    fm = new FocusManager();
+  });
+
+  afterEach(() => {
+    fm.dispose();
+    document.body.innerHTML = '';
+  });
+
+  it('FM-PTR-001: arrows on a mouse-clicked toolbar button are left to global shortcuts', () => {
+    const buttons = createButtons(3);
+    fm.addZone(createZone('toolbar', buttons));
+    fm.initRovingTabindex('toolbar');
+    buttons[0]!.focus();
+    // A click-focused button does not match :focus-visible in browsers
+    const matches = buttons[0]!.matches.bind(buttons[0]!);
+    vi.spyOn(buttons[0]!, 'matches').mockImplementation((sel: string) =>
+      sel === ':focus-visible' ? false : matches(sel),
+    );
+
+    const event = pressKey('ArrowRight');
+    expect(document.activeElement).toBe(buttons[0]);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('FM-PTR-002: keyboard-focused toolbar buttons keep roving navigation and consume the key', () => {
+    const buttons = createButtons(3);
+    fm.addZone(createZone('toolbar', buttons));
+    fm.initRovingTabindex('toolbar');
+    buttons[0]!.focus();
+
+    const event = pressKey('ArrowRight');
+    expect(document.activeElement).toBe(buttons[1]);
+    // preventDefault lets KeyboardManager skip the key (no frame step on top)
+    expect(event.defaultPrevented).toBe(true);
   });
 });

@@ -7,7 +7,7 @@
  */
 
 import { type KeyCombination } from './KeyboardManager';
-import { DEFAULT_KEY_BINDINGS, type KeyBindingKeys } from './KeyBindings';
+import { DEFAULT_KEY_BINDINGS, UNBOUND_CODE, isUnboundCombo, type KeyBindingKeys } from './KeyBindings';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
 import { Logger } from '../Logger';
@@ -52,47 +52,77 @@ export class CustomKeyBindingsManager {
    * @param excludeAction Optional action to exclude from the search (for self-reassignment)
    */
   findConflictingAction(combo: KeyCombination, excludeAction?: string): string | null {
-    const targetId = this.comboToId(combo);
+    return this.findActionsUsingCombo(combo, excludeAction)[0] ?? null;
+  }
 
+  /**
+   * All actions whose effective combo equals `combo` (unbound actions never
+   * match), optionally excluding one action.
+   */
+  findActionsUsingCombo(combo: KeyCombination, excludeAction?: string): string[] {
+    if (isUnboundCombo(combo)) return [];
+    const targetId = this.comboToId(combo);
+    const result: string[] = [];
     for (const actionName of Object.keys(DEFAULT_KEY_BINDINGS)) {
       if (actionName === excludeAction) continue;
       const effective = this.getEffectiveCombo(actionName);
-      if (this.comboToId(effective) === targetId) {
-        return actionName;
+      if (!isUnboundCombo(effective) && this.comboToId(effective) === targetId) {
+        result.push(actionName);
       }
     }
-    return null;
+    return result;
   }
 
   /**
    * Set a custom key binding for an action.
    * Throws if the combo is already used by another action, unless force is true.
+   * With force, the combo is taken away from every other action that used it
+   * (those actions become unbound), so exactly one action owns the key.
    */
   setCustomBinding(action: string, customCombo: KeyCombination, force = false): void {
+    if (!DEFAULT_KEY_BINDINGS[action as KeyBindingKeys]) {
+      throw new Error(`Unknown action: ${action}`);
+    }
+    const conflicts = this.findActionsUsingCombo(customCombo, action);
+    if (!force && conflicts.length > 0) {
+      throw new Error(`Key combination already used by "${conflicts[0]}"`);
+    }
+
+    this.putBinding(action, customCombo);
+    for (const other of conflicts) {
+      this.putBinding(other, { code: UNBOUND_CODE });
+    }
+    this.saveToStorage();
+    this.applyCustomBindings();
+  }
+
+  /**
+   * Remove the key from an action without assigning a new one.
+   */
+  unbindAction(action: string): void {
+    this.putBinding(action, { code: UNBOUND_CODE });
+    this.saveToStorage();
+    this.applyCustomBindings();
+  }
+
+  /** Check whether an action has been explicitly left without a key. */
+  isUnbound(action: string): boolean {
+    const custom = this.customBindings.get(action);
+    return custom !== undefined && isUnboundCombo(custom.customCombo);
+  }
+
+  private putBinding(action: string, customCombo: KeyCombination): void {
     const defaultBinding = DEFAULT_KEY_BINDINGS[action as KeyBindingKeys];
     if (!defaultBinding) {
       throw new Error(`Unknown action: ${action}`);
     }
-
-    if (!force) {
-      const conflict = this.findConflictingAction(customCombo, action);
-      if (conflict) {
-        throw new Error(`Key combination already used by "${conflict}"`);
-      }
-    }
-
-    // Extract the KeyCombination part (without description)
-    const { description: _, ...originalCombo } = defaultBinding;
-
-    const binding: CustomKeyBinding = {
+    // Extract the KeyCombination part (without description / context)
+    const { description: _, context: _context, ...originalCombo } = defaultBinding;
+    this.customBindings.set(action, {
       action,
       originalCombo: originalCombo as KeyCombination,
       customCombo,
-    };
-
-    this.customBindings.set(action, binding);
-    this.saveToStorage();
-    this.applyCustomBindings();
+    });
   }
 
   /**
@@ -139,8 +169,8 @@ export class CustomKeyBindingsManager {
       throw new Error(`Unknown action: ${action}`);
     }
 
-    // Extract the KeyCombination part (without description)
-    const { description: _, ...combo } = defaultBinding;
+    // Extract the KeyCombination part (without description / context)
+    const { description: _, context: _context, ...combo } = defaultBinding;
     return combo as KeyCombination;
   }
 

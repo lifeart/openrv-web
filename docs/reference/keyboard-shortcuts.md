@@ -151,6 +151,8 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 
 ## Annotations
 
+Paint tool keys (`V`, `P`, `E`, `T`, `R`, `O`, `L`, `A`, `B`, `G`, `X`) only act while the Annotate tab is active, so pressing them on other tabs never arms a drawing tool.
+
 | Shortcut | Action |
 |----------|--------|
 | `V` | Pan tool (no drawing) |
@@ -184,7 +186,7 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+Alt+P` | Toggle playlist panel |
 | `Ctrl+Shift+S` | Create quick snapshot |
 | `Ctrl+Shift+Alt+S` | Toggle snapshots panel |
-| `Ctrl+Shift+N` | Quick disconnect from sync room |
+| `Ctrl+Shift+Alt+N` | Quick disconnect from sync room |
 
 ## Layout Presets
 
@@ -228,6 +230,7 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 
 | Shortcut | Action |
 |----------|--------|
+| `N` | Add note at current frame (Annotate tab; toggles filtering elsewhere) |
 | `Shift+Alt+N` | Toggle notes panel |
 | `Alt+Shift+]` | Go to next note |
 | `Alt+Shift+[` | Go to previous note |
@@ -274,8 +277,9 @@ Some shortcuts change behavior depending on the active tab or context. Globally,
 | `G` | Go to frame | Gamut diagram (QC tab), ghost mode (Annotate tab) |
 | `H` | Fit to height | Histogram (QC tab) |
 | `W` | Fit to width | Waveform (QC tab) |
+| `N` | Toggle nearest-neighbor / bilinear filtering | Add note at current frame (Annotate tab) |
 
-If a contextual override is not what you need, switch to a different tab or use the [Shortcut Editor](#shortcut-editor) to reassign bindings.
+If a contextual override is not what you need, switch to a different tab or use the [Shortcut Editor](#shortcut-editor) to reassign bindings. Custom bindings always take precedence over these built-in contextual defaults.
 
 ## Mouse Controls
 
@@ -289,16 +293,16 @@ If a contextual override is not what you need, switch to a different tab or use 
 
 ## Shortcut Cheat Sheet
 
-Press `?` or open the Help menu to display the shortcut cheat sheet overlay. This quick-reference panel shows all available shortcuts grouped by category in a scannable grid layout. The cheat sheet overlay is dismissed by pressing `Escape` or clicking outside the panel.
+Press `?` or choose **Help > Keyboard Shortcuts** to display the shortcut cheat sheet overlay. This quick-reference panel shows all available shortcuts grouped by category in a scannable grid layout. The cheat sheet overlay is dismissed by pressing `Escape` or clicking outside the panel.
 
 ## Shortcut Editor
 
-OpenRV Web includes a dedicated shortcut editor UI for viewing and customizing keyboard shortcuts. Open it from the Settings panel. The editor displays every registered shortcut with its current binding, default binding, and category. Click any shortcut row to record a new key combination.
+OpenRV Web includes a dedicated shortcut editor UI for viewing and customizing keyboard shortcuts. Open it from **Help > Custom Key Bindings**. The editor displays every registered shortcut with its current binding, default binding, and category. Click any shortcut row to record a new key combination.
 
 ### Customization Features
 
 - **Override any default binding** -- reassign any shortcut to a different key combination
-- **Conflict detection** -- the editor highlights conflicts in real time when a new binding collides with an existing one, showing which action holds the conflicting key
+- **Conflict detection** -- the editor highlights conflicts in real time when a new binding collides with an existing one, showing which action holds the conflicting key. Choosing **Override** moves the key to the new action and leaves the previous owner unbound
 - **Export/Import** -- save custom bindings as a JSON file and import them on another machine or browser to share a consistent shortcut layout across a team
 - **Reset** -- return individual bindings or all bindings to defaults
 
@@ -308,7 +312,7 @@ Custom bindings are stored in the browser's localStorage and persist across sess
 
 Keyboard shortcuts are automatically disabled when typing in text inputs, number inputs, search fields, password fields, textareas, and contenteditable elements. This prevents shortcuts from interfering with text entry.
 
-Shortcuts remain active when focused on non-text controls such as sliders, checkboxes, and buttons.
+Shortcuts remain active when focused on non-text controls such as checkboxes and buttons. A button that was clicked with the mouse does not capture `Space` or the arrow keys: they still play/pause and step frames. When a control is reached with the keyboard (`Tab`), `Space`/`Enter` activate it and arrow keys move between toolbar items. Sliders, lists, menus and tab strips keep their own arrow keys while they are focused, and shortcuts are paused while a modal dialog is open.
 
 ---
 

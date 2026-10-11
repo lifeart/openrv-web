@@ -2,10 +2,12 @@
  * AppKeyboardHandler - Keyboard registration and binding tests
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { KeyboardHandlerContext } from './AppKeyboardHandler';
 import { AppKeyboardHandler } from './AppKeyboardHandler';
 import { KeyboardManager } from './utils/input/KeyboardManager';
+import { ActiveContextManager } from './utils/input/ActiveContextManager';
+import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { closeModal } from './ui/components/shared/Modal';
 import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './utils/input/KeyBindings';
@@ -363,5 +365,113 @@ describe('ShortcutEditor integration (Issue #57)', () => {
     // ShortcutEditor renders a toolbar with class "shortcut-toolbar"
     const toolbar = document.querySelector('.shortcut-toolbar');
     expect(toolbar).not.toBeNull();
+  });
+});
+
+describe('Keyboard UX fixes (U4c / U6 / U8)', () => {
+  const attached: KeyboardManager[] = [];
+
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
+
+  afterEach(() => {
+    for (const km of attached.splice(0)) km.detach(document.body);
+  });
+
+  function keydown(code: string, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', { code, key, bubbles: true, cancelable: true, ...init });
+    document.body.dispatchEvent(event);
+    return event;
+  }
+
+  function setupApp(handlers: Record<string, () => void>) {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const contexts = new ActiveContextManager();
+    const contextual = new ContextualKeyboardManager(contexts);
+    contextual.setOverriddenActionCheck((action) => ckm.hasCustomBinding(action));
+    km.setContextualManager(contextual);
+    const handler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => handlers,
+      getContainer: () => document.body,
+    });
+    handler.setup();
+    km.attach(document.body);
+    attached.push(km);
+    return { km, ckm, contexts, contextual, handler };
+  }
+
+  it('KUX-001: paint tool keys only fire in the paint context', () => {
+    const pen = vi.fn();
+    const { contexts } = setupApp({ 'paint.pen': pen });
+
+    contexts.setContext('viewer');
+    const ev = keydown('KeyP', 'p');
+    expect(pen).not.toHaveBeenCalled();
+    expect(ev.defaultPrevented).toBe(false);
+
+    contexts.setContext('paint');
+    keydown('KeyP', 'p');
+    expect(pen).toHaveBeenCalledTimes(1);
+  });
+
+  it('KUX-002: every bare-letter paint tool binding is scoped to the paint context', () => {
+    const paintTools = [
+      'paint.pan',
+      'paint.pen',
+      'paint.eraser',
+      'paint.text',
+      'paint.arrow',
+      'paint.toggleBrush',
+      'paint.toggleHold',
+    ];
+    for (const action of paintTools) {
+      expect(DEFAULT_KEY_BINDINGS[action]?.context).toBe('paint');
+      expect(AppKeyboardHandler.gatingContext(action)).toBe('paint');
+    }
+    expect(AppKeyboardHandler.gatingContext('playback.toggle')).toBe('global');
+  });
+
+  it('KUX-003: a user rebind to R wins over the built-in contextual R (reset in/out)', () => {
+    const resetInOut = vi.fn();
+    const toggleMark = vi.fn();
+    const { ckm, contextual, handler } = setupApp({ 'timeline.toggleMark': toggleMark });
+    contextual.register('timeline.resetInOut', { code: 'KeyR' }, resetInOut, 'global');
+
+    ckm.setCustomBinding('timeline.toggleMark', { code: 'KeyR' }, true);
+    handler.refresh();
+
+    keydown('KeyR', 'r');
+    expect(toggleMark).toHaveBeenCalledTimes(1);
+    expect(resetInOut).not.toHaveBeenCalled();
+  });
+
+  it('KUX-004: rebinding a contextual action moves it off its built-in key', () => {
+    const fitToHeight = vi.fn();
+    const { ckm, contextual, handler } = setupApp({ 'view.fitToHeight': fitToHeight });
+    contextual.register('view.fitToHeight', { code: 'KeyH' }, fitToHeight, 'global');
+
+    ckm.setCustomBinding('view.fitToHeight', { code: 'KeyJ', shift: true, alt: true }, true);
+    handler.refresh();
+
+    keydown('KeyH', 'h');
+    expect(fitToHeight).not.toHaveBeenCalled();
+    keydown('KeyJ', 'J', { shiftKey: true, altKey: true });
+    expect(fitToHeight).toHaveBeenCalledTimes(1);
+  });
+
+  it('KUX-005: unbound actions are not registered', () => {
+    const { km, ckm, handler } = setupApp({ 'playback.toggle': () => undefined });
+    expect(km.isRegistered({ code: 'Space' })).toBe(true);
+    ckm.unbindAction('playback.toggle');
+    handler.refresh();
+    expect(km.isRegistered({ code: 'Space' })).toBe(false);
+    expect(km.getBindings().some((b) => b.combo.code === 'Unbound')).toBe(false);
+  });
+
+  it('KUX-006: N is context-managed (filter toggle globally, add note on the Annotate tab)', () => {
+    const { km } = setupApp({ 'view.toggleFilterMode': () => undefined, 'notes.addNote': () => undefined });
+    expect(km.isRegistered({ code: 'KeyN' })).toBe(false);
   });
 });

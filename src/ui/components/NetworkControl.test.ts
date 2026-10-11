@@ -38,6 +38,12 @@ describe('NetworkControl', () => {
       const button = el.querySelector('[data-testid="network-sync-button"]');
       expect(button).toBeTruthy();
     });
+
+    it('NCC-001b: button tooltip names the registered shortcut and where it works', () => {
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      // network.togglePanel is Shift+N scoped to the QC tab (Shift+N is "reset channel" elsewhere)
+      expect(button.title).toBe('Network Sync (Shift+N on QC tab)');
+    });
   });
 
   describe('panel toggle', () => {

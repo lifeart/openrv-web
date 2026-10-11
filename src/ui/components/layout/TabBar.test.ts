@@ -324,6 +324,32 @@ describe('TabBar', () => {
       pressKey(el, 'ArrowRight');
       expect(callback).toHaveBeenCalledWith('color');
     });
+
+    it('TAB-U088: arrows on a mouse-clicked tab do not switch tabs (left to frame stepping)', () => {
+      const el = tabBar.render();
+      document.body.appendChild(el);
+      const viewBtn = el.querySelector('[data-tab-id="view"]') as HTMLButtonElement;
+      viewBtn.focus();
+      const matches = viewBtn.matches.bind(viewBtn);
+      vi.spyOn(viewBtn, 'matches').mockImplementation((sel: string) =>
+        sel === ':focus-visible' ? false : matches(sel),
+      );
+      const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
+      viewBtn.dispatchEvent(event);
+      expect(tabBar.activeTab).toBe('view');
+      expect(event.defaultPrevented).toBe(false);
+      document.body.removeChild(el);
+    });
+
+    it('TAB-U089: arrows on a keyboard-focused tab still switch tabs', () => {
+      const el = tabBar.render();
+      document.body.appendChild(el);
+      const viewBtn = el.querySelector('[data-tab-id="view"]') as HTMLButtonElement;
+      viewBtn.focus();
+      viewBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      expect(tabBar.activeTab).toBe('color');
+      document.body.removeChild(el);
+    });
   });
 
   describe('indicator', () => {

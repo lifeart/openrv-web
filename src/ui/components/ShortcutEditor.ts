@@ -119,7 +119,7 @@ export function buildActionGroups(manager: ShortcutEditorManager): ActionGroup[]
   return sortedCategories.map((category) => ({
     category,
     label: CATEGORY_LABELS[category] ?? category,
-    actions: groups.get(category)!,
+    actions: groups.get(category) ?? [],
   }));
 }
 
@@ -378,7 +378,7 @@ export class ShortcutEditor {
         this.keyHandler = null;
       }
 
-      const confirmMsg = `"${describeKeyCombo(combo)}" is already used by "${conflict.existingDescription}". Override?`;
+      const confirmMsg = `"${describeKeyCombo(combo)}" is already used by "${conflict.existingDescription}". Override? That action will be left without a shortcut.`;
       void showConfirm(confirmMsg, {
         title: 'Override shortcut?',
         confirmText: 'Override',

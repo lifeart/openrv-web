@@ -341,8 +341,22 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportSourceFrame).toHaveBeenCalledWith('jpeg', 0.8);
   });
 
-  it('PW-007: showShortcuts calls keyboardHandler.showCustomBindingsDialog()', () => {
+  it('PW-007: showShortcuts falls back to the bindings editor when no cheat sheet exists', () => {
     headerBar.emit('showShortcuts', undefined);
+    const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    expect(handler.showCustomBindingsDialog).toHaveBeenCalled();
+  });
+
+  it('PW-007b: showShortcuts opens the cheat sheet, not the rebinding editor', () => {
+    const sheet = { show: vi.fn() };
+    deps.getShortcutCheatSheet = vi.fn(() => sheet);
+    headerBar.emit('showShortcuts', undefined);
+    expect(sheet.show).toHaveBeenCalledTimes(1);
+    expect(deps.getKeyboardHandler).not.toHaveBeenCalled();
+  });
+
+  it('PW-007c: showCustomKeyBindings opens the rebinding editor', () => {
+    headerBar.emit('showCustomKeyBindings', undefined);
     const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(handler.showCustomBindingsDialog).toHaveBeenCalled();
   });
