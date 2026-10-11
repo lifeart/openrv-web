@@ -147,6 +147,9 @@ export interface PlaybackSyncPayload {
   playDirection: number;
   loopMode: LoopModeSync;
   playbackMode?: PlaybackModeSync;
+  /** Shared in/out range (optional for older peers). */
+  inPoint?: number;
+  outPoint?: number;
   timestamp: number;
 }
 

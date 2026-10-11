@@ -38,6 +38,9 @@ class MockSession extends EventEmitter {
   setSourceA = vi.fn();
   setSourceB = vi.fn();
   setCurrentAB = vi.fn();
+  togglePlayDirection = vi.fn(() => {
+    this.playDirection = -this.playDirection;
+  });
   noteManager: NoteManager;
 
   constructor() {
@@ -64,6 +67,8 @@ class MockNetworkSyncManager extends EventEmitter {
   sendAnnotationSync = vi.fn();
   sendColorSync = vi.fn();
   sendNoteSync = vi.fn();
+  sendViewSync = vi.fn();
+  sendCursorPosition = vi.fn();
   sendSessionStateResponse = vi.fn();
   _applyLocalRoomCreation = vi.fn();
   joinRoom = vi.fn();
@@ -91,6 +96,7 @@ class MockNetworkSyncManager extends EventEmitter {
     beginApplyRemote: ReturnType<typeof vi.fn>;
     endApplyRemote: ReturnType<typeof vi.fn>;
     shouldApplyFrameSync: ReturnType<typeof vi.fn>;
+    predictFrame: ReturnType<typeof vi.fn>;
   };
 
   constructor() {
@@ -103,6 +109,7 @@ class MockNetworkSyncManager extends EventEmitter {
       beginApplyRemote,
       endApplyRemote,
       shouldApplyFrameSync,
+      predictFrame: vi.fn((state: { currentFrame: number }) => state.currentFrame),
     };
     beginApplyRemote.mockImplementation(() => {
       sm.isApplyingRemoteState = true;
@@ -2016,5 +2023,188 @@ describe('AppNetworkBridge room security', () => {
     expect(link.toString()).not.toContain('482913');
     expect(link.hash).toContain('k=AAAAAAAAAAAAAAAAAAAAAA');
     expect(link.hash).toContain('pr=1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Playback, view, cursor and annotation-edit sync (C6, C7)
+// ---------------------------------------------------------------------------
+
+const penStroke = (id: string, frame = 1) => ({
+  type: 'pen' as const,
+  id,
+  frame,
+  user: 'me',
+  color: [1, 0, 0, 1] as [number, number, number, number],
+  width: 2,
+  brush: 'round' as const,
+  points: [{ x: 0.1, y: 0.2, pressure: 1 }],
+  join: 'round' as const,
+  cap: 'round' as const,
+  splat: false,
+  mode: 'normal' as const,
+  startFrame: -1,
+  duration: -1,
+});
+
+describe('AppNetworkBridge sync fidelity', () => {
+  let ctx: ReturnType<typeof createContext>;
+  let bridge: AppNetworkBridge;
+  let viewListener: ((x: number, y: number, z: number) => void) | null;
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createContext();
+    viewListener = null;
+    container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100 }) as DOMRect;
+    Object.assign(ctx._viewer, {
+      addViewChangeListener: vi.fn((cb: (x: number, y: number, z: number) => void) => {
+        viewListener = cb;
+        return () => (viewListener = null);
+      }),
+      setPan: vi.fn(),
+      getChannelMode: () => 'rgb',
+      getContainer: () => container,
+    });
+    bridge = new AppNetworkBridge({
+      session: ctx.session,
+      viewer: ctx.viewer,
+      paintEngine: ctx.paintEngine,
+      networkSyncManager: ctx.networkSyncManager,
+      networkControl: ctx.networkControl,
+      headerBar: ctx.headerBar,
+    });
+  });
+
+  afterEach(() => {
+    bridge.dispose();
+    vi.useRealTimers();
+  });
+
+  it('ANB-310: frames advancing during playback are not broadcast by every client', () => {
+    bridge.setup();
+    ctx._session.isPlaying = true;
+    ctx._session.emit('frameChanged', 10);
+    expect(ctx._networkSyncManager.sendFrameSync).not.toHaveBeenCalled();
+  });
+
+  it('ANB-311: only the host sends a playback heartbeat while playing', () => {
+    vi.useFakeTimers();
+    bridge.setup();
+    ctx._session.isPlaying = true;
+
+    vi.advanceTimersByTime(3000);
+    expect(ctx._networkSyncManager.sendPlaybackSync).not.toHaveBeenCalled();
+
+    ctx._networkSyncManager.isHost = true;
+    vi.advanceTimersByTime(3000);
+    expect(ctx._networkSyncManager.sendPlaybackSync).toHaveBeenCalledTimes(3);
+    expect(ctx._networkSyncManager.sendPlaybackSync).toHaveBeenCalledWith(
+      expect.objectContaining({ isPlaying: true, inPoint: 0, outPoint: 100 }),
+    );
+  });
+
+  it('ANB-312: remote playback applies direction, loop, in/out and the latency-predicted frame', () => {
+    bridge.setup();
+    const sm = ctx._networkSyncManager.getSyncStateManager();
+    sm.predictFrame.mockReturnValue(52);
+
+    ctx._networkSyncManager.emit('syncPlayback', {
+      isPlaying: true,
+      currentFrame: 50,
+      playbackSpeed: 1,
+      playDirection: -1,
+      loopMode: 'pingpong',
+      inPoint: 10,
+      outPoint: 90,
+      timestamp: 0,
+    });
+
+    expect(ctx._session.togglePlayDirection).toHaveBeenCalledTimes(1);
+    expect(ctx._session.loopMode).toBe('pingpong');
+    expect(ctx._session.setInPoint).toHaveBeenCalledWith(10);
+    expect(ctx._session.setOutPoint).toHaveBeenCalledWith(90);
+    expect(ctx._session.play).toHaveBeenCalled();
+    expect(ctx._session.goToFrame).toHaveBeenCalledWith(52);
+    // The sender's clock is ignored; prediction starts from receive time.
+    expect(sm.predictFrame.mock.calls[0]![0].timestamp).toBeGreaterThan(0);
+  });
+
+  it('ANB-313: local pan/zoom is sent, remote view sets pan and is not echoed back', () => {
+    vi.useFakeTimers();
+    bridge.setup();
+
+    viewListener!(12, -4, 2);
+    vi.advanceTimersByTime(200);
+    expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledWith({
+      panX: 12,
+      panY: -4,
+      zoom: 2,
+      channelMode: 'rgb',
+    });
+
+    ctx._networkSyncManager.sendViewSync.mockClear();
+    ctx._networkSyncManager.emit('syncView', { panX: 30, panY: 5, zoom: 3, channelMode: 'rgb' });
+    expect((ctx._viewer as any).setPan).toHaveBeenCalledWith(30, 5);
+    viewListener!(30, 5, 3); // the viewer reporting the remote change
+    vi.advanceTimersByTime(200);
+    expect(ctx._networkSyncManager.sendViewSync).not.toHaveBeenCalled();
+  });
+
+  it('ANB-314: pointer movement over the viewer sends a normalized cursor position', () => {
+    vi.useFakeTimers();
+    bridge.setup();
+    container.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 25 }) as PointerEvent);
+    vi.advanceTimersByTime(100);
+    expect(ctx._networkSyncManager.sendCursorPosition).toHaveBeenCalledWith(0.25, 0.25);
+  });
+
+  it('ANB-315: clearing a frame, undo and redo are broadcast per annotation', () => {
+    bridge.setup();
+    ctx._networkSyncManager.emit('roomJoined', { users: [] });
+
+    ctx.paintEngine.addAnnotation(penStroke('a') as any);
+    expect(ctx._networkSyncManager.sendAnnotationSync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ action: 'add', frame: 1, annotationId: 'a' }),
+    );
+
+    ctx._networkSyncManager.sendAnnotationSync.mockClear();
+    ctx.paintEngine.undo();
+    expect(ctx._networkSyncManager.sendAnnotationSync).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'remove', annotationId: 'a' }),
+    );
+
+    ctx._networkSyncManager.sendAnnotationSync.mockClear();
+    ctx.paintEngine.redo();
+    expect(ctx._networkSyncManager.sendAnnotationSync).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'add', annotationId: 'a' }),
+    );
+
+    ctx._networkSyncManager.sendAnnotationSync.mockClear();
+    ctx.paintEngine.clearFrame(1);
+    expect(ctx._networkSyncManager.sendAnnotationSync).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'remove', annotationId: 'a' }),
+    );
+    // Never a frame-wide 'clear' that would also wipe other people's strokes
+    expect(ctx._networkSyncManager.sendAnnotationSync).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'clear' }),
+    );
+  });
+
+  it('ANB-316: remote strokes are not echoed back', () => {
+    bridge.setup();
+    ctx._networkSyncManager.emit('syncAnnotation', {
+      frame: 1,
+      strokes: [penStroke('remote-1')],
+      action: 'add',
+      timestamp: Date.now(),
+    });
+    ctx.paintEngine.addAnnotation(penStroke('mine') as any);
+
+    const sentIds = ctx._networkSyncManager.sendAnnotationSync.mock.calls.flatMap((c: any[]) =>
+      c[0].strokes.map((st: { id: string }) => st.id),
+    );
+    expect(sentIds).toEqual(['mine']);
   });
 });

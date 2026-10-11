@@ -22,6 +22,8 @@ import type {
   NoteSyncPayload,
   ColorSyncPayload,
   CursorSyncPayload,
+  PlaybackSyncPayload,
+  ViewSyncPayload,
 } from './network/types';
 import type { RemoteCursorsOverlay } from './ui/components/RemoteCursorsOverlay';
 import {
@@ -47,6 +49,10 @@ const MAX_CONCURRENT_OUTGOING_TRANSFERS = 2;
 /** Largest offer a client will even ask its user about. */
 const MAX_INCOMING_TRANSFER_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_INCOMING_TRANSFER_FILES = 20_000;
+/** How often the host re-broadcasts playback state while playing. */
+const PLAYBACK_HEARTBEAT_MS = 1000;
+const VIEW_SYNC_THROTTLE_MS = 100;
+const CURSOR_SYNC_THROTTLE_MS = 50;
 /** Media URLs from peers are only followed over these schemes. */
 const ALLOWED_REMOTE_MEDIA_PROTOCOLS = new Set(['http:', 'https:']);
 
@@ -113,6 +119,13 @@ export class AppNetworkBridge {
   private frameSyncThrottle: Throttled<[number]> | null = null;
   private lastPlaybackSyncFrame = -1;
   private lastPlaybackSyncTime = 0;
+  private playbackHeartbeat: ReturnType<typeof setInterval> | null = null;
+  private viewSyncThrottle: Throttled<[ViewSyncPayload]> | null = null;
+  private cursorSyncThrottle: Throttled<[number, number]> | null = null;
+  /** Last view state sent or applied, to suppress echoes and no-op resends. */
+  private lastViewSync: { panX: number; panY: number; zoom: number } | null = null;
+  /** Per-frame annotation state last exchanged with the room (id -> JSON). */
+  private syncedAnnotations = new Map<number, Map<string, string>>();
 
   constructor(ctx: NetworkBridgeContext) {
     this.ctx = ctx;
@@ -603,19 +616,37 @@ export class AppNetworkBridge {
         const sm = networkSyncManager.getSyncStateManager();
         sm.beginApplyRemote();
         try {
-          if (payload.isPlaying && !session.isPlaying) {
-            session.play();
-          } else if (!payload.isPlaying && session.isPlaying) {
-            session.pause();
-          }
-          if (sm.shouldApplyFrameSync(session.currentFrame, payload.currentFrame)) {
-            session.goToFrame(payload.currentFrame);
-          }
           if (session.playbackSpeed !== payload.playbackSpeed) {
             session.playbackSpeed = payload.playbackSpeed;
           }
           if (payload.playbackMode && session.playbackMode !== payload.playbackMode) {
             session.playbackMode = payload.playbackMode;
+          }
+          if (payload.loopMode && session.loopMode !== payload.loopMode) {
+            session.loopMode = payload.loopMode;
+          }
+          if (
+            (payload.playDirection === 1 || payload.playDirection === -1) &&
+            session.playDirection !== payload.playDirection
+          ) {
+            session.togglePlayDirection();
+          }
+          if (typeof payload.inPoint === 'number' && session.inPoint !== payload.inPoint) {
+            session.setInPoint(payload.inPoint);
+          }
+          if (typeof payload.outPoint === 'number' && session.outPoint !== payload.outPoint) {
+            session.setOutPoint(payload.outPoint);
+          }
+          if (payload.isPlaying && !session.isPlaying) {
+            session.play();
+          } else if (!payload.isPlaying && session.isPlaying) {
+            session.pause();
+          }
+          // Compensate for one-way latency. The sender's clock is not
+          // comparable to ours, so only the measured RTT is used.
+          const target = this.predictRemoteFrame(payload);
+          if (sm.shouldApplyFrameSync(session.currentFrame, target)) {
+            session.goToFrame(target);
           }
         } finally {
           sm.endApplyRemote();
@@ -642,7 +673,12 @@ export class AppNetworkBridge {
         const sm = networkSyncManager.getSyncStateManager();
         sm.beginApplyRemote();
         try {
+          this.lastViewSync = { panX: payload.panX, panY: payload.panY, zoom: payload.zoom };
           viewer.setZoom(payload.zoom);
+          if (Number.isFinite(payload.panX) && Number.isFinite(payload.panY)) {
+            const withPan = viewer as unknown as { setPan?: (x: number, y: number) => void };
+            withPan.setPan?.(payload.panX, payload.panY);
+          }
         } finally {
           sm.endApplyRemote();
         }
@@ -738,34 +774,22 @@ export class AppNetworkBridge {
         }),
       );
 
-      // Send outgoing annotation sync when local annotations change
+      // Send outgoing annotation sync whenever a frame's annotations change:
+      // new strokes, erasing, clearing a frame, editing a shape, undo and redo.
+      // Each change is sent per annotation so concurrent work by others on
+      // the same frame is kept.
       this.unsubscribers.push(
-        paintEngine.on('strokeAdded', (annotation: Annotation) => {
-          if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-            networkSyncManager.sendAnnotationSync({
-              frame: annotation.frame,
-              strokes: [annotation],
-              action: 'add',
-              annotationId: annotation.id,
-              timestamp: Date.now(),
-            });
+        paintEngine.on('annotationsChanged', (frame: number) => {
+          const current = this.snapshotAnnotationFrame(frame);
+          if (!networkSyncManager.isConnected || networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+            this.syncedAnnotations.set(frame, current);
+            return;
           }
+          this.sendAnnotationChanges(frame, current);
         }),
       );
-
-      this.unsubscribers.push(
-        paintEngine.on('strokeRemoved', (annotation: Annotation) => {
-          if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-            networkSyncManager.sendAnnotationSync({
-              frame: annotation.frame,
-              strokes: [],
-              action: 'remove',
-              annotationId: annotation.id,
-              timestamp: Date.now(),
-            });
-          }
-        }),
-      );
+      this.unsubscribers.push(networkSyncManager.on('roomCreated', () => this.rememberSyncedAnnotations()));
+      this.unsubscribers.push(networkSyncManager.on('roomJoined', () => this.rememberSyncedAnnotations()));
     }
 
     // Wire incoming note sync
@@ -886,24 +910,86 @@ export class AppNetworkBridge {
       );
     }
 
+    // Send outgoing view (pan/zoom) changes
+    const viewerWithListeners = viewer as unknown as {
+      addViewChangeListener?: (cb: (panX: number, panY: number, zoom: number) => void) => () => void;
+      getChannelMode?: () => string;
+      getContainer?: () => HTMLElement;
+    };
+    if (typeof viewerWithListeners.addViewChangeListener === 'function') {
+      this.viewSyncThrottle = createThrottle((payload: ViewSyncPayload) => {
+        networkSyncManager.sendViewSync(payload);
+      }, VIEW_SYNC_THROTTLE_MS);
+      this.unsubscribers.push(
+        viewerWithListeners.addViewChangeListener((panX, panY, zoom) => {
+          if (!networkSyncManager.isConnected || networkSyncManager.getSyncStateManager().isApplyingRemoteState) return;
+          const last = this.lastViewSync;
+          if (last && last.panX === panX && last.panY === panY && last.zoom === zoom) return;
+          this.lastViewSync = { panX, panY, zoom };
+          this.viewSyncThrottle?.call({
+            panX,
+            panY,
+            zoom,
+            channelMode: viewerWithListeners.getChannelMode?.() ?? 'rgb',
+          });
+        }),
+      );
+    }
+
+    // Send the local cursor position over the viewer (normalized 0..1)
+    const viewerContainer = viewerWithListeners.getContainer?.();
+    if (viewerContainer) {
+      this.cursorSyncThrottle = createThrottle((x: number, y: number) => {
+        networkSyncManager.sendCursorPosition(x, y);
+      }, CURSOR_SYNC_THROTTLE_MS);
+      const onPointerMove = (event: PointerEvent) => {
+        if (!networkSyncManager.isConnected) return;
+        const rect = viewerContainer.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+        if (x < 0 || x > 1 || y < 0 || y > 1) return;
+        this.cursorSyncThrottle?.call(x, y);
+      };
+      viewerContainer.addEventListener('pointermove', onPointerMove);
+      this.unsubscribers.push(() => viewerContainer.removeEventListener('pointermove', onPointerMove));
+    }
+
     // Send outgoing sync when local state changes
     this.unsubscribers.push(
       session.on('playbackChanged', (isPlaying) => {
         if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
           this.lastPlaybackSyncFrame = session.currentFrame;
           this.lastPlaybackSyncTime = Date.now();
-          networkSyncManager.sendPlaybackSync({
-            isPlaying,
-            currentFrame: session.currentFrame,
-            playbackSpeed: session.playbackSpeed,
-            playDirection: session.playDirection,
-            loopMode: session.loopMode,
-            playbackMode: session.playbackMode,
-            timestamp: Date.now(),
-          });
+          networkSyncManager.sendPlaybackSync(this.capturePlaybackSync(isPlaying));
         }
       }),
     );
+
+    // Loop mode, direction and in/out are part of the shared playback state.
+    const sendPlaybackStateChange = () => {
+      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        networkSyncManager.sendPlaybackSync(this.capturePlaybackSync());
+      }
+    };
+    this.unsubscribers.push(session.on('loopModeChanged', sendPlaybackStateChange));
+    this.unsubscribers.push(session.on('inOutChanged', sendPlaybackStateChange));
+    this.unsubscribers.push(
+      session.on('playDirectionChanged', () => {
+        // Ping-pong bounces happen on every client by themselves.
+        if (session.isPlaying && session.loopMode === 'pingpong') return;
+        sendPlaybackStateChange();
+      }),
+    );
+
+    // While playing, only the host keeps everyone aligned, with a periodic
+    // heartbeat. Followers correct drift from it instead of every client
+    // broadcasting its own frames and pulling the others backwards.
+    this.playbackHeartbeat = setInterval(() => {
+      if (!networkSyncManager.isConnected || !networkSyncManager.isHost || !session.isPlaying) return;
+      if (networkSyncManager.getSyncStateManager().isApplyingRemoteState) return;
+      networkSyncManager.sendPlaybackSync(this.capturePlaybackSync());
+    }, PLAYBACK_HEARTBEAT_MS);
 
     this.frameSyncThrottle = createThrottle((frame: number) => {
       networkSyncManager.sendFrameSync(frame);
@@ -911,6 +997,8 @@ export class AppNetworkBridge {
 
     this.unsubscribers.push(
       session.on('frameChanged', (frame) => {
+        // Frames advancing during playback are covered by the host heartbeat.
+        if (session.isPlaying) return;
         if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
           // Skip if this frame was just sent via playbackChanged
           if (frame === this.lastPlaybackSyncFrame && Date.now() - this.lastPlaybackSyncTime < 50) {
@@ -920,6 +1008,84 @@ export class AppNetworkBridge {
         }
       }),
     );
+  }
+
+  private capturePlaybackSync(isPlaying = this.ctx.session.isPlaying): PlaybackSyncPayload {
+    const { session } = this.ctx;
+    return {
+      isPlaying,
+      currentFrame: session.currentFrame,
+      playbackSpeed: session.playbackSpeed,
+      playDirection: session.playDirection,
+      loopMode: session.loopMode,
+      playbackMode: session.playbackMode,
+      inPoint: session.inPoint,
+      outPoint: session.outPoint,
+      timestamp: Date.now(),
+    };
+  }
+
+  /** Where the sender is now, given one-way latency, clamped to in/out. */
+  private predictRemoteFrame(payload: PlaybackSyncPayload): number {
+    const { session, networkSyncManager } = this.ctx;
+    if (!payload.isPlaying) return payload.currentFrame;
+    const sm = networkSyncManager.getSyncStateManager();
+    const predicted = sm.predictFrame({ ...payload, timestamp: Date.now() }, session.fps);
+    const low = typeof payload.inPoint === 'number' ? payload.inPoint : session.inPoint;
+    const high = typeof payload.outPoint === 'number' ? payload.outPoint : session.outPoint;
+    return high >= low ? Math.min(high, Math.max(low, predicted)) : predicted;
+  }
+
+  private snapshotAnnotationFrame(frame: number): Map<string, string> {
+    const annotations = this.ctx.paintEngine?.toJSON().frames[frame] ?? [];
+    return new Map(annotations.map((a) => [a.id, JSON.stringify(a)]));
+  }
+
+  private rememberSyncedAnnotations(): void {
+    this.syncedAnnotations.clear();
+    const frames = this.ctx.paintEngine?.toJSON().frames ?? {};
+    for (const [frame, annotations] of Object.entries(frames)) {
+      this.syncedAnnotations.set(Number(frame), new Map(annotations.map((a) => [a.id, JSON.stringify(a)])));
+    }
+  }
+
+  private sendAnnotationChanges(frame: number, current: Map<string, string>): void {
+    const { networkSyncManager } = this.ctx;
+    const previous = this.syncedAnnotations.get(frame) ?? new Map<string, string>();
+    const timestamp = Date.now();
+    const added: Annotation[] = [];
+
+    for (const [id, json] of current) {
+      const before = previous.get(id);
+      if (before === json) continue;
+      const annotation = JSON.parse(json) as Annotation;
+      if (before === undefined) {
+        added.push(annotation);
+      } else {
+        networkSyncManager.sendAnnotationSync({
+          frame,
+          strokes: [annotation],
+          action: 'update',
+          annotationId: id,
+          timestamp,
+        });
+      }
+    }
+    if (added.length > 0) {
+      networkSyncManager.sendAnnotationSync({
+        frame,
+        strokes: added,
+        action: 'add',
+        annotationId: added.length === 1 ? added[0]?.id : undefined,
+        timestamp,
+      });
+    }
+    for (const id of previous.keys()) {
+      if (!current.has(id)) {
+        networkSyncManager.sendAnnotationSync({ frame, strokes: [], action: 'remove', annotationId: id, timestamp });
+      }
+    }
+    this.syncedAnnotations.set(frame, current);
   }
 
   /** Add the room secret (and PIN flag) to a share link's fragment. */
@@ -1028,6 +1194,7 @@ export class AppNetworkBridge {
     try {
       if (paintEngine) {
         paintEngine.loadFromAnnotations(validAnnotations);
+        this.rememberSyncedAnnotations();
       }
       if (hasNotes) {
         this.ctx.session.noteManager.fromSerializable(validNotes);
@@ -1398,6 +1565,15 @@ export class AppNetworkBridge {
     this.colorSyncThrottle = null;
     this.frameSyncThrottle?.cancel();
     this.frameSyncThrottle = null;
+    this.viewSyncThrottle?.cancel();
+    this.viewSyncThrottle = null;
+    this.cursorSyncThrottle?.cancel();
+    this.cursorSyncThrottle = null;
+    if (this.playbackHeartbeat !== null) {
+      clearInterval(this.playbackHeartbeat);
+      this.playbackHeartbeat = null;
+    }
+    this.syncedAnnotations.clear();
     this.clearAllTransferTimeouts();
     this.pendingStateByTransferId.clear();
     for (const transferId of Array.from(this.outgoingMediaTransfers.keys())) {

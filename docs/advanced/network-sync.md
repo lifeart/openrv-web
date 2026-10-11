@@ -73,7 +73,7 @@ Sync settings persist across reconnection events.
 
 The room creator is the **host**. All other users are **participants**.
 
-- **Host authority**: For playback position and state, the host is the source of truth. When conflicts arise (e.g., two users seek to different frames simultaneously), the host's state wins.
+- **Host authority**: For playback position and state, the host is the source of truth. While playing, the host sends its playback state about once a second and participants correct their position from it, compensating for network latency. Participants don't broadcast every frame during playback, so they never pull each other backwards. Play/pause, seeking, speed, direction, loop mode and in/out points are shared by everyone.
 - **Participant control**: Participants can still control playback locally. Their actions are sent to the room and applied if sync is enabled. However, in conflict scenarios, the host's state takes precedence.
 - **Host disconnect**: If the host disconnects and reconnects, they regain host status. If the host permanently leaves, the room may be closed depending on server configuration.
 - **Viewer role**: The host can switch any participant between **Reviewer** and **Viewer** from the user list. Viewers follow along but their playback, view, color, annotation and note changes are ignored by everyone else.
