@@ -41,6 +41,7 @@ export interface URLSession {
   setCurrentSource(index: number): void;
   setInPoint(frame: number): void;
   setOutPoint(frame: number): void;
+  setInOutRange(inPoint: number, outPoint: number): void;
   setSourceA(index: number): void;
   setSourceB(index: number): void;
   clearSourceB(): void;
@@ -308,16 +309,6 @@ export class SessionURLService {
         session.setCurrentSource(sourceIndex);
       }
 
-      if (typeof state.fps === 'number' && state.fps > 0) {
-        session.fps = state.fps;
-      }
-      if (typeof state.inPoint === 'number') {
-        session.setInPoint(state.inPoint);
-      }
-      if (typeof state.outPoint === 'number') {
-        session.setOutPoint(state.outPoint);
-      }
-
       if (typeof state.sourceAIndex === 'number') {
         // Clamp sourceAIndex to valid range (0 to sourceCount-1)
         const clampedA =
@@ -342,6 +333,21 @@ export class SessionURLService {
       }
       if (state.currentAB === 'A' || state.currentAB === 'B') {
         session.setCurrentAB(state.currentAB);
+      } else {
+        // Reset to 'A' when omitted (compact encoding strips 'A')
+        session.setCurrentAB('A');
+      }
+
+      // Range, fps and frame go after every source switch above, which would
+      // otherwise adapt them to the newly selected source.
+      if (typeof state.fps === 'number' && state.fps > 0) {
+        session.fps = state.fps;
+      }
+      if (typeof state.inPoint === 'number' || typeof state.outPoint === 'number') {
+        session.setInOutRange(
+          typeof state.inPoint === 'number' ? state.inPoint : session.inPoint,
+          typeof state.outPoint === 'number' ? state.outPoint : session.outPoint,
+        );
       }
 
       if (typeof state.frame === 'number') {
@@ -370,11 +376,6 @@ export class SessionURLService {
       } else {
         // Reset wipe position to center when omitted (compact encoding strips 0.5)
         compareControl.setWipePosition(0.5);
-      }
-
-      if (state.currentAB == null) {
-        // Reset to 'A' when omitted (compact encoding strips 'A')
-        session.setCurrentAB('A');
       }
 
       if (state.ocio) {

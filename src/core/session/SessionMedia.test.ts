@@ -74,6 +74,8 @@ function createMockHost(): SessionMediaHost {
     setFps: vi.fn(),
     setInPoint: vi.fn(),
     setOutPoint: vi.fn(),
+    getInPoint: vi.fn().mockReturnValue(1),
+    getOutPoint: vi.fn().mockReturnValue(1),
     setCurrentFrame: vi.fn(),
     pause: vi.fn(),
     play: vi.fn(),
@@ -273,26 +275,81 @@ describe('SessionMedia', () => {
     });
 
     it('SM-014: setCurrentSource sets in/out points and current frame', () => {
-      media.addSource(makeImageSource({ name: 'a.png', duration: 1 }));
-      media.addSource(makeVideoSource({ name: 'b.mp4', duration: 120 }));
+      media.addSource(makeVideoSource({ name: 'a.mp4', duration: 120 }));
+      media.addSource(makeImageSource({ name: 'b.png', duration: 1 }));
 
-      media.setCurrentSource(1);
+      media.setCurrentSource(0);
 
       expect(host.setOutPoint).toHaveBeenCalledWith(120);
       expect(host.setInPoint).toHaveBeenCalledWith(1);
       expect(host.setCurrentFrame).toHaveBeenCalledWith(1);
+      expect(host.emitInOutChanged).toHaveBeenCalledWith(1, 120);
     });
 
     it('SM-015: setCurrentSource emits durationChanged', () => {
       const listener = vi.fn();
       media.on('durationChanged', listener);
 
-      media.addSource(makeImageSource({ name: 'a.png', duration: 1 }));
-      media.addSource(makeVideoSource({ name: 'b.mp4', duration: 120 }));
+      media.addSource(makeVideoSource({ name: 'a.mp4', duration: 120 }));
+      media.addSource(makeImageSource({ name: 'b.png', duration: 1 }));
 
-      media.setCurrentSource(1);
+      media.setCurrentSource(0);
 
       expect(listener).toHaveBeenCalledWith(120);
+    });
+
+    it('SM-015b: re-selecting the current source keeps range and frame', () => {
+      media.addSource(makeVideoSource({ name: 'a.mp4', duration: 120 }));
+      vi.mocked(host.setInPoint).mockClear();
+      vi.mocked(host.setOutPoint).mockClear();
+      vi.mocked(host.setCurrentFrame).mockClear();
+
+      media.setCurrentSource(0);
+
+      expect(host.setInPoint).not.toHaveBeenCalled();
+      expect(host.setOutPoint).not.toHaveBeenCalled();
+      expect(host.setCurrentFrame).not.toHaveBeenCalled();
+    });
+
+    it('SM-015c: a narrowed loop range survives a switch when it fits the new source', () => {
+      media.addSource(makeVideoSource({ name: 'a.mp4', duration: 100 }));
+      media.addSource(makeVideoSource({ name: 'b.mp4', duration: 100 }));
+      vi.mocked(host.getInPoint).mockReturnValue(20);
+      vi.mocked(host.getOutPoint).mockReturnValue(40);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(30);
+
+      media.setCurrentSource(0);
+
+      expect(host.setInPoint).toHaveBeenLastCalledWith(20);
+      expect(host.setOutPoint).toHaveBeenLastCalledWith(40);
+      expect(host.setCurrentFrame).toHaveBeenLastCalledWith(30);
+    });
+
+    it('SM-015d: a range that does not fit the new source falls back to its full range', () => {
+      media.addSource(makeVideoSource({ name: 'a.mp4', duration: 30 }));
+      media.addSource(makeVideoSource({ name: 'b.mp4', duration: 100 }));
+      vi.mocked(host.getInPoint).mockReturnValue(60);
+      vi.mocked(host.getOutPoint).mockReturnValue(80);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(70);
+
+      media.setCurrentSource(0);
+
+      expect(host.setInPoint).toHaveBeenLastCalledWith(1);
+      expect(host.setOutPoint).toHaveBeenLastCalledWith(30);
+      expect(host.setCurrentFrame).toHaveBeenLastCalledWith(30);
+    });
+
+    it('SM-015e: switching to a video or sequence makes the session fps follow it', () => {
+      media.addSource(makeVideoSource({ name: 'a.mp4', duration: 100, fps: 30 }));
+      media.addSource(makeImageSource({ name: 'b.png', duration: 1, fps: 12 }));
+
+      media.setCurrentSource(0);
+      expect(host.setFps).toHaveBeenCalledWith(30);
+      expect(host.emitFpsChanged).toHaveBeenCalledWith(30);
+
+      vi.mocked(host.setFps).mockClear();
+      media.setCurrentSource(1);
+      expect(host.setFps).not.toHaveBeenCalled();
     });
 
     it('SM-016: setCurrentSource ignores negative index', () => {
@@ -325,6 +382,31 @@ describe('SessionMedia', () => {
       media.setCurrentSource(1);
 
       expect(videoPause).toHaveBeenCalled();
+    });
+  });
+
+  describe('loading a second source while the first stays current', () => {
+    it('SM-LOAD-001: does not apply the new source range, frame or fps', () => {
+      media.loadProceduralSource('smpte_bars', { duration: 100, fps: 24 });
+      expect(host.setOutPoint).toHaveBeenLastCalledWith(100);
+
+      // Second source becomes B; A stays current (real ABCompareManager behaviour).
+      vi.mocked(host.onSourceAdded).mockReturnValue({ currentSourceIndex: 0, emitEvent: true });
+      vi.mocked(host.setInPoint).mockClear();
+      vi.mocked(host.setOutPoint).mockClear();
+      vi.mocked(host.setCurrentFrame).mockClear();
+      vi.mocked(host.setFps).mockClear();
+      const durationListener = vi.fn();
+      media.on('durationChanged', durationListener);
+
+      media.loadProceduralSource('gradient', { duration: 1, fps: 30 });
+
+      expect(media.currentSourceIndex).toBe(0);
+      expect(host.setInPoint).not.toHaveBeenCalled();
+      expect(host.setOutPoint).not.toHaveBeenCalled();
+      expect(host.setCurrentFrame).not.toHaveBeenCalled();
+      expect(host.setFps).not.toHaveBeenCalled();
+      expect(durationListener).not.toHaveBeenCalled();
     });
   });
 
@@ -384,18 +466,20 @@ describe('SessionMedia', () => {
   });
 
   describe('event emission', () => {
-    it('SM-027: setCurrentSource emits durationChanged with correct duration after addSource', () => {
+    it('SM-027: setCurrentSource on the already-current source emits nothing', () => {
       const durationListener = vi.fn();
+      const sourceListener = vi.fn();
       media.on('durationChanged', durationListener);
+      media.on('currentSourceChanged', sourceListener);
 
       const source = makeVideoSource({ name: 'a.mp4', duration: 200 });
       media.addSource(source);
 
-      // addSource itself does not emit durationChanged; setCurrentSource does
       durationListener.mockClear();
       media.setCurrentSource(0);
 
-      expect(durationListener).toHaveBeenCalledWith(200);
+      expect(durationListener).not.toHaveBeenCalled();
+      expect(sourceListener).not.toHaveBeenCalled();
     });
 
     it('SM-028: setCurrentSource emits durationChanged with the selected source duration', () => {

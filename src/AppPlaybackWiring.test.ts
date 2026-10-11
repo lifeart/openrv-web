@@ -148,6 +148,10 @@ function createMockSession() {
     setOutPoint: vi.fn((frame: number) => {
       session.outPoint = frame;
     }),
+    setInOutRange: vi.fn((inPoint: number, outPoint: number) => {
+      session.inPoint = inPoint;
+      session.outPoint = outPoint;
+    }),
     resetInOutPoints: vi.fn(() => {
       session.inPoint = 1;
       session.outPoint = session.frameCount;
@@ -383,8 +387,7 @@ describe('wirePlaybackControls', () => {
     controls.playlistPanel.emit('clipSelected', { sourceIndex: 1, frame: 101 });
 
     expect(session.setCurrentSource).toHaveBeenCalledWith(1);
-    expect(session.setInPoint).toHaveBeenCalledWith(10);
-    expect(session.setOutPoint).toHaveBeenCalledWith(90);
+    expect(session.setInOutRange).toHaveBeenCalledWith(10, 90);
     expect(session.goToFrame).toHaveBeenCalledWith(42);
     expect(controls.playlistManager.setCurrentFrame).toHaveBeenCalledWith(101);
   });
@@ -457,8 +460,7 @@ describe('wirePlaybackControls', () => {
     session.emit('frameChanged', 1);
 
     expect(session.setCurrentSource).toHaveBeenCalledWith(1);
-    expect(session.setInPoint).toHaveBeenCalledWith(5);
-    expect(session.setOutPoint).toHaveBeenCalledWith(15);
+    expect(session.setInOutRange).toHaveBeenCalledWith(5, 15);
     expect(session.goToFrame).toHaveBeenCalledWith(5);
   });
 

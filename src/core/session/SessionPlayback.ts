@@ -19,6 +19,7 @@ import { PlaybackEngine } from './PlaybackEngine';
 import type { FPSMeasurement, PlaybackStarvedEvent, PauseReason } from './PlaybackEngine';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
+import { resolveRangeOnSourceSwitch, sourceDrivesFps } from './sourceActivation';
 import { AudioCoordinator } from '../../audio/AudioCoordinator';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { Logger } from '../../utils/Logger';
@@ -380,14 +381,10 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     const result = this._abCompareManager.toggle(count);
     if (!result) return;
 
-    const savedFrame = result.shouldRestoreFrame ? this._playbackEngine.currentFrame : null;
-
+    // switchToSource keeps the frame (clamped into the new range).
     this.switchToSource(result.newSourceIndex);
 
-    // Restore frame position if sync is enabled
-    if (savedFrame !== null) {
-      const maxFrame = this._host?.getCurrentSource()?.duration ?? 1;
-      this._playbackEngine.setCurrentFrameInternal(Math.min(savedFrame, maxFrame));
+    if (result.shouldRestoreFrame) {
       this.syncVideoToFrame();
       this.emit('frameChanged', this._playbackEngine.currentFrame);
     }
@@ -521,6 +518,8 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   private switchToSource(index: number): void {
     const sources = this._host?.getSources() ?? [];
     if (index < 0 || index >= sources.length) return;
+    // Already showing this source: keep the range and frame untouched.
+    if (index === this._host?.getMediaCurrentSourceIndex()) return;
 
     // Pause current video if playing
     const currentSource = this._host?.getCurrentSource() ?? null;
@@ -528,14 +527,29 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
       currentSource.element.pause();
     }
 
+    const pe = this._playbackEngine;
+    const previousState = { inPoint: pe.inPoint, outPoint: pe.outPoint, currentFrame: pe.currentFrame };
+
     this._host?.setMediaCurrentSourceIndex(index);
 
-    // Update duration but preserve frame if syncing
+    // Keep a narrowed loop range across the flip when it fits the new source.
     const newSource = this._host?.getCurrentSource() ?? null;
     if (newSource) {
-      this._playbackEngine.setOutPointInternal(newSource.duration);
-      this._playbackEngine.setInPointInternal(1);
+      const next = resolveRangeOnSourceSwitch(
+        previousState,
+        currentSource?.duration ?? newSource.duration,
+        newSource.duration,
+      );
+      if (sourceDrivesFps(newSource) && newSource.fps !== pe.fps) {
+        pe.fps = newSource.fps;
+      }
+      pe.setOutPointInternal(next.outPoint);
+      pe.setInPointInternal(next.inPoint);
+      pe.setCurrentFrameInternal(next.currentFrame);
       this._host?.emitDurationChanged(newSource.duration);
+      if (next.inPoint !== previousState.inPoint || next.outPoint !== previousState.outPoint) {
+        pe.emit('inOutChanged', { inPoint: next.inPoint, outPoint: next.outPoint });
+      }
     }
   }
 

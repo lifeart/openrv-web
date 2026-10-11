@@ -1217,15 +1217,6 @@ export class AppNetworkBridge {
         session.setCurrentSource(sourceIndex);
       }
 
-      if (typeof state.fps === 'number' && state.fps > 0) {
-        session.fps = state.fps;
-      }
-      if (typeof state.inPoint === 'number') {
-        session.setInPoint(state.inPoint);
-      }
-      if (typeof state.outPoint === 'number') {
-        session.setOutPoint(state.outPoint);
-      }
       if (typeof state.sourceAIndex === 'number') {
         session.setSourceA(state.sourceAIndex);
       }
@@ -1234,6 +1225,16 @@ export class AppNetworkBridge {
       }
       if (state.currentAB === 'A' || state.currentAB === 'B') {
         session.setCurrentAB(state.currentAB);
+      }
+      // Range and fps after the source switches, which adapt them to the new source.
+      if (typeof state.fps === 'number' && state.fps > 0) {
+        session.fps = state.fps;
+      }
+      if (typeof state.inPoint === 'number' || typeof state.outPoint === 'number') {
+        session.setInOutRange(
+          typeof state.inPoint === 'number' ? state.inPoint : session.inPoint,
+          typeof state.outPoint === 'number' ? state.outPoint : session.outPoint,
+        );
       }
       if (typeof state.frame === 'number') {
         session.goToFrame(state.frame);

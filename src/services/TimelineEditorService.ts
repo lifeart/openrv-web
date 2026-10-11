@@ -58,6 +58,7 @@ export interface TimelineEditorSession {
   setCurrentSource(index: number): void;
   setInPoint(frame: number): void;
   setOutPoint(frame: number): void;
+  setInOutRange(inPoint: number, outPoint: number): void;
   getSourceByIndex(index: number): TimelineSourceInfo | null;
   on(event: string, handler: (...args: unknown[]) => void): () => void;
 }
@@ -412,8 +413,7 @@ export class TimelineEditorService {
       if (this.session.currentSourceIndex !== clip.sourceIndex) {
         this.session.setCurrentSource(clip.sourceIndex);
       }
-      this.session.setInPoint(clip.inPoint);
-      this.session.setOutPoint(clip.outPoint);
+      this.session.setInOutRange(clip.inPoint, clip.outPoint);
       this.playlistManager.setCurrentFrame(1);
 
       if (this.session.currentFrame < clip.inPoint || this.session.currentFrame > clip.outPoint) {
@@ -449,8 +449,7 @@ export class TimelineEditorService {
     sequenceNode.setEDL(normalizedEDL);
 
     const totalDuration = Math.max(1, sequenceNode.getTotalDurationFromEDL());
-    this.session.setInPoint(1);
-    this.session.setOutPoint(totalDuration);
+    this.session.setInOutRange(1, totalDuration);
     if (this.session.currentFrame > totalDuration) {
       this.session.goToFrame(totalDuration);
     }
