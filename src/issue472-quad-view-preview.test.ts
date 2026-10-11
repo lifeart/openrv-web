@@ -162,6 +162,8 @@ describe('Issue #472: AppViewWiring quad-view produces warning only', () => {
       toneMappingControl: Object.assign(new EventEmitter(), {
         syncHDROutputMode: vi.fn(),
         getHDROutputMode: vi.fn().mockReturnValue('sdr'),
+        setHDROutputModeSource: vi.fn(),
+        setHDRPeakNits: vi.fn(),
       }),
       ghostFrameControl: new EventEmitter(),
       parControl: new EventEmitter(),

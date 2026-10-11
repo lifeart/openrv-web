@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { DEFAULT_CAPABILITIES } from '../../color/DisplayCapabilities';
 import { ToneMappingControl, DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from './ToneMappingControl';
 import {
   resetOutsideClickRegistry,
@@ -1084,6 +1085,79 @@ describe('ToneMappingControl HDR mode (issues #224/#225)', () => {
     control.setHDROutputMode('sdr'); // already sdr
 
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('ToneMappingControl HDR output section (H3/H13)', () => {
+  const extendedCaps = {
+    ...DEFAULT_CAPABILITIES,
+    displayHDR: true,
+    webglDrawingBufferStorage: true,
+    canvasExtendedHDR: true,
+  };
+
+  function openDropdown(control: ToneMappingControl): HTMLElement {
+    const el = control.render();
+    document.body.appendChild(el);
+    (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+    return document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+  }
+
+  it('TONE-HDR-010: shows an Extended mode when only extended HDR output is available', () => {
+    const control = new ToneMappingControl(extendedCaps);
+    const dropdown = openDropdown(control);
+    expect(dropdown.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+    expect(dropdown.querySelector('[data-testid="hdr-mode-extended"]')).not.toBeNull();
+    expect(dropdown.querySelector('[data-testid="hdr-mode-hlg"]')).toBeNull();
+    control.dispose();
+  });
+
+  it('TONE-HDR-011: no HDR section on SDR displays; refreshCapabilities adds it after a display change', () => {
+    const caps = { ...extendedCaps, displayHDR: false };
+    const control = new ToneMappingControl(caps);
+    const dropdown = openDropdown(control);
+    expect(dropdown.querySelector('[data-testid="hdr-output-section"]')).toBeNull();
+
+    control.refreshCapabilities({ ...caps, displayHDR: true });
+    expect(dropdown.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+    control.dispose();
+  });
+
+  it('TONE-HDR-012: mode source keeps buttons in sync with the renderer, so SDR can be selected', () => {
+    const control = new ToneMappingControl(extendedCaps);
+    let rendererMode: 'sdr' | 'extended' = 'extended';
+    control.setHDROutputModeSource(() => rendererMode);
+    expect(control.getHDROutputMode()).toBe('extended');
+
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+    control.setHDROutputMode('sdr');
+    expect(listener).toHaveBeenCalledWith({ mode: 'sdr', previousMode: 'extended' });
+
+    rendererMode = 'sdr';
+    openDropdown(control);
+    expect(control.getHDROutputMode()).toBe('sdr');
+    control.dispose();
+  });
+
+  it('TONE-HDR-013: peak-nits input emits clamped values and empty means automatic', () => {
+    const control = new ToneMappingControl(extendedCaps);
+    const dropdown = openDropdown(control);
+    const input = dropdown.querySelector('[data-testid="hdr-peak-nits-input"]') as HTMLInputElement;
+    const listener = vi.fn();
+    control.on('hdrPeakNitsChanged', listener);
+
+    input.value = '20000';
+    input.dispatchEvent(new Event('change'));
+    expect(listener).toHaveBeenLastCalledWith({ peakNits: 10000 });
+
+    input.value = '';
+    input.dispatchEvent(new Event('change'));
+    expect(listener).toHaveBeenLastCalledWith({ peakNits: null });
+
+    control.setHDRPeakNits(600);
+    expect(input.value).toBe('600');
+    control.dispose();
   });
 });
 

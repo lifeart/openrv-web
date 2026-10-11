@@ -1,3 +1,4 @@
+import { getCorePreferencesManager } from './core/PreferencesManager';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from './utils/EventEmitter';
 import { wireViewControls, deriveCompareLabels } from './AppViewWiring';
@@ -20,6 +21,8 @@ function createMockContext() {
     setBlendModeState: vi.fn(),
     setToneMappingState: vi.fn(),
     setHDROutputMode: vi.fn(),
+    getHDROutputMode: vi.fn().mockReturnValue('sdr'),
+    refreshHDRHeadroom: vi.fn(),
     setGhostFrameState: vi.fn(),
     setPARState: vi.fn(),
     setBackgroundPatternState: vi.fn(),
@@ -101,6 +104,8 @@ function createMockContext() {
   const toneMappingControl = Object.assign(new EventEmitter(), {
     syncHDROutputMode: vi.fn(),
     getHDROutputMode: vi.fn().mockReturnValue('sdr'),
+    setHDROutputModeSource: vi.fn(),
+    setHDRPeakNits: vi.fn(),
   });
   const ghostFrameControl = new EventEmitter();
   const parControl = new EventEmitter();
@@ -277,6 +282,21 @@ describe('wireViewControls', () => {
     (controls.toneMappingControl as EventEmitter).emit('stateChanged', state);
     expect(viewer.setToneMappingState).toHaveBeenCalledWith(state);
     expect(sessionBridge.scheduleUpdateScopes).toHaveBeenCalledOnce();
+  });
+
+  it('VW-011b: tone mapping control reads the renderer HDR mode and peak-nits changes refresh headroom', () => {
+    const tm = controls.toneMappingControl as unknown as {
+      setHDROutputModeSource: ReturnType<typeof vi.fn>;
+    } & EventEmitter;
+    expect(tm.setHDROutputModeSource).toHaveBeenCalled();
+    const source = tm.setHDROutputModeSource.mock.calls[0]![0] as () => string;
+    viewer.getHDROutputMode.mockReturnValue('extended');
+    expect(source()).toBe('extended');
+
+    tm.emit('hdrPeakNitsChanged', { peakNits: 800 });
+    expect(viewer.refreshHDRHeadroom).toHaveBeenCalled();
+    expect(getCorePreferencesManager().getColorDefaults().hdrPeakNits).toBe(800);
+    getCorePreferencesManager().setColorDefaults({ hdrPeakNits: null });
   });
 
   // VW-011
