@@ -360,6 +360,52 @@ describe('FileSourceNode', () => {
 
       expect(node.formatName).not.toBe('png16');
     });
+
+    /** Insert a cICP chunk right after IHDR (offset 33). CRC is not checked. */
+    function withCICP(png: Uint8Array, cicp: [number, number, number, number]): Uint8Array<ArrayBuffer> {
+      const chunk = [0, 0, 0, 4, 0x63, 0x49, 0x43, 0x50, ...cicp, 0, 0, 0, 0];
+      return new Uint8Array([...png.slice(0, 33), ...chunk, ...png.slice(33)]);
+    }
+
+    it('FSN-PNG16-004: 16-bit PNG with cICP PQ is tagged and rendered as HDR', async () => {
+      const ref = PNG16_REFERENCE_FILES.rgba;
+      if (!ref) throw new Error('missing fixture');
+      await node.loadFile(new File([withCICP(b64(ref.png), [9, 16, 0, 1])], 'pq.png', { type: 'image/png' }));
+
+      expect(node.formatName).toBe('png16');
+      expect(node.isHDR()).toBe(true);
+      const image = node.getIPImage()!;
+      expect(image.metadata.transferFunction).toBe('pq');
+      expect(image.metadata.colorPrimaries).toBe('bt2020');
+      // Pixel values stay the encoded signal; the renderer applies the PQ EOTF.
+      const expected = new DataView(b64(ref.rgba64le).buffer).getUint16(0, true) / 65535;
+      expect(new Float32Array(image.data)[0]).toBeCloseTo(expected, 6);
+    });
+
+    it('FSN-PNG-HDR-001: 8-bit PNG with cICP HLG / P3 takes the VideoFrame HDR path', async () => {
+      const origCreateImageBitmap = globalThis.createImageBitmap;
+      const origVideoFrame = globalThis.VideoFrame;
+      const createImageBitmapMock = vi.fn(async () => ({ width: 3, height: 2, close: vi.fn() }));
+      globalThis.createImageBitmap = createImageBitmapMock as unknown as typeof globalThis.createImageBitmap;
+      globalThis.VideoFrame = class {
+        displayWidth = 3;
+        displayHeight = 2;
+        close = vi.fn();
+      } as unknown as typeof globalThis.VideoFrame;
+      try {
+        await node.loadFile(new File([withCICP(b64(PNG8_FILE), [12, 18, 0, 1])], 'hlg.png', { type: 'image/png' }));
+      } finally {
+        globalThis.createImageBitmap = origCreateImageBitmap;
+        globalThis.VideoFrame = origVideoFrame;
+      }
+
+      expect(createImageBitmapMock).toHaveBeenCalledWith(expect.any(Blob), { colorSpaceConversion: 'none' });
+      expect(node.formatName).toBe('png-hdr');
+      expect(node.isHDR()).toBe(true);
+      const image = node.getIPImage()!;
+      expect(image.metadata.transferFunction).toBe('hlg');
+      expect(image.metadata.colorPrimaries).toBe('p3');
+    });
   });
 
   describe('error visibility (CONS-1b)', () => {
@@ -1244,6 +1290,26 @@ describe('FileSourceNode', () => {
       expect(ipImage!.metadata.colorSpace).toBe('rec709');
     });
 
+    it('FSN-067b: HDR AVIF with P3 (12) primaries is labelled p3, DCI-P3 (11) via chromaticities', async () => {
+      await node.loadFile(
+        new File([createTestAVIFBuffer({ transferCharacteristics: 16, colourPrimaries: 12 })], 'p3.avif', {
+          type: 'image/avif',
+        }),
+      );
+      expect(node.getIPImage()!.metadata.colorPrimaries).toBe('p3');
+      expect(node.getIPImage()!.metadata.colorSpace).toBe('display-p3');
+
+      await node.loadFile(
+        new File([createTestAVIFBuffer({ transferCharacteristics: 18, colourPrimaries: 11 })], 'dci.avif', {
+          type: 'image/avif',
+        }),
+      );
+      const meta = node.getIPImage()!.metadata;
+      expect(meta.colorPrimaries).toBeUndefined();
+      expect(meta.chromaticities).toEqual([0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.314, 0.351]);
+      expect(meta.transferFunction).toBe('hlg');
+    });
+
     it('FSN-068: dispose() calls close() on VideoFrame', async () => {
       const buffer = createTestAVIFBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
       const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
@@ -1809,9 +1875,12 @@ describe('FileSourceNode', () => {
       await node.loadFile(file);
 
       // Display P3 triggers wide gamut detection in detectHDRFromICCProfile
-      // which returns { transferFunction: 'srgb', colorPrimaries: 'bt709', isHDR: true }
+      // which returns { transferFunction: 'srgb', colorPrimaries: 'p3', isHDR: true }
       expect(node.isHDR()).toBe(true);
       expect(node.formatName).toBe('avif-hdr');
+      // Labelled P3 (not BT.709) so the renderer converts the gamut
+      expect(node.getIPImage()!.metadata.colorPrimaries).toBe('p3');
+      expect(node.getIPImage()!.metadata.transferFunction).toBe('srgb');
     });
 
     it('ICC-002: BT.2020 ICC profile detected as wide gamut HDR', async () => {
@@ -1823,6 +1892,7 @@ describe('FileSourceNode', () => {
       // BT.2020 triggers wide gamut detection (contains '2020')
       expect(node.isHDR()).toBe(true);
       expect(node.formatName).toBe('avif-hdr');
+      expect(node.getIPImage()!.metadata.colorPrimaries).toBe('bt2020');
     });
 
     it('ICC-003: sRGB ICC profile NOT detected as HDR', async () => {
@@ -1849,6 +1919,7 @@ describe('FileSourceNode', () => {
       const ipImage = node.getIPImage();
       expect(ipImage).not.toBeNull();
       expect(ipImage!.metadata.transferFunction).toBe('pq');
+      expect(ipImage!.metadata.colorPrimaries).toBe('bt2020');
     });
 
     it('ICC-005: ICC profile with HLG in description detected as HLG HDR', async () => {
