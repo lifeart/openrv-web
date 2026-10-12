@@ -335,8 +335,10 @@ describe('Issue #383: File-reload dialog must have a Cancel path that aborts res
 
     await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow('Session restore cancelled by user');
 
-    // First file was loaded, second triggered cancel, third never prompted
-    expect(components.session.loadFile).toHaveBeenCalledTimes(1);
+    // Second prompt cancelled, third never prompted. All prompts run before
+    // the session is touched, so nothing loaded and nothing was cleared (L15).
+    expect(components.session.loadFile).not.toHaveBeenCalled();
+    expect(components.session.clearSources).not.toHaveBeenCalled();
     expect(showFileReloadPrompt).toHaveBeenCalledTimes(2);
   });
 
@@ -360,5 +362,28 @@ describe('Issue #383: File-reload dialog must have a Cancel path that aborts res
 
     await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow('Session restore cancelled by user');
     expect(components.session.loadSequence).not.toHaveBeenCalled();
+  });
+  it('ISS-383-L15: a cancelled restore leaves the current session untouched', async () => {
+    const components = createMockComponents();
+    vi.mocked(showFileReloadPrompt).mockResolvedValue(FILE_RELOAD_CANCEL);
+
+    const state = SessionSerializer.createEmpty();
+    state.media = [
+      {
+        name: 'hero.exr',
+        path: '',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 1,
+        fps: 24,
+        requiresReload: true,
+      },
+    ];
+
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow('Session restore cancelled by user');
+    expect(components.session.clearSources).not.toHaveBeenCalled();
+    expect(components.session.setPlaybackState).not.toHaveBeenCalled();
+    expect(components.paintEngine.loadFromAnnotations).not.toHaveBeenCalled();
   });
 });
