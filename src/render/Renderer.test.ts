@@ -225,6 +225,45 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     expect(getLastUniform1i(mockGL, 'u_outputMode')).toBe(0);
   });
 
+  it('REN-SDR-005a: on an HLG buffer, SDR frames are decoded from sRGB and HLG-encoded in BT.2020', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportHLG: true });
+    renderer.setHDROutputMode('hlg', makeCaps({ webglHLG: true }));
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(document.createElement('canvas'));
+
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(4); // OUTPUT_ENCODING_HLG
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(5); // INPUT_TRANSFER_SRGB_TO_LINEAR
+    expect(getLastUniform1i(mockGL, 'u_outputPrimariesEnabled')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_inputPrimariesEnabled')).toBe(0);
+    expect(getLastUniform1i(mockGL, 'u_outputMode')).toBe(0);
+  });
+
+  it('REN-SDR-005b: on a PQ buffer, SDR frames are PQ-encoded', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportPQ: true });
+    renderer.setHDROutputMode('pq', makeCaps({ webglPQ: true }));
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(document.createElement('canvas'));
+
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(3); // OUTPUT_ENCODING_PQ
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(5);
+    expect(getLastUniform1i(mockGL, 'u_outputPrimariesEnabled')).toBe(1);
+  });
+
+  it('REN-SDR-005c: SDR and extended buffers keep the display-encoded path', () => {
+    const mockGL = initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(document.createElement('canvas'));
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(0); // OUTPUT_ENCODING_DISPLAY
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(0);
+
+    renderer.setHDROutputMode('extended', makeCaps({ webglDrawingBufferStorage: true }));
+    renderer.renderSDRFrame(document.createElement('canvas'));
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(0);
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(0);
+  });
+
   it('REN-SDR-006: renderSDRFrame reuses SDR texture across calls', () => {
     const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');

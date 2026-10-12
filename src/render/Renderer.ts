@@ -2632,7 +2632,8 @@ export class Renderer implements RendererBackend {
    *
    * The source is uploaded as an UNSIGNED_BYTE RGBA texture, u_inputTransfer is
    * set to 0 (sRGB), and all currently configured effects are applied via the
-   * existing fragment shader.
+   * existing fragment shader. On a rec2100-hlg/pq drawing buffer the sRGB
+   * values are decoded to linear and encoded as HLG/PQ in BT.2020 instead.
    *
    * Returns the WebGL canvas element so the Viewer can position / composite it.
    * Returns null if the WebGL context is unavailable.
@@ -2717,14 +2718,25 @@ export class Renderer implements RendererBackend {
     this.scaleBuffer[1] = 1;
     this.displayShader.setUniform('u_scale', this.scaleBuffer);
 
-    // SDR output: always clamp to [0,1], sRGB input (no special EOTF).
-    // SDR sources are already display-encoded, so they keep the display
-    // encoding path (with u_displayTransfer forced to linear below).
+    // SDR output: always clamp to [0,1].
+    // On sRGB / display-p3 / extended buffers the sources are already encoded
+    // for the surface, so they keep the display encoding path (with
+    // u_displayTransfer forced to linear below) and no EOTF.
+    // A rec2100-hlg/pq buffer expects an HLG/PQ signal with BT.2020 primaries:
+    // decode the sRGB curve to linear (SDR white 1.0 = 203 cd/m²), convert
+    // BT.709 -> BT.2020 and encode with the buffer's transfer, as renderImage does.
+    const rec2100Buffer = this.hdrOutputMode === 'hlg' || this.hdrOutputMode === 'pq';
+    const sdrOutputEncoding = rec2100Buffer ? outputEncodingForHDRMode(this.hdrOutputMode) : OUTPUT_ENCODING_DISPLAY;
+    const sdrInputTransfer = rec2100Buffer ? INPUT_TRANSFER_SRGB_TO_LINEAR : INPUT_TRANSFER_SRGB;
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
-    this.displayShader.setUniformInt('u_outputEncoding', OUTPUT_ENCODING_DISPLAY);
-    this._lastOutputEncodingCode = OUTPUT_ENCODING_DISPLAY;
-    this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
-    this._lastInputTransferCode = INPUT_TRANSFER_SRGB;
+    this.displayShader.setUniformInt('u_outputEncoding', sdrOutputEncoding);
+    this._lastOutputEncodingCode = sdrOutputEncoding;
+    this.displayShader.setUniformInt('u_inputTransfer', sdrInputTransfer);
+    this._lastInputTransferCode = sdrInputTransfer;
+    if (rec2100Buffer) {
+      // sRGB sources (uploaded with unpackColorSpace 'srgb'), BT.2020 buffer.
+      this.stateManager.setColorPrimaries(undefined, 'rec2020');
+    }
     // Apply user rotation/flip (SDR has no video rotation metadata)
     const sdrRotMatrix = getRotationMatrix2x2(normalizeAngle(this._userRotation));
     this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', sdrRotMatrix);

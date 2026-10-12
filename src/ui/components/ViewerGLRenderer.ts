@@ -1498,8 +1498,12 @@ export class ViewerGLRenderer {
     // SDR frames are display-encoded sRGB: the primaries matrices left over
     // from an HDR source (e.g. BT.2020 -> 709, 709 -> P3) must not touch them.
     // Gamut conversion for a P3 drawing buffer happens at texture upload.
+    // A rec2100 buffer is the exception: renderSDRFrame linearizes SDR frames
+    // there and needs the 709 -> 2020 matrix (it sets it itself; matching it
+    // here keeps the primaries uniforms from being re-dirtied every frame).
     if (typeof (renderer as Partial<Renderer>).setColorPrimaries === 'function') {
-      renderer.setColorPrimaries(undefined, 'srgb');
+      const rec2100 = this.getDrawingBufferColorSpace(renderer) === 'rec2020';
+      renderer.setColorPrimaries(undefined, rec2100 ? 'rec2020' : 'srgb');
     }
 
     // Apply user rotation/flip via shader uniforms (replaces CSS transform)
