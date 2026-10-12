@@ -104,6 +104,10 @@ export class Renderer implements RendererBackend {
 
   // HDR output mode (not part of shader state — controls drawingBufferColorSpace)
   private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
+  // Set when the output mode or headroom changes. Neither goes through the
+  // ShaderStateManager dirty flags, so without this a still image would keep
+  // the frame encoded for the previous mode (e.g. HLG pixels in a PQ buffer).
+  private outputConfigChanged = false;
 
   // Whether a half-float (RGBA16F) drawing buffer is active via drawingBufferStorage
   private usingHalfFloatBackbuffer = false;
@@ -610,6 +614,7 @@ export class Renderer implements RendererBackend {
     // Skip rendering if the shader is still compiling (parallel compile path).
     // The caller should poll isShaderReady() or await initAsync() first.
     if (!this.displayShader.isReady()) return;
+    this.outputConfigChanged = false;
 
     const gl = this.gl;
 
@@ -1446,6 +1451,9 @@ export class Renderer implements RendererBackend {
         this.tryConfigureHDRMetadata();
       }
 
+      if (mode !== previousMode || this.gl.drawingBufferColorSpace !== previousColorSpace) {
+        this.outputConfigChanged = true;
+      }
       return true;
     } catch (e) {
       // Ensure all state is rolled back to its previous value
@@ -1476,11 +1484,9 @@ export class Renderer implements RendererBackend {
     // poison every tone mapping division. Then clamp to [1.0, 100.0]: values
     // beyond 100x SDR white are unreasonable and could cause numerical issues
     // in shader math.
-    if (!Number.isFinite(headroom)) {
-      this.hdrHeadroom = 1.0;
-      return;
-    }
-    this.hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
+    const next = Number.isFinite(headroom) ? Math.min(100.0, Math.max(1.0, headroom)) : 1.0;
+    if (next !== this.hdrHeadroom) this.outputConfigChanged = true;
+    this.hdrHeadroom = next;
   }
 
   /**
@@ -1660,6 +1666,8 @@ export class Renderer implements RendererBackend {
     // SDR: clamp output to [0,1] for RGBA8 FBO; HDR: preserve >1.0 values
     this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
     // Scopes measure linear data, independent of the drawing buffer's encoding.
+    // A scope readback is not a display render: keep a pending output change.
+    const pendingOutputChange = this.outputConfigChanged;
     this._readbackEncoding = OUTPUT_ENCODING_LINEAR;
 
     const readType = isSDR ? gl.UNSIGNED_BYTE : gl.FLOAT;
@@ -1705,6 +1713,7 @@ export class Renderer implements RendererBackend {
     } finally {
       this.hdrOutputMode = prevHdrMode;
       this._readbackEncoding = null;
+      this.outputConfigChanged = pendingOutputChange;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
       this.stateManager.setDisplayColorState(prevDisplayState);
@@ -1743,6 +1752,8 @@ export class Renderer implements RendererBackend {
     }
     this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
     // Scopes measure linear data, independent of the drawing buffer's encoding.
+    // A scope readback is not a display render: keep a pending output change.
+    const pendingOutputChange = this.outputConfigChanged;
     this._readbackEncoding = OUTPUT_ENCODING_LINEAR;
 
     const pixelCount = width * height * RGBA_CHANNELS;
@@ -1758,6 +1769,7 @@ export class Renderer implements RendererBackend {
     } finally {
       this.hdrOutputMode = prevHdrMode;
       this._readbackEncoding = null;
+      this.outputConfigChanged = pendingOutputChange;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
       this.stateManager.setDisplayColorState(prevDisplayState);
@@ -2595,7 +2607,7 @@ export class Renderer implements RendererBackend {
   }
 
   hasPendingStateChanges(): boolean {
-    return this.stateManager.hasPendingStateChanges();
+    return this.outputConfigChanged || this.stateManager.hasPendingStateChanges();
   }
 
   private tryConfigureHDRMetadata(): void {
