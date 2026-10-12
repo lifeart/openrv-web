@@ -417,7 +417,7 @@ describe('SessionURLService', () => {
       try {
         deps = createDeps({
           getLocationSearch: () => '?room=ABCD',
-          getLocationHash: () => '',
+          getLocationHash: () => `#k=${ROOM_SECRET}`,
         });
         service = new SessionURLService(deps);
 
