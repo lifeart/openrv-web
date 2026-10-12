@@ -1257,24 +1257,31 @@ describe('ViewerGLRenderer', () => {
       expect(webgpuCanvas.style.display).toBe('none');
     });
 
-    it('VGLR-110: Canvas2D blit path is bypassed during active interaction', () => {
+    it('VGLR-110: Canvas2D blit path stays active during interaction, at the interaction size', () => {
       const { glRenderer, syncReadback, asyncReadback, mockRendererObj } = setupCanvas2DBlitRenderer();
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       const imageCanvas = document.createElement('canvas');
       imageCanvas.style.visibility = 'visible';
-      const blitCtx = (glRenderer as any).ctx as GLRendererContext;
+      const blitCtx = (glRenderer as unknown as { ctx: GLRendererContext }).ctx;
       (blitCtx.getImageCanvas as ReturnType<typeof vi.fn>).mockReturnValue(imageCanvas);
-      (blitCtx.isInteractionActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
 
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      // Full-resolution frame before the gesture
       glRenderer.renderHDRWithWebGL(image, 100, 100);
+      expect(internal._hdrPresentationTarget).toBe('canvas2d');
 
-      expect(syncReadback).not.toHaveBeenCalled();
-      expect(asyncReadback).not.toHaveBeenCalled();
-      expect(mockRendererObj.renderImage).toHaveBeenCalledTimes(1);
-      expect(internal._glCanvas?.style.display).toBe('block');
-      expect((internal._canvas2dBlit as any).getCanvas().style.display).toBe('none');
-      expect(internal._hdrPresentationTarget).toBe('gl');
+      // During interaction the viewer passes the reduced viewport
+      (blitCtx.isInteractionActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      syncReadback.mockClear();
+      asyncReadback.mockClear();
+      glRenderer.renderHDRWithWebGL(image, 50, 50);
+
+      const readback = syncReadback.mock.calls.length > 0 ? syncReadback : asyncReadback;
+      expect(readback).toHaveBeenCalledTimes(1);
+      expect(readback.mock.calls[0]).toEqual([image, 50, 50, expect.any(Number)]);
+      expect(mockRendererObj.renderImage).not.toHaveBeenCalled();
+      expect(internal._hdrPresentationTarget).toBe('canvas2d');
+      expect(internal._glCanvas?.style.display).not.toBe('block');
       expect(imageCanvas.style.visibility).toBe('hidden');
     });
   });
@@ -1470,24 +1477,36 @@ describe('ViewerGLRenderer', () => {
       expect(canvas2dBlitCanvas.style.display).toBe('none');
     });
 
-    it('VGLR-111: WebGPU blit path is bypassed during active interaction', () => {
+    it('VGLR-111: WebGPU blit path stays active during interaction (no HDR/SDR flicker)', () => {
       const { glRenderer, mockRendererObj } = setupWebGPUBlitRenderer();
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       const imageCanvas = document.createElement('canvas');
       imageCanvas.style.visibility = 'visible';
-      const blitCtx = (glRenderer as any).ctx as GLRendererContext;
+      const blitCtx = (glRenderer as unknown as { ctx: GLRendererContext }).ctx;
       (blitCtx.getImageCanvas as ReturnType<typeof vi.fn>).mockReturnValue(imageCanvas);
-      (blitCtx.isInteractionActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      const upload = (internal._webgpuBlit as unknown as { uploadAndDisplay: ReturnType<typeof vi.fn> })
+        .uploadAndDisplay;
 
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
-      glRenderer.renderHDRWithWebGL(image, 100, 100);
+      const targets: (string | null | undefined)[] = [];
+      for (const [interacting, w, h] of [
+        [false, 100, 100],
+        [true, 50, 50],
+        [true, 50, 50],
+        [false, 100, 100],
+      ] as [boolean, number, number][]) {
+        (blitCtx.isInteractionActive as ReturnType<typeof vi.fn>).mockReturnValue(interacting);
+        glRenderer.renderHDRWithWebGL(image, w, h);
+        targets.push(internal._hdrPresentationTarget);
+      }
 
-      expect(mockRendererObj.renderImageToFloat).not.toHaveBeenCalled();
-      expect(mockRendererObj.renderImageToFloatAsync).not.toHaveBeenCalled();
-      expect(mockRendererObj.renderImage).toHaveBeenCalledTimes(1);
-      expect(internal._glCanvas?.style.display).toBe('block');
-      expect((internal._webgpuBlit as any).getCanvas().style.display).toBe('none');
-      expect(internal._hdrPresentationTarget).toBe('gl');
+      // Never falls back to the SDR GL canvas
+      expect(targets).toEqual(['webgpu', 'webgpu', 'webgpu', 'webgpu']);
+      expect(mockRendererObj.renderImage).not.toHaveBeenCalled();
+      // The interaction frame is read back and uploaded at the reduced size
+      expect(upload).toHaveBeenCalledWith(expect.any(Float32Array), 50, 50);
+      expect(upload).toHaveBeenLastCalledWith(expect.any(Float32Array), 100, 100);
+      expect(internal._glCanvas?.style.display).not.toBe('block');
       expect(imageCanvas.style.visibility).toBe('hidden');
     });
 

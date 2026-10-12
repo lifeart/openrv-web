@@ -2032,6 +2032,19 @@ describe('Renderer renderImageToFloat', () => {
     expect(result1).toBe(result2);
   });
 
+  it('REN-FBO-012a: shrinking to the interaction size reuses the larger readback buffer', () => {
+    initWithFBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const full = renderer.renderImageToFloat(image, 8, 8)!;
+    const reduced = renderer.renderImageToFloat(image, 4, 4)!;
+    const fullAgain = renderer.renderImageToFloat(image, 8, 8)!;
+
+    expect(reduced.length).toBe(4 * 4 * 4);
+    expect(reduced.buffer).toBe(full.buffer);
+    expect(fullAgain).toBe(full);
+  });
+
   it('REN-FBO-013: allocates new readback buffer when dimensions change', () => {
     initWithFBOCapableGL();
 
@@ -2424,6 +2437,19 @@ describe('Renderer renderImageToFloatAsync', () => {
     // Last viewport should restore original [0, 0, 100, 100]
     const lastViewport = viewport!.mock.calls[viewport!.mock.calls.length - 1] as number[];
     expect(lastViewport).toEqual([0, 0, 100, 100]);
+  });
+
+  it('REN-PBO-013a: interaction-size readbacks reuse the full-size pixel storage', () => {
+    initWithPBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const full = renderer.renderImageToFloatAsync(image, 8, 8)!;
+    const reduced = renderer.renderImageToFloatAsync(image, 4, 4)!;
+    const fullAgain = renderer.renderImageToFloatAsync(image, 8, 8)!;
+
+    expect(reduced.length).toBe(4 * 4 * 4);
+    expect(reduced.buffer).toBe(full.buffer);
+    expect(fullAgain).toBe(full);
   });
 
   it('REN-PBO-013: reuses cached pixel buffer when dimensions unchanged', () => {

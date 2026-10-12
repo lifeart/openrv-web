@@ -754,7 +754,6 @@ export class ViewerGLRenderer {
 
     const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
     const hasFloatReadback = typeof renderer.renderImageToFloat === 'function';
-    const interactionActive = this.ctx.isInteractionActive();
 
     // Debug: log HDR rendering path decision (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -778,13 +777,18 @@ export class ViewerGLRenderer {
       );
     }
 
+    // The blit paths stay active during interaction (zoom, pan, scrub). The
+    // caller already passes the reduced interaction resolution, so the float
+    // readback shrinks with it; switching to the SDR GL canvas instead would
+    // make the picture flicker between HDR and SDR on every gesture.
+
     // Try WebGPU HDR blit path when WebGL2 has no native HDR output
-    if (!interactionActive && !isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
+    if (!isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithWebGPUBlit(renderer, image, displayWidth, displayHeight);
     }
 
     // Try Canvas2D HDR blit path as last resort when WebGPU blit is not available
-    if (!interactionActive && !isHDROutput && this._canvas2dBlit?.initialized && hasFloatReadback) {
+    if (!isHDROutput && this._canvas2dBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithCanvas2DBlit(renderer, image, displayWidth, displayHeight);
     }
 

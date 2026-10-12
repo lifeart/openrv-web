@@ -200,6 +200,7 @@ export class Renderer implements RendererBackend {
   private hdrPBOWidth = 0;
   private hdrPBOHeight = 0;
   private hdrPBOCachedPixels: Float32Array | null = null; // data from previous frame
+  private hdrPBOPixelStore: Float32Array | null = null; // grow-only backing for hdrPBOCachedPixels
   private hdrPBOReady = false; // true after first frame has been captured
 
   // --- Dedicated FBO/PBO for scope readback (separate from display blit path) ---
@@ -523,6 +524,7 @@ export class Renderer implements RendererBackend {
     this.hdrPBOWidth = 0;
     this.hdrPBOHeight = 0;
     this.hdrPBOCachedPixels = null;
+    this.hdrPBOPixelStore = null;
     this.hdrPBOReady = false;
 
     // Scope FBO/PBO resources
@@ -2018,12 +2020,10 @@ export class Renderer implements RendererBackend {
     this.hdrOutputMode = prevHdrMode;
     this._readbackEncoding = null;
 
-    // Read float pixels (reuse buffer across frames when dimensions match)
+    // Read float pixels (reuse buffer across frames and across the switch
+    // between interaction and full resolution)
     const pixelCount = width * height * RGBA_CHANNELS;
-    if (!this.hdrReadbackBuffer || this.hdrReadbackBuffer.length !== pixelCount) {
-      this.hdrReadbackBuffer = new Float32Array(pixelCount);
-    }
-    const pixels = this.hdrReadbackBuffer;
+    const pixels = this.growOnlyFloatView('sync', pixelCount);
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
 
     const err = gl.getError();
@@ -2096,7 +2096,7 @@ export class Renderer implements RendererBackend {
 
     const pixelCount = width * height * RGBA_CHANNELS;
     if (!this.hdrPBOCachedPixels || this.hdrPBOCachedPixels.length !== pixelCount) {
-      this.hdrPBOCachedPixels = new Float32Array(pixelCount);
+      this.hdrPBOCachedPixels = this.growOnlyFloatView('pbo', pixelCount);
     }
 
     // Step 1: Render current frame to FBO
@@ -2155,6 +2155,22 @@ export class Renderer implements RendererBackend {
     gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
 
     return this.hdrPBOCachedPixels;
+  }
+
+  /**
+   * Float readback storage that only grows: the blit paths alternate between
+   * the reduced interaction resolution and the full resolution, and reusing
+   * the larger allocation avoids a new multi-megabyte array on every switch.
+   * Returns a view of exactly `count` floats.
+   */
+  private growOnlyFloatView(kind: 'sync' | 'pbo', count: number): Float32Array {
+    let store = kind === 'sync' ? this.hdrReadbackBuffer : this.hdrPBOPixelStore;
+    if (!store || store.length < count) {
+      store = new Float32Array(count);
+      if (kind === 'sync') this.hdrReadbackBuffer = store;
+      else this.hdrPBOPixelStore = store;
+    }
+    return store.length === count ? store : store.subarray(0, count);
   }
 
   /**
@@ -2863,6 +2879,7 @@ export class Renderer implements RendererBackend {
     this.hdrFBOHeight = 0;
     this.hasColorBufferFloat = null;
     this.hdrReadbackBuffer = null;
+    this.hdrPBOPixelStore = null;
 
     // Release PBO resources
     this.disposeHDRPBOs();
