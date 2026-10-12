@@ -19,6 +19,7 @@ import {
 } from './OCIOConfig';
 import { OCIOTransform, type RGB } from './OCIOTransform';
 import { type LUT3D } from './LUTLoader';
+import { bakeOCIOLinearDisplayLUT, type OCIOLinearDisplayLUT } from './OCIODisplayLUT';
 import type { OCIOWasmPipeline, OCIOPipelineResult } from './wasm/OCIOWasmPipeline';
 
 /** Processing mode: 'js' uses the built-in JS transforms, 'wasm' uses the WASM OCIO pipeline */
@@ -84,6 +85,8 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   private transform: OCIOTransform | null = null;
   private bakedLUT: LUT3D | null = null;
   private lutDirty = true;
+  // Float-pipeline bakes, keyed by stripInputDecode ('strip' / 'keep').
+  private linearDisplayLUTs = new Map<string, OCIOLinearDisplayLUT>();
 
   /** Per-source input color space tracking */
   private perSourceInputColorSpace: Map<string, string> = new Map();
@@ -427,6 +430,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     );
 
     this.lutDirty = true;
+    this.linearDisplayLUTs.clear();
     this.emit('transformChanged', undefined);
   }
 
@@ -706,6 +710,31 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   }
 
   /**
+   * Bake the current transform for the WebGL float pipeline (HDR / float
+   * sources): scene-linear input through a log2 shaper, display-linear
+   * BT.709 output. See OCIODisplayLUT.ts for the contract.
+   *
+   * @param size LUT size (2..129)
+   * @param options.stripInputDecode True when the renderer has already
+   *   linearised the source (PQ / HLG input); see BakeOCIOLinearDisplayLUTOptions.
+   */
+  bakeLinearDisplayLUT(size: number = 65, options: { stripInputDecode?: boolean } = {}): OCIOLinearDisplayLUT {
+    const stripInputDecode = options.stripInputDecode ?? false;
+    const key = stripInputDecode ? 'strip' : 'keep';
+    const cached = this.linearDisplayLUTs.get(key);
+    if (cached && cached.lut.size === size) {
+      return cached;
+    }
+    const transform = this.transform ?? new OCIOTransform('Raw', 'Raw');
+    const bake = bakeOCIOLinearDisplayLUT(transform, this.state.display, size, {
+      title: `OCIO (linear): ${this.state.inputColorSpace} -> ${this.state.display}`,
+      stripInputDecode,
+    });
+    this.linearDisplayLUTs.set(key, bake);
+    return bake;
+  }
+
+  /**
    * Check if current state is default (no OCIO processing needed)
    */
   isDefaultState(): boolean {
@@ -857,6 +886,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   dispose(): void {
     this.transform = null;
     this.bakedLUT = null;
+    this.linearDisplayLUTs.clear();
     this.lutDirty = true;
     this.perSourceInputColorSpace.clear();
     this.activeSourceId = null;

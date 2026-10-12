@@ -24,6 +24,7 @@ import {
   DIRTY_LUT3D,
   DIRTY_FILE_LUT3D,
   DIRTY_DISPLAY_LUT3D,
+  DIRTY_OCIO_LUT3D,
   DIRTY_DISPLAY,
   DIRTY_BACKGROUND,
   DIRTY_HIGHLIGHTS_SHADOWS,
@@ -285,6 +286,15 @@ export function applyUniforms(
     }
   }
 
+  // OCIO display transform (HDR / float sources)
+  if (dirty.has(DIRTY_OCIO_LUT3D)) {
+    shader.setUniformInt('u_ocioLUT3DEnabled', s.ocioLUT3DEnabled ? 1 : 0);
+    if (s.ocioLUT3DEnabled) {
+      shader.setUniform('u_ocioLUT3DSize', s.ocioLUT3DSize);
+      shader.setUniform('u_ocioShaper', s.ocioShaper);
+    }
+  }
+
   // Display transfer function
   if (dirty.has(DIRTY_DISPLAY)) {
     shader.setUniformInt('u_displayTransfer', s.displayTransferCode);
@@ -487,6 +497,7 @@ export function applyUniforms(
     shader.setUniformInt('u_inlineLUT', 5);
     shader.setUniformInt('u_fileLUT3D', 6);
     shader.setUniformInt('u_displayLUT3D', 7);
+    shader.setUniformInt('u_ocioLUT3D', 8);
     textureUnitsInitialized = true;
   }
 
@@ -497,6 +508,7 @@ export function applyUniforms(
   if (s.inlineLUTEnabled) texCb.bindInlineLUTTexture();
   if (s.fileLUT3DEnabled) texCb.bindFileLUT3DTexture();
   if (s.displayLUT3DEnabled) texCb.bindDisplayLUT3DTexture();
+  if (s.ocioLUT3DEnabled) texCb.bindOCIOLUT3DTexture?.();
 
   // Clear all dirty flags after uniforms have been set
   dirty.clear();

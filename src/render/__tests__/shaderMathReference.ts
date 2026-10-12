@@ -926,6 +926,25 @@ export function applyLUT3DTrilinear(
   return [r + (out[0] - r) * intensity, g + (out[1] - g) * intensity, b + (out[2] - b) * intensity];
 }
 
+/**
+ * OCIO float-pipeline stage (stage 7b'). Port of GLSL `applyOCIOLUT3D`:
+ * log2 shaper `clamp(log2(1 + max(c, 0) / eps) * scale, 0, 1)`, then a
+ * trilinear lookup in an RGBA cube (red index fastest).
+ *
+ * @param shaper [epsilon, scale] exactly as uploaded to u_ocioShaper
+ */
+export function applyOCIOLUT3D(
+  r: number,
+  g: number,
+  b: number,
+  lutData: Float32Array,
+  lutSize: number,
+  shaper: [number, number],
+): [number, number, number] {
+  const shape = (c: number) => Math.max(0, Math.min(1, Math.log2(1 + Math.max(c, 0) / shaper[0]) * shaper[1]));
+  return applyLUT3DTrilinear(shape(r), shape(g), shape(b), lutData, lutSize, [0, 0, 0], [1, 1, 1], 1);
+}
+
 // =============================================================================
 // Premultiply / Unpremultiply alpha
 // =============================================================================

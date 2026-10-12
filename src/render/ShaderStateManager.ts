@@ -78,6 +78,7 @@ export {
   DIRTY_CONTOUR,
   DIRTY_FILE_LUT3D,
   DIRTY_DISPLAY_LUT3D,
+  DIRTY_OCIO_LUT3D,
   ALL_DIRTY_FLAGS,
   TONE_MAPPING_OPERATOR_CODES,
   BG_PATTERN_NONE,
@@ -109,6 +110,7 @@ import {
   DIRTY_LUT3D,
   DIRTY_FILE_LUT3D,
   DIRTY_DISPLAY_LUT3D,
+  DIRTY_OCIO_LUT3D,
   DIRTY_DISPLAY,
   DIRTY_HIGHLIGHTS_SHADOWS,
   DIRTY_VIBRANCE,
@@ -174,6 +176,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   private cachedLUT3DSnapshot: LUT3DSnapshot | null = null;
   private cachedFileLUT3DSnapshot: LUT3DSnapshot | null = null;
   private cachedDisplayLUT3DSnapshot: LUT3DSnapshot | null = null;
+  private cachedOCIOLUT3DSnapshot: LUT3DSnapshot | null = null;
 
   // --- Cached getter copies (invalidated on change) ---
   private cachedColorAdjustments: ColorAdjustments | null = null;
@@ -265,7 +268,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       | 'filmLUTDirty'
       | 'inlineLUTDirty'
       | 'fileLUT3DDirty'
-      | 'displayLUT3DDirty',
+      | 'displayLUT3DDirty'
+      | 'ocioLUT3DDirty',
   ): void {
     this.state[flag] = false;
     if (flag === 'curvesLUTDirty') {
@@ -278,6 +282,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.cachedFileLUT3DSnapshot = null;
     } else if (flag === 'displayLUT3DDirty') {
       this.cachedDisplayLUT3DSnapshot = null;
+    } else if (flag === 'ocioLUT3DDirty') {
+      this.cachedOCIOLUT3DSnapshot = null;
     }
   }
 
@@ -336,6 +342,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       };
     }
     return this.cachedDisplayLUT3DSnapshot;
+  }
+  getOCIOLUT3DSnapshot(): LUT3DSnapshot {
+    if (!this.cachedOCIOLUT3DSnapshot) {
+      this.cachedOCIOLUT3DSnapshot = {
+        dirty: this.state.ocioLUT3DDirty,
+        data: this.state.ocioLUT3DData,
+        size: this.state.ocioLUT3DSize,
+      };
+    }
+    return this.cachedOCIOLUT3DSnapshot;
   }
 
   // -----------------------------------------------------------------------
@@ -676,6 +692,40 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.state.displayLUT3DDomainMax[1] = 1;
       this.state.displayLUT3DDomainMax[2] = 1;
     }
+  }
+
+  setOCIOLUT(lut: { data: Float32Array; size: number; shaper: { epsilon: number; maxValue: number } } | null): void {
+    // Called every frame by the viewer: only dirty on a real change so the
+    // render-skip and async-readback fast paths stay effective.
+    if (!lut || lut.size < 2) {
+      if (!this.state.ocioLUT3DEnabled && this.state.ocioLUT3DData === null) return;
+      this.state.ocioLUT3DEnabled = false;
+      this.state.ocioLUT3DData = null;
+      this.state.ocioLUT3DSize = 0;
+      this.cachedOCIOLUT3DSnapshot = null;
+      this.dirtyFlags.add(DIRTY_OCIO_LUT3D);
+      return;
+    }
+    const epsilon = lut.shaper.epsilon;
+    const scale = 1 / Math.log2(1 + lut.shaper.maxValue / epsilon);
+    if (
+      this.state.ocioLUT3DEnabled &&
+      this.state.ocioLUT3DData === lut.data &&
+      this.state.ocioLUT3DSize === lut.size &&
+      this.state.ocioShaper[0] === epsilon &&
+      this.state.ocioShaper[1] === scale
+    ) {
+      return;
+    }
+    this.state.ocioLUT3DEnabled = true;
+    if (this.state.ocioLUT3DData !== lut.data || this.state.ocioLUT3DSize !== lut.size) {
+      this.state.ocioLUT3DDirty = true;
+    }
+    this.state.ocioLUT3DData = lut.data;
+    this.state.ocioLUT3DSize = lut.size;
+    this.state.ocioShaper = [epsilon, scale];
+    this.cachedOCIOLUT3DSnapshot = null;
+    this.dirtyFlags.add(DIRTY_OCIO_LUT3D);
   }
 
   getDisplayColorState(): DisplayColorConfig {
@@ -1021,6 +1071,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.cachedLUT3DSnapshot = null;
     this.cachedFileLUT3DSnapshot = null;
     this.cachedDisplayLUT3DSnapshot = null;
+    this.cachedOCIOLUT3DSnapshot = null;
     this.cachedColorAdjustments = null;
     this.cachedToneMappingState = null;
     this._textureUnitsInitialized = false;

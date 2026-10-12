@@ -109,6 +109,14 @@
       uniform vec3 u_lookLUT3DDomainMin;
       uniform vec3 u_lookLUT3DDomainMax;
 
+      // OCIO display transform for HDR / float sources (stage 7b'). Float 3D LUT
+      // indexed through a log2 shaper; outputs display-linear BT.709 light
+      // (1.0 = reference white). See src/color/OCIODisplayLUT.ts.
+      uniform sampler3D u_ocioLUT3D;
+      uniform bool u_ocioLUT3DEnabled;
+      uniform float u_ocioLUT3DSize;
+      uniform vec2 u_ocioShaper;          // x = linear toe epsilon, y = 1 / log2(1 + max / epsilon)
+
       // Display LUT (session-wide, applied after output primaries, before display transfer)
       uniform sampler3D u_displayLUT3D;
       uniform bool u_displayLUT3DEnabled;
@@ -894,6 +902,16 @@
         vec3 lutCoord = normalized * scale + offset;
         vec3 lutColor = texture(lut, lutCoord).rgb;
         return mix(color, lutColor, intensity);
+      }
+
+      // OCIO display transform: log2 shaper, then trilinear 3D LUT lookup.
+      // Negative input is clamped to 0 and input above the shaper's maximum to
+      // the last LUT cell.
+      vec3 applyOCIOLUT3D(vec3 color) {
+        vec3 shaped = clamp(log2(1.0 + max(color, 0.0) / u_ocioShaper.x) * u_ocioShaper.y, 0.0, 1.0);
+        float offset = 0.5 / u_ocioLUT3DSize;
+        float scale = (u_ocioLUT3DSize - 1.0) / u_ocioLUT3DSize;
+        return texture(u_ocioLUT3D, shaped * scale + offset).rgb;
       }
 
       // Display transfer functions (linear -> display encoded)
@@ -1743,6 +1761,15 @@
           // Laplacian: high-frequency edge detail (both terms in same space)
           vec3 detail = origCenter * 4.0 - neighbors;
           color.rgb = clampToSourceGamut(color.rgb + detail * u_sharpenAmount);
+        }
+
+        // 7b'. OCIO display transform (HDR / float sources). Input is the source
+        // values the OCIO input space describes, in its primaries (input
+        // primaries normalization is off while OCIO is active); output is
+        // display-linear BT.709, so stages 7c and 8a below convert and encode it
+        // for the surface exactly once.
+        if (u_ocioLUT3DEnabled) {
+          color.rgb = applyOCIOLUT3D(color.rgb);
         }
 
         // 7c. Output primaries conversion (BT.709 working space → display gamut)

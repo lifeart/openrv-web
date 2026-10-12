@@ -29,6 +29,7 @@ class StubCurvesControl extends EventEmitter {}
 class StubOCIOControl extends EventEmitter {
   private _processor = {
     bakeTo3DLUT: vi.fn(() => new Float32Array(65 * 65 * 65 * 3)),
+    bakeLinearDisplayLUT: vi.fn(() => ({ lut: { size: 65 } })),
   };
   getProcessor() {
     return this._processor;
@@ -239,7 +240,13 @@ describe('wireColorControls', () => {
     const processor = ctx._controls.ocioControl.getProcessor();
     expect(processor.bakeTo3DLUT).toHaveBeenCalledWith(ACES_OCIO_BAKE_SIZE);
     expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledTimes(1);
-    expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(expect.any(Float32Array), true);
+    expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(expect.any(Float32Array), true, expect.any(Function));
+    // The float-pipeline bake (HDR / float sources) is lazy: only built when the
+    // viewer asks for it, with the same cube size and the requested variant.
+    expect(processor.bakeLinearDisplayLUT).not.toHaveBeenCalled();
+    const provider = ctx._viewer.setOCIOBakedLUT.mock.calls[0]![2];
+    provider({ stripInputDecode: true });
+    expect(processor.bakeLinearDisplayLUT).toHaveBeenCalledWith(ACES_OCIO_BAKE_SIZE, { stripInputDecode: true });
     expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
   });

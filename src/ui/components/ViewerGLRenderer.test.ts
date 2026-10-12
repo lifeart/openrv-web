@@ -4,13 +4,18 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OUTPUT_ENCODING_EXTENDED_SRGB } from '../../config/RenderConfig';
-import { ViewerGLRenderer, type GLRendererContext } from './ViewerGLRenderer';
+import { ViewerGLRenderer, isInputLinearizedByShader, type GLRendererContext } from './ViewerGLRenderer';
+import { OCIO_HDR_SHAPER, type OCIOLinearDisplayLUT } from '../../color/OCIODisplayLUT';
 import type { Renderer } from '../../render/Renderer';
 import type { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import type { RenderState } from '../../render/RenderState';
 import type { ColorAdjustments } from '../../core/types/color';
 import type { ToneMappingState } from '../../core/types/effects';
-import { type DisplayCapabilities, DEFAULT_CAPABILITIES } from '../../color/ColorProcessingFacade';
+import {
+  type DisplayCapabilities,
+  DEFAULT_CAPABILITIES,
+  DISPLAY_TRANSFER_CODES,
+} from '../../color/ColorProcessingFacade';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 import { DEFAULT_TONE_MAPPING_STATE } from '../../core/types/effects';
 import { DEFAULT_CDL } from '../../color/CDL';
@@ -19,6 +24,7 @@ import { DEFAULT_ZEBRA_STATE } from './ZebraStripes';
 import { DEFAULT_BACKGROUND_PATTERN_STATE } from './BackgroundPatternControl';
 import { DEFAULT_HSL_QUALIFIER_STATE } from './HSLQualifier';
 import { IPImage } from '../../core/image/Image';
+import type { ColorPipelineManager } from './ColorPipelineManager';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -60,7 +66,8 @@ function createMockContext(): GLRendererContext {
     getCanvasContainer: vi.fn(() => document.createElement('div')),
     getImageCanvas: vi.fn(() => document.createElement('canvas')),
     getPaintCanvas: vi.fn(() => document.createElement('canvas')),
-    getColorPipeline: vi.fn(),
+    // OCIO off: no float-pipeline stage (tests that need one override this)
+    getColorPipeline: vi.fn(() => ({ ocioGPUAvailable: false }) as unknown as ColorPipelineManager),
     getTransformManager: vi.fn(),
     getFilterSettings: vi.fn(),
     getChannelMode: vi.fn(),
@@ -1525,6 +1532,155 @@ describe('ViewerGLRenderer', () => {
   // =========================================================================
   // Gamut mapping state roundtrip
   // =========================================================================
+  // =========================================================================
+  // OCIO in the float pipeline (H11): HDR + OCIO never bypasses OCIO
+  // =========================================================================
+  describe('OCIO float stage', () => {
+    const lutData = new Float32Array(2 * 2 * 2 * 3);
+    const bake = {
+      lut: { type: '3d', title: 't', size: 2, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data: lutData },
+      shaper: OCIO_HDR_SHAPER,
+      displayTransfer: 'rec709',
+      signal: 'sdr',
+      inputDecode: null,
+      stripInputDecode: false,
+    } as unknown as OCIOLinearDisplayLUT;
+
+    function setupOCIO(opts: { hdrOutputMode?: string; webgpuBlit?: boolean; canvas2dBlit?: boolean; ocio?: boolean }) {
+      const calls: string[] = [];
+      const capturedStates: RenderState[] = [];
+      const readback = vi.fn(() => {
+        calls.push('readback');
+        return new Float32Array(100 * 100 * 4);
+      });
+      const mockRendererObj = {
+        getHDROutputMode: vi.fn(() => opts.hdrOutputMode ?? 'sdr'),
+        applyRenderState: vi.fn((state: RenderState) => {
+          calls.push('applyRenderState');
+          capturedStates.push(JSON.parse(JSON.stringify(state)));
+        }),
+        resize: vi.fn(),
+        clear: vi.fn(),
+        renderImage: vi.fn(() => calls.push('renderImage')),
+        renderImageToFloat: readback,
+        renderImageToFloatAsync: readback,
+        hasPendingStateChanges: vi.fn(() => true),
+        isOCIOWasmActive: vi.fn(() => false),
+        setColorPrimaries: vi.fn(),
+        setOCIOLUT: vi.fn(() => calls.push('setOCIOLUT')),
+        renderSDRFrame: vi.fn(() => true),
+        dispose: vi.fn(),
+      };
+      const getOCIOLinearDisplayLUT = vi.fn(() => (opts.ocio === false ? null : bake));
+      const ocioCtx = createMockContext();
+      (ocioCtx.getTransformManager as ReturnType<typeof vi.fn>).mockReturnValue({
+        transform: { rotation: 0, flipH: false, flipV: false },
+      });
+      (ocioCtx.getColorPipeline as ReturnType<typeof vi.fn>).mockReturnValue({
+        ocioGPUAvailable: opts.ocio !== false,
+        getOCIOLinearDisplayLUT,
+      });
+      const glRenderer = new ViewerGLRenderer(ocioCtx);
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = mockRendererObj as unknown as Renderer;
+      const blitCanvas = document.createElement('canvas');
+      if (opts.webgpuBlit) {
+        internal._webgpuBlit = { initialized: true, getCanvas: () => blitCanvas, uploadAndDisplay: vi.fn() };
+      }
+      if (opts.canvas2dBlit) {
+        internal._canvas2dBlit = { initialized: true, getCanvas: () => blitCanvas, uploadAndDisplay: vi.fn() };
+      }
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
+      return { glRenderer, internal, mockRendererObj, capturedStates, calls, readback, getOCIOLinearDisplayLUT };
+    }
+
+    function floatImage(tf?: 'pq' | 'hlg' | 'linear'): IPImage {
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      if (tf) image.metadata.transferFunction = tf;
+      return image;
+    }
+
+    it('VGLR-OCIO-001: native GL path installs the OCIO LUT and the OCIO display transfer on an SDR surface', () => {
+      const { glRenderer, mockRendererObj, capturedStates, calls } = setupOCIO({ hdrOutputMode: 'sdr' });
+      glRenderer.renderHDRWithWebGL(floatImage('linear'), 100, 100);
+
+      expect(mockRendererObj.setOCIOLUT).toHaveBeenCalledWith({ data: lutData, size: 2, shaper: OCIO_HDR_SHAPER });
+      // Installed before the state is applied and the frame is drawn
+      expect(calls.indexOf('setOCIOLUT')).toBeLessThan(calls.indexOf('applyRenderState'));
+      expect(calls.indexOf('setOCIOLUT')).toBeLessThan(calls.indexOf('renderImage'));
+      // OCIO input space defines the source primaries; output goes to the surface
+      expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith(undefined, 'srgb');
+      // The OCIO display (Rec.709 here) sets the SDR display transfer
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(DISPLAY_TRANSFER_CODES.rec709);
+    });
+
+    it('VGLR-OCIO-002: HDR drawing buffers keep their own encoding (no SDR transfer on top)', () => {
+      const { glRenderer, mockRendererObj, capturedStates } = setupOCIO({ hdrOutputMode: 'pq' });
+      glRenderer.renderHDRWithWebGL(floatImage('pq'), 100, 100);
+
+      expect(mockRendererObj.setOCIOLUT).toHaveBeenCalledWith(expect.objectContaining({ data: lutData }));
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
+      expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith(undefined, 'rec2020');
+    });
+
+    it('VGLR-OCIO-003: WebGPU blit applies OCIO in the float pipeline it reads back', () => {
+      const { glRenderer, mockRendererObj, calls, readback } = setupOCIO({ webgpuBlit: true });
+      const image = floatImage('linear');
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(readback).toHaveBeenCalledWith(image, 100, 100, OUTPUT_ENCODING_EXTENDED_SRGB);
+      expect(mockRendererObj.setOCIOLUT).toHaveBeenCalledWith(expect.objectContaining({ data: lutData }));
+      expect(calls.indexOf('setOCIOLUT')).toBeLessThan(calls.indexOf('readback'));
+    });
+
+    it('VGLR-OCIO-004: Canvas2D blit applies OCIO in the float pipeline it reads back', () => {
+      const { glRenderer, mockRendererObj, calls, readback } = setupOCIO({ canvas2dBlit: true });
+      glRenderer.renderHDRWithWebGL(floatImage('linear'), 100, 100);
+
+      expect(readback).toHaveBeenCalled();
+      expect(mockRendererObj.setOCIOLUT).toHaveBeenCalledWith(expect.objectContaining({ data: lutData }));
+      expect(calls.indexOf('setOCIOLUT')).toBeLessThan(calls.indexOf('readback'));
+    });
+
+    it('VGLR-OCIO-005: OCIO off clears the stage on every HDR path', () => {
+      for (const opts of [{}, { webgpuBlit: true }, { canvas2dBlit: true }]) {
+        const { glRenderer, mockRendererObj } = setupOCIO({ ...opts, ocio: false });
+        glRenderer.renderHDRWithWebGL(floatImage('linear'), 100, 100);
+        expect(mockRendererObj.setOCIOLUT).toHaveBeenCalledWith(null);
+      }
+    });
+
+    it('VGLR-OCIO-006: picks the bake variant from whether the shader linearises the source', () => {
+      const linear = setupOCIO({});
+      linear.glRenderer.renderHDRWithWebGL(floatImage('linear'), 100, 100);
+      expect(linear.getOCIOLinearDisplayLUT).toHaveBeenLastCalledWith(false);
+
+      const pq = setupOCIO({});
+      pq.glRenderer.renderHDRWithWebGL(floatImage('pq'), 100, 100);
+      expect(pq.getOCIOLinearDisplayLUT).toHaveBeenLastCalledWith(true);
+
+      expect(isInputLinearizedByShader(floatImage('hlg'))).toBe(true);
+      expect(isInputLinearizedByShader(floatImage())).toBe(false);
+    });
+
+    it('VGLR-OCIO-007: leaves the render worker when OCIO runs in the float pipeline', () => {
+      const { glRenderer, internal } = setupOCIO({});
+      internal._isAsyncRenderer = true;
+      const fallback = vi.spyOn(glRenderer, 'fallbackToSyncRenderer').mockImplementation(() => {
+        internal._isAsyncRenderer = false;
+      });
+      glRenderer.renderHDRWithWebGL(floatImage('linear'), 100, 100);
+      expect(fallback).toHaveBeenCalledOnce();
+    });
+
+    it('VGLR-OCIO-008: the SDR WebGL path drops a LUT left by an HDR source', () => {
+      const { glRenderer, mockRendererObj } = setupOCIO({});
+      glRenderer.renderSDRWithWebGL(document.createElement('canvas'), 100, 100);
+      expect(mockRendererObj.setOCIOLUT).toHaveBeenCalledWith(null);
+    });
+  });
+
   describe('Gamut mapping state', () => {
     it('VGLR-090: default gamut mapping state is returned initially', () => {
       const state = renderer.getGamutMapping();

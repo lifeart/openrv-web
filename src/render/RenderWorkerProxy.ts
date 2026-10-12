@@ -87,6 +87,8 @@ export interface RenderWorkerProxyOptions {
 export type WorkerProxyRendererSurface = Pick<
   Renderer,
   | 'isOCIOWasmActive'
+  | 'setOCIOLUT'
+  | 'isOCIOLUTActive'
   | 'setColorPrimaries'
   | 'renderForScopes'
   | 'setLinearize'
@@ -175,6 +177,7 @@ export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSu
   private disposed = false;
   private workerReady = false;
   private contextLost = false;
+  private ocioLUTWarned = false;
 
   // Request ID counter for correlation
   private nextId = 1;
@@ -984,6 +987,23 @@ export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSu
    * never on the worker, so it is never active here.
    */
   isOCIOWasmActive(): boolean {
+    return false;
+  }
+
+  /**
+   * The OCIO float-pipeline stage (HDR / float sources) runs on the
+   * main-thread Renderer only: ViewerGLRenderer leaves the worker before it
+   * sends an OCIO LUT. Clearing is a no-op here; a LUT reaching the worker is
+   * reported instead of being dropped silently.
+   */
+  setOCIOLUT(lut: { data: Float32Array; size: number; shaper: { epsilon: number; maxValue: number } } | null): void {
+    if (lut && !this.ocioLUTWarned) {
+      this.ocioLUTWarned = true;
+      log.warn('OCIO float LUT sent to the render worker, which does not apply it; use the main-thread renderer');
+    }
+  }
+
+  isOCIOLUTActive(): boolean {
     return false;
   }
 

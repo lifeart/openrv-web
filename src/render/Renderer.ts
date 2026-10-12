@@ -143,6 +143,7 @@ export class Renderer implements RendererBackend {
   private lut3DTexture: WebGLTexture | null = null;
   private fileLUT3DTexture: WebGLTexture | null = null;
   private displayLUT3DTexture: WebGLTexture | null = null;
+  private ocioLUT3DTexture: WebGLTexture | null = null;
   private filmLUTTexture: WebGLTexture | null = null;
   private inlineLUTTexture: WebGLTexture | null = null;
 
@@ -154,6 +155,7 @@ export class Renderer implements RendererBackend {
   private fileLUT3DRGBABufferSize = 0;
   private displayLUT3DRGBABuffer: Float32Array | null = null;
   private displayLUT3DRGBABufferSize = 0;
+  private ocioLUT3DRGBABuffer: Float32Array | null = null;
   private inlineLUTDeinterleavedBuffer: Float32Array | null = null;
   private inlineLUTDeinterleavedBufferSize = 0; // tracks (lutSize * channels) for cache invalidation
 
@@ -174,6 +176,8 @@ export class Renderer implements RendererBackend {
   // uploaded through the Look LUT (u_lookLUT3D) uniform path. The OCIO shader code
   // and uniform metadata are stored here for future shader injection support.
   private ocioWasmActive = false;
+  // OCIO float-pipeline stage (setOCIOLUT), used for HDR / float sources.
+  private ocioLUTActive = false;
   private ocioShaderCode: string | null = null;
   private ocioFunctionName: string | null = null;
   private ocioUniforms: Array<{ name: string; type: string; isSampler: boolean }> | null = null;
@@ -497,6 +501,7 @@ export class Renderer implements RendererBackend {
     this.lut3DTexture = null;
     this.fileLUT3DTexture = null;
     this.displayLUT3DTexture = null;
+    this.ocioLUT3DTexture = null;
     this.filmLUTTexture = null;
     this.inlineLUTTexture = null;
     this.sdrTexture = null;
@@ -817,6 +822,13 @@ export class Renderer implements RendererBackend {
         const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE6);
         gl.bindTexture(gl.TEXTURE_3D, this.fileLUT3DTexture);
+      },
+      bindOCIOLUT3DTexture: () => {
+        this.ensureOCIOLUT3DTexture();
+        const gl = this.gl;
+        if (!gl) return;
+        gl.activeTexture(gl.TEXTURE8);
+        gl.bindTexture(gl.TEXTURE_3D, this.ocioLUT3DTexture);
       },
       bindDisplayLUT3DTexture: () => {
         this.ensureDisplayLUT3DTexture();
@@ -2342,6 +2354,21 @@ export class Renderer implements RendererBackend {
     this.stateManager.setDisplayLUT(data, size, intensity, domainMin, domainMax);
   }
 
+  /**
+   * Set the OCIO display transform for HDR / float sources (stage 7b'): a
+   * float 3D LUT behind a log2 shaper, from OCIOProcessor.bakeLinearDisplayLUT.
+   * Pass null to disable. Cheap to call every frame (dirty only on change).
+   */
+  setOCIOLUT(lut: { data: Float32Array; size: number; shaper: { epsilon: number; maxValue: number } } | null): void {
+    this.ocioLUTActive = lut !== null && lut.size >= 2;
+    this.stateManager.setOCIOLUT(lut);
+  }
+
+  /** Whether the OCIO float-pipeline stage is currently enabled. */
+  isOCIOLUTActive(): boolean {
+    return this.ocioLUTActive;
+  }
+
   // -----------------------------------------------------------------------
   // OCIO WASM Integration
   // -----------------------------------------------------------------------
@@ -2556,6 +2583,49 @@ export class Renderer implements RendererBackend {
       gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
       this.stateManager.clearTextureDirtyFlag('displayLUT3DDirty');
+    }
+  }
+
+  /**
+   * Upload the OCIO display LUT (stage 7b'). Uploads when the data changed or
+   * when the texture was (re)created, e.g. after a context restore.
+   */
+  private ensureOCIOLUT3DTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const snapshot = this.stateManager.getOCIOLUT3DSnapshot();
+    const created = !this.ocioLUT3DTexture;
+    if (created) {
+      this.ocioLUT3DTexture = gl.createTexture();
+    }
+
+    if ((snapshot.dirty || created) && snapshot.data && snapshot.size > 0) {
+      const size = snapshot.size;
+      const totalEntries = size * size * size;
+      if (!this.ocioLUT3DRGBABuffer || this.ocioLUT3DRGBABuffer.length !== totalEntries * RGBA_CHANNELS) {
+        this.ocioLUT3DRGBABuffer = new Float32Array(totalEntries * RGBA_CHANNELS);
+      }
+      const rgbaData = this.ocioLUT3DRGBABuffer;
+      const src = snapshot.data;
+      for (let i = 0; i < totalEntries; i++) {
+        const dstOff = i * RGBA_CHANNELS;
+        const srcOff = i * RGB_CHANNELS;
+        rgbaData[dstOff] = src[srcOff] ?? 0;
+        rgbaData[dstOff + 1] = src[srcOff + 1] ?? 0;
+        rgbaData[dstOff + 2] = src[srcOff + 2] ?? 0;
+        rgbaData[dstOff + 3] = 1.0;
+      }
+
+      gl.activeTexture(gl.TEXTURE8);
+      gl.bindTexture(gl.TEXTURE_3D, this.ocioLUT3DTexture);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
+      this.stateManager.clearTextureDirtyFlag('ocioLUT3DDirty');
     }
   }
 
@@ -2845,6 +2915,8 @@ export class Renderer implements RendererBackend {
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);
     if (this.fileLUT3DTexture) gl.deleteTexture(this.fileLUT3DTexture);
     if (this.displayLUT3DTexture) gl.deleteTexture(this.displayLUT3DTexture);
+    if (this.ocioLUT3DTexture) gl.deleteTexture(this.ocioLUT3DTexture);
+    this.ocioLUT3DTexture = null;
     if (this.filmLUTTexture) gl.deleteTexture(this.filmLUTTexture);
     if (this.inlineLUTTexture) gl.deleteTexture(this.inlineLUTTexture);
 
@@ -2856,6 +2928,7 @@ export class Renderer implements RendererBackend {
     this.fileLUT3DRGBABufferSize = 0;
     this.displayLUT3DRGBABuffer = null;
     this.displayLUT3DRGBABufferSize = 0;
+    this.ocioLUT3DRGBABuffer = null;
     this.inlineLUTDeinterleavedBuffer = null;
     this.inlineLUTDeinterleavedBufferSize = 0;
     this.rgbaPadBuffer = null;

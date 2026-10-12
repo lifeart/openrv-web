@@ -284,7 +284,9 @@ export function updateOCIOPipeline(ctx: AppWiringContext, state: OCIOState): voi
     // ACES transforms use 65^3 for better precision; others use 33^3.
     const bakeSize = resolveOCIOBakeSize(state);
     const bakedLUT = processor.bakeTo3DLUT(bakeSize);
-    ctx.viewer.setOCIOBakedLUT(bakedLUT, true);
+    // HDR / float sources run OCIO inside the GL float pipeline instead of
+    // the 8-bit canvas; that bake is only built when such a source is shown.
+    ctx.viewer.setOCIOBakedLUT(bakedLUT, true, (options) => processor.bakeLinearDisplayLUT(bakeSize, options));
   } else {
     // Disable OCIO - clear the baked LUT
     ctx.viewer.setOCIOBakedLUT(null, false);

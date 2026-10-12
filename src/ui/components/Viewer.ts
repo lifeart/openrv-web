@@ -36,6 +36,8 @@ import {
   type DisplayCapabilities,
   safeCanvasContext2D,
 } from '../../color/ColorProcessingFacade';
+import { selectHDRSourceRoute } from './hdrOCIORoute';
+import type { OCIOLinearLUTProvider } from './ColorPipelineManager';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import {
   type ExportFormat,
@@ -1613,15 +1615,22 @@ export class Viewer implements ViewerAccessor {
       this.stereoManager.setRightEyeImageData(null);
     }
 
-    // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
-    // (unless WebGPU blit bypasses OCIO for HDR output)
+    // Deactivate HDR mode if current source isn't HDR, or if OCIO has to run
+    // on the canvas (no float bake available, see hdrOCIORoute.ts). With a
+    // float bake, OCIO is applied inside the GL float pipeline, which also
+    // feeds the WebGPU / Canvas2D HDR blits, so HDR stays on the GL path.
     const isCurrentHDR =
       source?.fileSourceNode?.isHDR() === true ||
       source?.videoSourceNode?.isHDR() === true ||
       source?.proceduralSourceNode != null;
-    const ocioActive = this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
-    const blitBypassesOCIO = this.glRendererManager.isWebGPUBlitReady;
-    if (this.glRendererManager.hdrRenderActive && (!isCurrentHDR || (ocioActive && !blitBypassesOCIO))) {
+    const hdrRoute = selectHDRSourceRoute({
+      ocioActive: this.colorPipeline.isOCIOEnabled(),
+      ocioFloatStage: this.colorPipeline.ocioGPUAvailable,
+    });
+    if (hdrRoute === 'canvas-ocio' && isCurrentHDR) {
+      this.warnHDRCanvasOCIOOnce();
+    }
+    if (this.glRendererManager.hdrRenderActive && (!isCurrentHDR || hdrRoute !== 'gl')) {
       this.deactivateHDRMode();
     }
 
@@ -1867,11 +1876,11 @@ export class Viewer implements ViewerAccessor {
     }
 
     // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas.
-    // When OCIO is active, normally skip the WebGL path and fall through to the
-    // 2D canvas where applyOCIOToCanvas() can apply the baked LUT as a post-process.
-    // Exception: when the WebGPU HDR blit is ready, bypass the OCIO guard so that
-    // HDR content can be displayed via the float FBO → WebGPU extended-range path.
-    if (isHDRVideo && (!ocioActive || blitBypassesOCIO)) {
+    // OCIO, when on, is applied inside the float pipeline (stage 7b'), for the
+    // native HDR canvas and the WebGPU / Canvas2D blits alike. Only when no
+    // float bake exists does an HDR source fall through to the 2D canvas, where
+    // applyOCIOToCanvas() applies the [0, 1] LUT as a post-process.
+    if (isHDRVideo && hdrRoute === 'gl') {
       // HDR video: get cached HDR IPImage with VideoFrame for GPU upload
       const currentFrame = this.session.currentFrame;
       PerfTrace.begin('getVideoHDRIPImage');
@@ -1901,7 +1910,7 @@ export class Viewer implements ViewerAccessor {
           .catch((err) => log.warn('Failed to fetch HDR video frame:', err));
       }
       // Fall through to SDR while waiting (element was set by the video path above)
-    } else if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
+    } else if (hdrFileSource && hdrRoute === 'gl') {
       const ipImage = hdrFileSource.getIPImage();
       // Apply LUT pipeline metadata cascade so the renderer sees the
       // post-pipeline color space when the user has declared explicit
@@ -1922,7 +1931,7 @@ export class Viewer implements ViewerAccessor {
         return;
       }
     } else if (hdrFileSource) {
-      // OCIO is active — bypass WebGL and use 2D canvas so OCIO LUT can be applied
+      // OCIO without a float bake — use the 2D canvas so the OCIO LUT can be applied
       element = hdrFileSource.getCanvas() ?? undefined;
       if (!element) {
         this.drawPlaceholder();
@@ -1934,7 +1943,7 @@ export class Viewer implements ViewerAccessor {
       // Procedural sources produce float32 IPImage — render via WebGL HDR path
       const ipImage = hdrProceduralSource.getIPImage();
       // See note in the hdrFileSource branch above — issue MED-51.
-      const cascadedIpImage = ipImage ? this.applyLUTMetadataCascade(ipImage) : null;
+      const cascadedIpImage = ipImage && hdrRoute === 'gl' ? this.applyLUTMetadataCascade(ipImage) : null;
       if (cascadedIpImage && this.renderHDRWithWebGL(cascadedIpImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
@@ -2914,6 +2923,18 @@ export class Viewer implements ViewerAccessor {
     this.colorPipeline.applyLUTToCanvas(ctx, width, height);
   }
 
+  private hdrCanvasOCIOWarned = false;
+
+  /** Report (once) that an HDR source is colour managed on the 8-bit canvas. */
+  private warnHDRCanvasOCIOOnce(): void {
+    if (this.hdrCanvasOCIOWarned) return;
+    this.hdrCanvasOCIOWarned = true;
+    log.warn(
+      'OCIO is on without a float-pipeline bake: HDR sources are colour managed on the 8-bit canvas ' +
+        '(values above 1.0 are clamped). Pass a linearLUTProvider to setOCIOBakedLUT to keep them in float.',
+    );
+  }
+
   /**
    * Apply OCIO display transform using GPU-accelerated baked 3D LUT.
    *
@@ -2935,9 +2956,11 @@ export class Viewer implements ViewerAccessor {
    *
    * @param lut The baked 3D LUT from OCIOProcessor.bakeTo3DLUT(), or null to clear
    * @param enabled Whether OCIO processing is enabled
+   * @param linearLUTProvider Builds the float-pipeline bake used for HDR /
+   *   float sources (OCIOProcessor.bakeLinearDisplayLUT); baked lazily.
    */
-  setOCIOBakedLUT(lut: LUT3D | null, enabled: boolean): void {
-    this.colorPipeline.setOCIOBakedLUT(lut, enabled);
+  setOCIOBakedLUT(lut: LUT3D | null, enabled: boolean, linearLUTProvider: OCIOLinearLUTProvider | null = null): void {
+    this.colorPipeline.setOCIOBakedLUT(lut, enabled, linearLUTProvider);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }

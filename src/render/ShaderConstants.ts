@@ -42,6 +42,7 @@ export const DIRTY_COLOR_PRIMARIES = 'colorPrimaries';
 export const DIRTY_CONTOUR = 'contour';
 export const DIRTY_FILE_LUT3D = 'fileLut3d';
 export const DIRTY_DISPLAY_LUT3D = 'displayLut3d';
+export const DIRTY_OCIO_LUT3D = 'ocioLut3d';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -77,6 +78,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_CONTOUR,
   DIRTY_FILE_LUT3D,
   DIRTY_DISPLAY_LUT3D,
+  DIRTY_OCIO_LUT3D,
 ] as const;
 
 // ---------------------------------------------------------------------------
