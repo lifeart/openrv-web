@@ -9,6 +9,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { __test__ } from './renderWorker.worker';
 import { Renderer } from '../render/Renderer';
+import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
 import {
   DATA_TYPE_CODES,
   TRANSFER_FUNCTION_CODES,
@@ -1244,6 +1245,85 @@ describe('renderWorker', () => {
       const bitmap = { width: 2, height: 2, close: vi.fn() } as unknown as ImageBitmap;
       handleMessage({ type: 'renderSDR', id: 5, bitmap, width: 2, height: 2 });
       expect(__test__.getLastImage()).toBeNull();
+    });
+  });
+
+  describe('HDR output mode result', () => {
+    let postMessageSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      postMessageSpy = vi.spyOn(self, 'postMessage').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      postMessageSpy.mockRestore();
+    });
+
+    function hdrResults(): unknown[] {
+      return postMessageSpy.mock.calls
+        .map((call: unknown[]) => call[0])
+        .filter((m: unknown) => (m as { type?: string })?.type === 'hdrOutputModeResult');
+    }
+
+    function fakeRenderer(accept: boolean) {
+      let mode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
+      return {
+        setHDROutputMode: vi.fn((next: 'sdr' | 'hlg' | 'pq' | 'extended') => {
+          if (accept) mode = next;
+          return accept;
+        }),
+        getHDROutputMode: vi.fn(() => mode),
+      };
+    }
+
+    it('RW-HDR-001: syncState reports an accepted switch with the applied mode and request id', () => {
+      const r = fakeRenderer(true);
+      __test__.setRenderer(r as unknown as Renderer);
+
+      applySyncState({
+        type: 'syncState',
+        state: { hdrOutputMode: { mode: 'pq', capabilities: DEFAULT_CAPABILITIES, requestId: 7 } },
+      });
+
+      expect(r.setHDROutputMode).toHaveBeenCalledWith('pq', DEFAULT_CAPABILITIES);
+      expect(hdrResults()).toEqual([
+        expect.objectContaining({
+          type: 'hdrOutputModeResult',
+          requestId: 7,
+          requested: 'pq',
+          accepted: true,
+          mode: 'pq',
+        }),
+      ]);
+    });
+
+    it('RW-HDR-002: a failed switch reports the mode still in effect', () => {
+      __test__.setRenderer(fakeRenderer(false) as unknown as Renderer);
+
+      applySyncState({
+        type: 'syncState',
+        state: { hdrOutputMode: { mode: 'hlg', capabilities: DEFAULT_CAPABILITIES, requestId: 3 } },
+      });
+
+      expect(hdrResults()).toEqual([
+        expect.objectContaining({ requestId: 3, requested: 'hlg', accepted: false, mode: 'sdr' }),
+      ]);
+    });
+
+    it('RW-HDR-003: the setHDROutputMode message also reports its outcome', () => {
+      __test__.setRenderer(fakeRenderer(false) as unknown as Renderer);
+
+      handleMessage({ type: 'setHDROutputMode', mode: 'extended', capabilities: DEFAULT_CAPABILITIES, requestId: 9 });
+
+      expect(hdrResults()).toEqual([
+        expect.objectContaining({ requestId: 9, requested: 'extended', accepted: false, mode: 'sdr' }),
+      ]);
+    });
+
+    it('RW-HDR-004: no reply without a renderer', () => {
+      __test__.setRenderer(null);
+      handleMessage({ type: 'setHDROutputMode', mode: 'pq', capabilities: DEFAULT_CAPABILITIES, requestId: 1 });
+      expect(hdrResults()).toEqual([]);
     });
   });
 });

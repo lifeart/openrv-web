@@ -240,11 +240,13 @@ export interface SetBackgroundPatternMessage extends BaseWorkerMessage {
   state: BackgroundPatternState;
 }
 
-/** Set HDR output mode (fire-and-forget). */
+/** Set HDR output mode. The worker answers with an `hdrOutputModeResult`. */
 export interface SetHDROutputModeMessage extends BaseWorkerMessage {
   type: 'setHDROutputMode';
   mode: 'sdr' | 'hlg' | 'pq' | 'extended';
   capabilities: DisplayCapabilities;
+  /** Echoed back in the `hdrOutputModeResult` so stale replies can be ignored. */
+  requestId?: number;
 }
 
 /** Read pixel data at a specific location. Requires response. */
@@ -304,7 +306,8 @@ export interface RendererSyncState {
   displayLUT: RendererLUTSyncState;
   displayColorState: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number };
   backgroundPattern: BackgroundPatternState;
-  hdrOutputMode: { mode: 'sdr' | 'hlg' | 'pq' | 'extended'; capabilities: DisplayCapabilities };
+  /** The worker answers with an `hdrOutputModeResult` carrying `requestId`. */
+  hdrOutputMode: { mode: 'sdr' | 'hlg' | 'pq' | 'extended'; capabilities: DisplayCapabilities; requestId?: number };
   gamutMapping: GamutMappingState;
   premultMode: number;
   ditherMode: number;
@@ -398,6 +401,19 @@ export interface ScopeDataResult extends BaseWorkerMessage {
   height: number;
 }
 
+/**
+ * Outcome of an HDR output mode change: whether the worker's renderer accepted
+ * the requested mode, and the mode actually in effect afterwards (the previous
+ * one when the switch failed).
+ */
+export interface HDROutputModeResult extends BaseWorkerMessage {
+  type: 'hdrOutputModeResult';
+  requestId?: number;
+  requested: 'sdr' | 'hlg' | 'pq' | 'extended';
+  accepted: boolean;
+  mode: 'sdr' | 'hlg' | 'pq' | 'extended';
+}
+
 /** WebGL context was lost. */
 export interface ContextLostResult extends BaseWorkerMessage {
   type: 'contextLost';
@@ -425,6 +441,7 @@ export type RenderWorkerResult =
   | RenderErrorResult
   | PixelDataResult
   | ScopeDataResult
+  | HDROutputModeResult
   | ContextLostResult
   | ContextRestoredResult
   | ProtocolMismatchResult;
