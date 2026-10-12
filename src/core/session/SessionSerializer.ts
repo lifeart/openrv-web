@@ -434,6 +434,69 @@ export class SessionSerializer {
   }
 
   /**
+   * Resolve every user-supplied or cached file a restore needs, before the
+   * current session is cleared. Throws when the user cancels a reload
+   * prompt, so a cancelled restore never leaves a half-cleared session.
+   */
+  private static async collectReloadInputs(
+    media: SessionState['media'],
+    components: SessionComponents,
+  ): Promise<{ cachedFiles: Map<number, File>; promptedFiles: Map<number, File | File[] | null> }> {
+    const cachedFiles = new Map<number, File>();
+    const promptedFiles = new Map<number, File | File[] | null>();
+
+    for (let refIndex = 0; refIndex < media.length; refIndex++) {
+      const ref = media[refIndex]!;
+      const isBlobPath = ref.path.startsWith('blob:');
+
+      if (ref.type === 'sequence' && (ref.requiresReload || !isBlobPath)) {
+        const files = await showSequenceReloadPrompt(ref.name, {
+          title: 'Reload Sequence',
+          accept: SUPPORTED_MEDIA_ACCEPT,
+        });
+        if (files === FILE_RELOAD_CANCEL) {
+          throw new Error('Session restore cancelled by user');
+        }
+        promptedFiles.set(refIndex, files);
+        continue;
+      }
+
+      if (!ref.requiresReload) continue;
+
+      // Try the OPFS cache first (images and videos only)
+      if (ref.opfsCacheKey && components.cacheManager) {
+        try {
+          const cached = await components.cacheManager.get(ref.opfsCacheKey);
+          if (cached) {
+            cachedFiles.set(
+              refIndex,
+              new File([cached], ref.name, { type: ref.type === 'video' ? 'video/mp4' : 'image/png' }),
+            );
+            continue;
+          }
+        } catch (error) {
+          // Cache lookup failed – fall through to file picker
+          logger.debug('OPFS cache lookup failed; falling through to file picker', {
+            opfsCacheKey: ref.opfsCacheKey,
+            error,
+          });
+        }
+      }
+
+      const file = await showFileReloadPrompt(ref.name, {
+        title: 'Reload File',
+        accept: SUPPORTED_MEDIA_ACCEPT,
+      });
+      if (file === FILE_RELOAD_CANCEL) {
+        throw new Error('Session restore cancelled by user');
+      }
+      promptedFiles.set(refIndex, file);
+    }
+
+    return { cachedFiles, promptedFiles };
+  }
+
+  /**
    * Restore session state from JSON
    */
   static async fromJSON(
@@ -445,6 +508,10 @@ export class SessionSerializer {
 
     // Version migration if needed
     const migrated = this.migrate(state);
+
+    // Ask for every file the restore needs before touching the session, so
+    // cancelling a reload prompt leaves the current session intact (L15).
+    const { cachedFiles, promptedFiles } = await this.collectReloadInputs(migrated.media, components);
 
     // Clear existing media before loading new project to replace the session (fix #121).
     session.clearSources();
@@ -462,16 +529,9 @@ export class SessionSerializer {
           // Sequences need multi-file picker and the sequence-loading path
           if (ref.type === 'sequence') {
             const seqDetail = this.formatSequenceDetail(ref);
-            const files = await showSequenceReloadPrompt(ref.name, {
-              title: 'Reload Sequence',
-              accept: SUPPORTED_MEDIA_ACCEPT,
-            });
+            const files = promptedFiles.get(refIndex);
 
-            if (files === FILE_RELOAD_CANCEL) {
-              throw new Error('Session restore cancelled by user');
-            }
-
-            if (files && files.length > 0) {
+            if (Array.isArray(files) && files.length > 0) {
               try {
                 await session.loadSequence(files);
                 mediaIndexMap.set(refIndex, nextSourceIndex++);
@@ -493,37 +553,17 @@ export class SessionSerializer {
             continue;
           }
 
-          // Attempt to load from OPFS cache first (images and videos only)
-          if (ref.opfsCacheKey && components.cacheManager) {
-            try {
-              const cached = await components.cacheManager.get(ref.opfsCacheKey);
-              if (cached) {
-                const cachedFile = new File([cached], ref.name, {
-                  type: ref.type === 'video' ? 'video/mp4' : 'image/png',
-                });
-                await session.loadFile(cachedFile);
-                mediaIndexMap.set(refIndex, nextSourceIndex++);
-                loadedMedia++;
-                continue;
-              }
-            } catch (error) {
-              // Cache lookup failed – fall through to file picker
-              logger.debug('OPFS cache lookup failed; falling through to file picker', {
-                opfsCacheKey: ref.opfsCacheKey,
-                error,
-              });
-            }
+          // Load from the OPFS cache when it had the file (images and videos only)
+          const cachedFile = cachedFiles.get(refIndex);
+          if (cachedFile) {
+            await session.loadFile(cachedFile);
+            mediaIndexMap.set(refIndex, nextSourceIndex++);
+            loadedMedia++;
+            continue;
           }
 
-          const accept = SUPPORTED_MEDIA_ACCEPT;
-          const file = await showFileReloadPrompt(ref.name, {
-            title: 'Reload File',
-            accept,
-          });
-
-          if (file === FILE_RELOAD_CANCEL) {
-            throw new Error('Session restore cancelled by user');
-          }
+          const prompted = promptedFiles.get(refIndex);
+          const file = prompted instanceof File ? prompted : null;
 
           if (file) {
             // User provided a file - load it
@@ -574,16 +614,9 @@ export class SessionSerializer {
         } else if (ref.type === 'sequence') {
           // Non-blob sequences: prompt user for sequence files
           const seqDetail = this.formatSequenceDetail(ref);
-          const files = await showSequenceReloadPrompt(ref.name, {
-            title: 'Reload Sequence',
-            accept: SUPPORTED_MEDIA_ACCEPT,
-          });
+          const files = promptedFiles.get(refIndex);
 
-          if (files === FILE_RELOAD_CANCEL) {
-            throw new Error('Session restore cancelled by user');
-          }
-
-          if (files && files.length > 0) {
+          if (Array.isArray(files) && files.length > 0) {
             try {
               await session.loadSequence(files);
               mediaIndexMap.set(refIndex, nextSourceIndex++);
@@ -604,10 +637,6 @@ export class SessionSerializer {
           }
         }
       } catch (_err) {
-        // Re-throw cancel errors so they propagate out of fromJSON
-        if (_err instanceof Error && _err.message === 'Session restore cancelled by user') {
-          throw _err;
-        }
         warnings.push(`Failed to load: ${ref.name}`);
       }
     }
