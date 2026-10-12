@@ -157,6 +157,7 @@ function createMockState(overrides: Partial<InternalShaderState> = {}): Internal
     quantizeBits: 0,
     inputPrimariesEnabled: false,
     inputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    inputPrimariesInverse: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
     outputPrimariesEnabled: false,
     outputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
     ...overrides,

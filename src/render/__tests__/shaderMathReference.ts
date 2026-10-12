@@ -458,12 +458,9 @@ export function applyVibrance(
 ): [number, number, number] {
   if (amount === 0.0) return [r, g, b];
 
-  const clamped: [number, number, number] = [
-    Math.max(0.0, Math.min(1.0, r)),
-    Math.max(0.0, Math.min(1.0, g)),
-    Math.max(0.0, Math.min(1.0, b)),
-  ];
-  const [vibH, vibS, vibL] = rgbToHsl(clamped[0], clamped[1], clamped[2]);
+  // HDR values are scaled down by their largest channel for the HSL math and
+  // scaled back afterwards; SDR values use a scale of exactly 1.
+  const [scale, vibH, vibS, vibL] = hdrNormalizedHsl(r, g, b);
 
   let skinProt = 1.0;
   if (skinProtection && vibH >= 20.0 && vibH <= 50.0 && vibS < 0.6 && vibL > 0.2 && vibL < 0.8) {
@@ -476,10 +473,50 @@ export function applyVibrance(
   const newS = Math.max(0.0, Math.min(1.0, vibS + adjustment));
 
   if (Math.abs(newS - vibS) > 0.001) {
-    return hslToRgb(vibH, newS, vibL);
+    const [vr, vg, vb] = hslToRgb(vibH, newS, vibL);
+    return [vr * scale, vg * scale, vb * scale];
   }
 
   return [r, g, b];
+}
+
+/**
+ * HSL of a possibly-HDR colour, as used by vibrance and the HSL qualifier.
+ * Negative components are clamped (hue math); the colour is divided by
+ * max(maxChannel, 1) so values above 1.0 are not clipped.
+ * Returns [scale, h (0-360), s (0-1), l (0-1)].
+ */
+export function hdrNormalizedHsl(r: number, g: number, b: number): [number, number, number, number] {
+  const cr = Math.max(r, 0),
+    cg = Math.max(g, 0),
+    cb = Math.max(b, 0);
+  const scale = Math.max(cr, cg, cb, 1.0);
+  const [h, s, l] = rgbToHsl(cr / scale, cg / scale, cb / scale);
+  return [scale, h, s, l];
+}
+
+/**
+ * HSL qualifier correction (GLSL section 6e, non-preview branch).
+ * Returns the corrected colour; pixels with matte <= 0.001 pass through.
+ */
+export function applyHSLQualifierCorrection(
+  r: number,
+  g: number,
+  b: number,
+  matte: number,
+  hueShift: number,
+  satScale: number,
+  lumScale: number,
+): [number, number, number] {
+  if (matte <= 0.001) return [r, g, b];
+  const [scale, h, s, l] = hdrNormalizedHsl(r, g, b);
+  let newH = h + hueShift * matte;
+  if (newH < 0.0) newH += 360.0;
+  if (newH >= 360.0) newH -= 360.0;
+  const newS = Math.max(0, Math.min(1, s * (1.0 - matte) + s * satScale * matte));
+  const newL = Math.max(0, Math.min(1, l * (1.0 - matte) + l * lumScale * matte));
+  const [cr, cg, cb] = hslToRgb(newH, newS, newL);
+  return [cr * scale, cg * scale, cb * scale];
 }
 
 // =============================================================================
@@ -1043,4 +1080,59 @@ export function apply1DCurvesLUT(
   cb = sample(cb, 3);
 
   return [cr + excessR, cg + excessG, cb + excessB];
+}
+
+// =============================================================================
+// Wide-gamut working space (H7)
+// =============================================================================
+
+/**
+ * Non-negative clamp in the source primaries (GLSL `clampToSourceGamut`).
+ * `toWorking` is the column-major source → BT.709 matrix and `toSource` its
+ * inverse; pass null for BT.709 sources, where this is max(c, 0).
+ */
+export function clampToSourceGamut(
+  r: number,
+  g: number,
+  b: number,
+  toWorking: ArrayLike<number> | null,
+  toSource: ArrayLike<number> | null,
+): [number, number, number] {
+  if (!toWorking || !toSource) return [Math.max(r, 0), Math.max(g, 0), Math.max(b, 0)];
+  const src = applyMat3(Array.from(toSource), r, g, b).map((v) => Math.max(v, 0)) as [number, number, number];
+  return applyMat3(Array.from(toWorking), src[0], src[1], src[2]);
+}
+
+function gamutSoftClipChannel(x: number): number {
+  if (x <= 0.0) return 0.0;
+  if (x <= 0.8) return x;
+  return 0.8 + 0.2 * Math.tanh((x - 0.8) / 0.2);
+}
+
+/**
+ * GLSL `applyGamutMapping`: BT.709 working values in, BT.709 working values out.
+ *
+ * @param sourceToWorking - Matrix that brings an untagged pixel to BT.709
+ *   (null when step 0e already converted it, or for sRGB sources).
+ * @param workingToTarget - BT.709 → target gamut (null for an sRGB target).
+ * @param targetToWorking - Inverse of workingToTarget.
+ * @param peak - max(u_hdrHeadroom, 1).
+ */
+export function applyGamutMappingWorking(
+  rgb: [number, number, number],
+  sourceToWorking: ArrayLike<number> | null,
+  workingToTarget: ArrayLike<number> | null,
+  targetToWorking: ArrayLike<number> | null,
+  mode: 'clip' | 'compress',
+  peak = 1.0,
+): [number, number, number] {
+  let c = rgb;
+  if (sourceToWorking) c = applyMat3(Array.from(sourceToWorking), c[0], c[1], c[2]);
+  if (workingToTarget) c = applyMat3(Array.from(workingToTarget), c[0], c[1], c[2]);
+  c =
+    mode === 'compress'
+      ? (c.map((v) => gamutSoftClipChannel(v / peak) * peak) as [number, number, number])
+      : (c.map((v) => Math.max(0, Math.min(peak, v))) as [number, number, number]);
+  if (targetToWorking) c = applyMat3(Array.from(targetToWorking), c[0], c[1], c[2]);
+  return c;
 }

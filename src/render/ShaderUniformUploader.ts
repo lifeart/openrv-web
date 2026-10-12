@@ -389,6 +389,7 @@ export function applyUniforms(
     shader.setUniformInt('u_inputPrimariesEnabled', s.inputPrimariesEnabled ? 1 : 0);
     if (s.inputPrimariesEnabled) {
       shader.setUniformMatrix3('u_inputPrimariesMatrix', s.inputPrimariesMatrix);
+      shader.setUniformMatrix3('u_inputPrimariesInverse', s.inputPrimariesInverse);
     }
     shader.setUniformInt('u_outputPrimariesEnabled', s.outputPrimariesEnabled ? 1 : 0);
     if (s.outputPrimariesEnabled) {

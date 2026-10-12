@@ -1998,6 +1998,18 @@ describe('ShaderStateManager', () => {
       expect(mat.length).toBe(9);
       // First element should be ~1.66 (REC2020_TO_SRGB[0])
       expect(mat[0]).toBeCloseTo(1.6605, 3);
+      // H7: the inverse (709 → source) is uploaded alongside for source-gamut clamps
+      const inv = uploaded['u_inputPrimariesInverse'] as Float32Array;
+      expect(inv).toBeInstanceOf(Float32Array);
+      expect(inv.length).toBe(9);
+      // inverse * forward = identity
+      for (let col = 0; col < 3; col++) {
+        for (let row = 0; row < 3; row++) {
+          let sum = 0;
+          for (let k = 0; k < 3; k++) sum += inv[k * 3 + row]! * mat[col * 3 + k]!;
+          expect(sum).toBeCloseTo(col === row ? 1 : 0, 5);
+        }
+      }
     });
 
     it('CP-SM-003: P3 display output — correct output matrix selected', () => {

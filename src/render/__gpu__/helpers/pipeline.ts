@@ -141,6 +141,9 @@ export function setupIdentityPipeline(gl: WebGL2RenderingContext, program: WebGL
   // Input/output primaries: disabled
   gl.uniform1i(gl.getUniformLocation(program, 'u_inputPrimariesEnabled'), 0);
   gl.uniform1i(gl.getUniformLocation(program, 'u_outputPrimariesEnabled'), 0);
+  gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_inputPrimariesMatrix'), false, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_inputPrimariesInverse'), false, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_outputPrimariesMatrix'), false, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
 
   // Linearize: disabled (no log conversion)
   gl.uniform1i(gl.getUniformLocation(program, 'u_linearizeLogType'), 0);
