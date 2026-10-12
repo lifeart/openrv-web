@@ -8,6 +8,8 @@ import { createMockSession, createMockViewer } from '../../test/mocks';
 import { encodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
 import type { WebRTCURLOfferSignal, WebRTCURLAnswerSignal } from '../network/WebRTCURLSignaling';
 
+const ROOM_SECRET = 'AAAAAAAAAAAAAAAAAAAAAA';
+
 // ---------------------------------------------------------------------------
 // Lightweight test doubles
 // ---------------------------------------------------------------------------
@@ -45,6 +47,7 @@ function createMockNetworkSyncManager() {
     setPinCode: vi.fn(),
     joinRoom: vi.fn(),
     joinServerlessRoomFromOfferToken: vi.fn().mockResolvedValue(null),
+    setRoomSecret: vi.fn(),
     _syncStateManager: syncStateManager,
   };
 }
@@ -382,7 +385,7 @@ describe('SessionURLService', () => {
     it('SU-016: sets room code and pin from URL params', async () => {
       deps = createDeps({
         getLocationSearch: () => '?room=ABCD&pin=1234',
-        getLocationHash: () => '',
+        getLocationHash: () => `#k=${ROOM_SECRET}`,
       });
       service = new SessionURLService(deps);
 
@@ -397,7 +400,7 @@ describe('SessionURLService', () => {
     it('SU-017: auto-joins room when only room code is present (no pin)', async () => {
       deps = createDeps({
         getLocationSearch: () => '?room=ABCD',
-        getLocationHash: () => '',
+        getLocationHash: () => `#k=${ROOM_SECRET}`,
       });
       service = new SessionURLService(deps);
 
@@ -414,7 +417,7 @@ describe('SessionURLService', () => {
       try {
         deps = createDeps({
           getLocationSearch: () => '?room=ABCD',
-          getLocationHash: () => '',
+          getLocationHash: () => `#k=${ROOM_SECRET}`,
         });
         service = new SessionURLService(deps);
 
@@ -430,7 +433,7 @@ describe('SessionURLService', () => {
     it('SU-040: auto-joins room with PIN when both room and pin are present', async () => {
       deps = createDeps({
         getLocationSearch: () => '?room=WXYZ&pin=5678',
-        getLocationHash: () => '',
+        getLocationHash: () => `#k=${ROOM_SECRET}`,
       });
       service = new SessionURLService(deps);
 
@@ -440,6 +443,45 @@ describe('SessionURLService', () => {
       expect(deps.networkControl.setPinCode).toHaveBeenCalledWith('5678');
       expect(deps.networkSyncManager.setPinCode).toHaveBeenCalledWith('5678');
       expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('WXYZ', 'User', '5678');
+    });
+
+    it('SU-041a: installs the room secret from the link fragment', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?room=ABCD-EFGH',
+        getLocationHash: () => `#s=abc&k=${ROOM_SECRET}`,
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkSyncManager.setRoomSecret).toHaveBeenCalledWith(ROOM_SECRET);
+    });
+
+    it('SU-041b: a room link without a room key does not join and explains why', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?room=ABCD-EFGH',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.setJoinRoomCodeFromLink).toHaveBeenCalledWith('ABCD-EFGH');
+      expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(expect.stringContaining('no room key'));
+    });
+
+    it('SU-041c: a PIN-protected link waits for the PIN instead of joining', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?room=ABCD-EFGH',
+        getLocationHash: () => `#k=${ROOM_SECRET}&pr=1`,
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith('Enter the room PIN to join.');
     });
 
     it('SU-041: does not auto-join when no room code is present', async () => {
@@ -1141,6 +1183,29 @@ describe('SessionURLService', () => {
       expect(deps.networkControl.showInfo).not.toHaveBeenCalledWith(expect.stringContaining('could not be processed'));
     });
 
+    it('SU-045a: PIN-protected WebRTC invite asks for the PIN and keeps it out of the response URL', async () => {
+      const token = encodeWebRTCURLSignal({ ...validOfferSignal, pinRequired: true });
+      const answerToken = encodeWebRTCURLSignal(validAnswerSignal);
+      const promptForRoomPin = vi.fn().mockResolvedValue('482913');
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${token}`,
+        getLocationHash: () => `#k=${ROOM_SECRET}&pr=1`,
+        getLocationHref: () => 'http://localhost/',
+        promptForRoomPin,
+      });
+      deps.networkSyncManager.joinServerlessRoomFromOfferToken.mockResolvedValue(answerToken);
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(promptForRoomPin).toHaveBeenCalled();
+      expect(deps.networkSyncManager.joinServerlessRoomFromOfferToken).toHaveBeenCalledWith(token, 'User', '482913');
+      const responseUrl = (deps.networkControl.setShareLink as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+      expect(responseUrl).not.toContain('482913');
+      expect(responseUrl).not.toContain('pin=');
+    });
+
     it('SU-046: answer link still shows guidance message', async () => {
       const token = encodeWebRTCURLSignal(validAnswerSignal);
 
@@ -1547,7 +1612,7 @@ describe('SessionURLService', () => {
     it('SU-065: room-only URL (no pin) auto-joins immediately', async () => {
       deps = createDeps({
         getLocationSearch: () => '?room=EFGH',
-        getLocationHash: () => '',
+        getLocationHash: () => `#k=${ROOM_SECRET}`,
       });
       service = new SessionURLService(deps);
 
@@ -1565,7 +1630,7 @@ describe('SessionURLService', () => {
     it('SU-066: room+pin URL auto-joins with pin', async () => {
       deps = createDeps({
         getLocationSearch: () => '?room=MNOP&pin=4321',
-        getLocationHash: () => '',
+        getLocationHash: () => `#k=${ROOM_SECRET}`,
       });
       service = new SessionURLService(deps);
 
@@ -1580,7 +1645,7 @@ describe('SessionURLService', () => {
     it('SU-067: room code is uppercased for both UI prefill and join', async () => {
       deps = createDeps({
         getLocationSearch: () => '?room=abcd-efgh',
-        getLocationHash: () => '',
+        getLocationHash: () => `#k=${ROOM_SECRET}`,
       });
       service = new SessionURLService(deps);
 

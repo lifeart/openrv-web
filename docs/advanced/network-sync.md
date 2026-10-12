@@ -26,13 +26,13 @@ The room code uniquely identifies the session. Share this code with participants
 
 ## Joining a Room
 
-Participants join an existing room by entering the room code provided by the host.
+Rooms are end-to-end encrypted, so participants join with the host's **invite link**, not the room code alone.
 
-1. Click the **Network** button in the header bar
-2. Enter the room code in the **Room Code** field
-3. Click **Join Room**
+1. The host clicks **Copy Invite URL** in the Network panel and sends the link to participants
+2. The host sends the room **PIN** separately (for example by phone or a different chat)
+3. Participants open the link (or paste it into the **Room Code** field and click **Join Room**) and enter the PIN
 
-Alternatively, the host can copy a shareable URL using the **Copy Link** button. Opening this URL in a browser automatically populates the room code and initiates a join attempt. If the room is not PIN-protected, the join completes without any manual steps. If the room requires a PIN and the URL includes the PIN parameter, the join also completes automatically. If the room requires a PIN but the URL does not include one, the room code is prefilled in the UI and the user is prompted to enter the PIN manually.
+Opening the link prefills the room code. If the room has a PIN, typing it in the Network panel joins the room. If the host cleared the PIN, the link joins without any manual steps. The PIN is never part of the link.
 
 Invalid or non-existent room codes produce an error message. If the room has reached its maximum participant count, a "Room is full" error is displayed. Malformed or corrupted share links display an error notification explaining that the link could not be processed.
 
@@ -73,9 +73,11 @@ Sync settings persist across reconnection events.
 
 The room creator is the **host**. All other users are **participants**.
 
-- **Host authority**: For playback position and state, the host is the source of truth. When conflicts arise (e.g., two users seek to different frames simultaneously), the host's state wins.
+- **Host authority**: For playback position and state, the host is the source of truth. While playing, the host sends its playback state about once a second and participants correct their position from it, compensating for network latency. Participants don't broadcast every frame during playback, so they never pull each other backwards. Play/pause, seeking, speed, direction, loop mode and in/out points are shared by everyone.
 - **Participant control**: Participants can still control playback locally. Their actions are sent to the room and applied if sync is enabled. However, in conflict scenarios, the host's state takes precedence.
 - **Host disconnect**: If the host disconnects and reconnects, they regain host status. If the host permanently leaves, the room may be closed depending on server configuration.
+- **Viewer role**: The host can switch any participant between **Reviewer** and **Viewer** from the user list. Viewers follow along but their playback, view, color, annotation and note changes are ignored by everyone else.
+- **Host-only actions**: Only the host can send the initial session state, assign roles, or replace the full note list. State, annotations and notes sent by anyone else are ignored.
 
 ---
 
@@ -85,11 +87,15 @@ OpenRV Web uses **WebSocket** connections (Secure WebSocket, `wss://`) as the pr
 
 ### URL-Based Signaling
 
-Room connection is established through URL-based signaling. The shareable room URL encodes the room code (and optionally a PIN) as query parameters. For rooms without PIN protection, opening the URL joins the room automatically with no manual entry required. For PIN-protected rooms, the URL must include the PIN parameter for automatic joining; otherwise, the room code is prefilled and the user must enter the PIN manually. Malformed or corrupted signaling URLs display an error notification to the user rather than failing silently.
+Room connection is established through URL-based signaling. The invite URL carries the room code as a query parameter and the room key in the URL fragment (the part after `#`). Browsers never send the fragment to the signaling server or any web server. Malformed or corrupted signaling URLs display an error notification to the user rather than failing silently.
 
-### PIN Encryption
+### End-to-End Encryption and the PIN
 
-For sensitive review content, rooms can be secured with a PIN code. When a PIN is set during room creation, all participants must enter the PIN to join. The PIN encrypts the room access token, preventing unauthorized access even if the room code is intercepted.
+Every room gets a fresh random 128-bit room key when it is created. All traffic between participants (playback, view, color, annotations, notes, session state, media transfer and WebRTC signaling) is encrypted with AES-GCM under a key derived from the room key, the room code and the PIN. The relay server only sees the room code and who is connected; it cannot read or forge room messages, and it cannot relabel a message as coming from another participant.
+
+The PIN is a second factor: when a PIN is set, someone who obtains the invite link still cannot read or send anything without it. Because the room key is random, the PIN cannot be guessed offline from captured traffic. Messages that are not encrypted with the room's key are dropped, and a participant with the wrong PIN sees a warning instead of room content.
+
+Anyone with both the link and the PIN can take part, so share them only with the intended reviewers.
 
 ### Latency Compensation
 
@@ -116,7 +122,7 @@ In addition to WebSocket-based sync, OpenRV Web supports direct peer-to-peer con
 
 ## Media Transfer
 
-Each participant typically loads media independently. However, when direct file access is not available, the media transfer system supports request/offer/chunk-based sharing between peers. A participant can request media from the host, who offers the file and streams it in chunks over the peer connection. For standard workflows, all users should have access to the same media files through:
+Each participant typically loads media independently. However, when direct file access is not available, the media transfer system supports request/offer/chunk-based sharing between peers. A participant who joins with an empty session can request media from the host. The host is asked to approve every request before any file is sent, and the participant is asked to accept the incoming size. Files are read and sent one chunk at a time with flow control, so large transfers do not need to fit in memory. Each participant can have one transfer in progress at a time. For standard workflows, all users should have access to the same media files through:
 
 - Shared network storage (NFS, SMB)
 - Cloud storage URLs

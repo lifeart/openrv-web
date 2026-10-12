@@ -43,7 +43,8 @@ test.describe('Network Sync', () => {
   });
 
   test('NET-003: shared room link auto-joins after entering only a PIN via UI', async ({ page }) => {
-    await page.goto('/?room=ABCD-EFGH');
+    // Invite links carry the room key in the fragment; the PIN is typed by the guest.
+    await page.goto('/?room=ABCD-EFGH#k=AAAAAAAAAAAAAAAAAAAAAA&pr=1');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
     await loadVideoFile(page);
@@ -120,7 +121,11 @@ test.describe('Network Sync', () => {
     const initialShareLink = await shareInput.inputValue();
     const initialURL = new URL(initialShareLink);
     expect(initialURL.searchParams.get('room')).toBe(roomCode);
-    expect(initialURL.searchParams.get('pin')).toBe(pinCode);
+    // The PIN is shared separately; the link carries only the room key, in the fragment.
+    expect(initialURL.searchParams.get('pin')).toBeNull();
+    expect(initialShareLink).not.toContain(pinCode);
+    expect(initialURL.hash).toMatch(/(^#|&)k=[A-Za-z0-9_-]{22}/);
+    expect(initialURL.hash).toContain('pr=1');
 
     const copyButton = connectedPanel.locator('[data-testid="network-copy-link-button"]');
     await copyButton.click();
@@ -132,8 +137,10 @@ test.describe('Network Sync', () => {
     const shareLinkWithState = await shareInput.inputValue();
     const sharedURL = new URL(shareLinkWithState);
     expect(sharedURL.searchParams.get('room')).toBe(roomCode);
-    expect(sharedURL.searchParams.get('pin')).toBe(pinCode);
+    expect(sharedURL.searchParams.get('pin')).toBeNull();
+    expect(shareLinkWithState).not.toContain(pinCode);
     expect(sharedURL.hash.startsWith('#s=')).toBe(true);
+    expect(sharedURL.hash).toMatch(/&k=[A-Za-z0-9_-]{22}/);
     expect(sharedURL.searchParams.get('rtc')).toBeTruthy();
   });
 
@@ -170,9 +177,17 @@ test.describe('Network Sync', () => {
     const inviteURL = new URL(hostShareLink);
     expect(inviteURL.searchParams.get('rtc')).toBeTruthy();
 
+    expect(inviteURL.searchParams.get('pin')).toBeNull();
+    expect(inviteURL.hash).toMatch(/k=[A-Za-z0-9_-]{22}/);
+
     const guestPage = await context.newPage();
     await guestPage.goto(inviteURL.toString());
     await guestPage.waitForSelector('#app');
+    // The PIN is not in the link, so the guest is asked for it.
+    const pinPrompt = guestPage.getByPlaceholder('PIN', { exact: true });
+    await expect(pinPrompt).toBeVisible({ timeout: 5000 });
+    await pinPrompt.fill('1357');
+    await pinPrompt.press('Enter');
     await waitForTestHelper(guestPage);
 
     const guestNetworkButton = guestPage.locator('[data-testid="network-sync-button"]').first();

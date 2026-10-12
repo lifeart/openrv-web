@@ -72,7 +72,7 @@ Three loop modes are available: **Loop** (continuous repetition), **Ping-pong** 
 
 ### How does collaborative review work?
 
-OpenRV Web uses WebSocket (server-relayed) connections as its primary transport for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. When available, WebRTC peer-to-peer connections are attempted first for session state transfer, with WebSocket used as a fallback. Both state sync and media transfer can flow through either transport path depending on availability. PIN-based encryption secures the session.
+OpenRV Web uses WebSocket (server-relayed) connections as its primary transport for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. When available, WebRTC peer-to-peer connections are attempted first for session state transfer, with WebSocket used as a fallback. Both state sync and media transfer can flow through either transport path depending on availability. Room traffic is end-to-end encrypted with a random key carried in the invite link fragment, plus an optional PIN shared separately.
 
 ### Is a server required for collaboration?
 

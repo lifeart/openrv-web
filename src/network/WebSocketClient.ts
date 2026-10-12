@@ -116,6 +116,13 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   }
 
   /**
+   * Bytes queued on the socket but not yet sent (0 when not connected).
+   */
+  get bufferedAmount(): number {
+    return this.ws?.bufferedAmount ?? 0;
+  }
+
+  /**
    * Send a SyncMessage over the WebSocket connection.
    * Returns true if the message was sent, false otherwise.
    */
@@ -392,7 +399,7 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private getCurrentServerUrl(): string {
     if (this.serverUrls.length === 0) return this.config.serverUrl;
     const index = Math.max(0, Math.min(this.serverUrlIndex, this.serverUrls.length - 1));
-    return this.serverUrls[index]!;
+    return this.serverUrls[index] ?? this.config.serverUrl;
   }
 
   private advanceServerUrl(): void {

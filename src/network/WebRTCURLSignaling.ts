@@ -26,7 +26,8 @@ export interface WebRTCURLOfferSignal extends WebRTCURLSignalBase {
   type: 'offer';
   hostUserName: string;
   hostColor: string;
-  pinCode?: string;
+  /** Whether the guest must also enter the room PIN. The PIN itself is never in the link. */
+  pinRequired?: boolean;
 }
 
 export interface WebRTCURLAnswerSignal extends WebRTCURLSignalBase {
@@ -97,13 +98,13 @@ function parseSignal(value: unknown): WebRTCURLSignal | null {
   if (base.type === 'offer') {
     if (typeof raw.hostUserName !== 'string' || raw.hostUserName.length === 0) return null;
     if (typeof raw.hostColor !== 'string' || raw.hostColor.length === 0) return null;
-    if (raw.pinCode !== undefined && typeof raw.pinCode !== 'string') return null;
+    // Older invites carried the PIN itself; it is ignored so the PIN never comes from a link.
     return {
       ...base,
       type: 'offer',
       hostUserName: raw.hostUserName,
       hostColor: raw.hostColor,
-      pinCode: typeof raw.pinCode === 'string' ? raw.pinCode : undefined,
+      pinRequired: raw.pinRequired === true || typeof raw.pinCode === 'string' ? true : undefined,
     };
   }
 
@@ -142,8 +143,8 @@ function parseBaseSignal(raw: Record<string, unknown>): WebRTCURLSignalBase | nu
 function base64UrlEncode(str: string): string {
   const bytes = new TextEncoder().encode(str);
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
   }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }

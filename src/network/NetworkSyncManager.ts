@@ -95,6 +95,15 @@ import {
   type WebRTCURLAnswerSignal,
   WEBRTC_URL_SIGNAL_PARAM,
 } from './WebRTCURLSignaling';
+import {
+  deriveRoomKey,
+  generateRoomSecret,
+  isEncryptedMessageType,
+  isEncryptedPayloadEnvelope,
+  isValidRoomSecret,
+  openMessage,
+  sealMessage,
+} from './RoomCrypto';
 
 const log = new Logger('NetworkSyncManager');
 
@@ -121,6 +130,15 @@ interface ServerlessPeerState {
 
 const CREATE_ROOM_WSS_FALLBACK_TIMEOUT_MS = 2000;
 const SERVERLESS_ICE_GATHERING_TIMEOUT_MS = 4000;
+/** Upper bound on concurrent WebRTC peer connections opened for state transfer. */
+const MAX_WEBRTC_STATE_PEERS = 4;
+/** Minimum spacing between state requests honoured from the same peer. */
+const STATE_REQUEST_MIN_INTERVAL_MS = 2000;
+/** Bytes queued for sending above which bulk senders should wait. */
+const SEND_BUFFER_HIGH_WATER_BYTES = 1024 * 1024;
+const SEND_CAPACITY_POLL_MS = 20;
+/** Message types that change shared session state and are refused from viewers. */
+const STATE_CHANGING_TYPES = new Set(['sync.playback', 'sync.frame', 'sync.view', 'sync.color']);
 
 export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implements ManagerBase {
   private wsClient: WebSocketClient;
@@ -153,6 +171,16 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _reconnectExhausted = false;
   private _lastRoomCode: string | null = null;
   private _lastRoomAction: 'create' | 'join' | null = null;
+
+  // End-to-end encryption state (see RoomCrypto)
+  private _roomSecret: string | null = null;
+  private _keyRoomCode: string | null = null;
+  private _roomKey: Promise<CryptoKey | null> | null = null;
+  private _sendChain: Promise<void> = Promise.resolve();
+  private _receiveChain: Promise<void> = Promise.resolve();
+  private _pendingSealedSends = 0;
+  private _warnedUndecryptableSenders = new Set<string>();
+  private _lastStateRequestAt = new Map<string, number>();
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -263,7 +291,79 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   setPinCode(pinCode: string): void {
-    this._pinCode = pinCode.trim();
+    const next = pinCode.trim();
+    if (next === this._pinCode) return;
+    this._pinCode = next;
+    this.refreshRoomKey();
+    // A guest who fixes a wrong PIN while connected needs the host state again.
+    if (this.isConnected && this._roomInfo && !this.isHost && this._roomInfo.hostId) {
+      this.requestStateSync(this._roomInfo.hostId);
+    }
+  }
+
+  /**
+   * The room secret that encrypts all peer traffic, or null when the room is
+   * not end-to-end encrypted. It belongs in the invite link fragment only.
+   */
+  get roomSecret(): string | null {
+    return this._roomSecret;
+  }
+
+  /** Whether peer traffic is sealed with a room key. */
+  get isEndToEndEncrypted(): boolean {
+    return this._roomSecret !== null;
+  }
+
+  /**
+   * Set the room secret (from an invite link, or a freshly generated one for a
+   * new room). Pass null to clear it.
+   */
+  setRoomSecret(secret: string | null): void {
+    if (secret !== null && !isValidRoomSecret(secret)) {
+      this.emit('error', { code: 'INVALID_ROOM_KEY', message: 'The room key in this link is invalid.' });
+      return;
+    }
+    if (secret === this._roomSecret) return;
+    this._roomSecret = secret;
+    this.refreshRoomKey();
+  }
+
+  /**
+   * Resolve once outgoing traffic has drained below the buffering threshold.
+   * Bulk senders (media transfer) await this between chunks so they never
+   * overrun the socket or data channel buffers.
+   */
+  async waitForSendCapacity(): Promise<void> {
+    while (this.isConnected && this.queuedSendBytes() > SEND_BUFFER_HIGH_WATER_BYTES) {
+      await new Promise((resolve) => setTimeout(resolve, SEND_CAPACITY_POLL_MS));
+    }
+  }
+
+  private queuedSendBytes(): number {
+    const channelBytes = this._serverlessPeer?.channel?.bufferedAmount ?? 0;
+    // Messages still waiting for encryption count as roughly one media chunk each.
+    return this.wsClient.bufferedAmount + channelBytes + this._pendingSealedSends * 64 * 1024;
+  }
+
+  private refreshRoomKey(): void {
+    this._warnedUndecryptableSenders.clear();
+    const secret = this._roomSecret;
+    const roomCode = this._keyRoomCode;
+    if (!secret || !roomCode) {
+      this._roomKey = null;
+      return;
+    }
+    this._roomKey = deriveRoomKey(secret, roomCode, this._pinCode).catch((error) => {
+      log.warn('Failed to derive room key', error);
+      return null;
+    });
+  }
+
+  private setKeyRoomCode(roomCode: string | null): void {
+    const normalized = roomCode ? roomCode.toUpperCase() : null;
+    if (normalized === this._keyRoomCode) return;
+    this._keyRoomCode = normalized;
+    this.refreshRoomKey();
   }
 
   /**
@@ -294,9 +394,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
     const url = new URL(baseUrl, fallbackBase);
     url.searchParams.set('room', this._roomInfo.roomCode);
-    if (this._pinCode) {
-      url.searchParams.set('pin', this._pinCode);
-    }
+    url.searchParams.delete('pin');
     url.searchParams.set(WEBRTC_URL_SIGNAL_PARAM, encodeWebRTCURLSignal(offerSignal));
     return url.toString();
   }
@@ -322,8 +420,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     }
 
     if (userName) this._userName = userName;
-    const activePin = (pinCode ?? decoded.pinCode ?? '').trim();
-    this.setPinCode(activePin);
+    if (typeof pinCode === 'string') this.setPinCode(pinCode);
+    this.setKeyRoomCode(decoded.roomCode);
 
     const localUser: SyncUser = {
       id: this._userId,
@@ -413,6 +511,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
+    // New rooms are always end-to-end encrypted.
+    if (!this._roomSecret) this.setRoomSecret(generateRoomSecret());
     this._pendingRoomAction = 'create';
     this._lastRoomAction = 'create';
     this._lastRoomCode = null;
@@ -447,6 +547,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
+    this.setKeyRoomCode(roomCode);
     this._pendingRoomAction = 'join';
     this._lastRoomAction = 'join';
     this._lastRoomCode = roomCode.toUpperCase();
@@ -504,6 +605,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!this.isConnected || !this._roomInfo) return;
     if (!this._syncSettings.playback) return;
     if (this.stateManager.isApplyingRemoteState) return;
+    if (!this.canUserSync(this._userId)) return;
 
     this.stateManager.updateLocalPlayback(payload);
     const message = createPlaybackSyncMessage(this._roomInfo.roomId, this._userId, {
@@ -520,6 +622,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!this.isConnected || !this._roomInfo) return;
     if (!this._syncSettings.playback) return;
     if (this.stateManager.isApplyingRemoteState) return;
+    if (!this.canUserSync(this._userId)) return;
 
     const payload: FrameSyncPayload = {
       currentFrame,
@@ -537,6 +640,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!this.isConnected || !this._roomInfo) return;
     if (!this._syncSettings.view) return;
     if (this.stateManager.isApplyingRemoteState) return;
+    if (!this.canUserSync(this._userId)) return;
 
     this.stateManager.updateLocalView(payload);
     const message = createViewSyncMessage(this._roomInfo.roomId, this._userId, payload);
@@ -551,6 +655,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!this.isConnected || !this._roomInfo) return;
     if (!this._syncSettings.color) return;
     if (this.stateManager.isApplyingRemoteState) return;
+    if (!this.canUserSync(this._userId)) return;
 
     this.stateManager.updateLocalColor(payload);
     const message = createColorSyncMessage(this._roomInfo.roomId, this._userId, payload);
@@ -632,6 +737,19 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.dispatchRealtimeMessage(message);
 
     this.emit('participantPermissionChanged', { userId: targetUserId, role });
+  }
+
+  /**
+   * Re-send every non-default participant role so late joiners learn them.
+   * Only the host can do this.
+   */
+  broadcastParticipantPermissions(): void {
+    if (!this.isConnected || !this._roomInfo || !this.isHost) return;
+    for (const [targetUserId, role] of this._permissions) {
+      if (targetUserId === this._userId || role === 'reviewer') continue;
+      const message = createPermissionMessage(this._roomInfo.roomId, this._userId, { targetUserId, role });
+      this.dispatchRealtimeMessage(message);
+    }
   }
 
   /**
@@ -856,15 +974,69 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this._unsubscribers.push(unsub0, unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7, unsub8);
   }
 
+  /**
+   * Entry point for every inbound message. Peer messages are opened with the
+   * room key first; anything that is not sealed with it is dropped once the
+   * room is end-to-end encrypted.
+   */
   private handleMessage(message: SyncMessage, transport: 'websocket' | 'webrtc' = 'websocket'): void {
+    if (!isEncryptedMessageType(message.type)) {
+      this.processMessage(message, transport);
+      return;
+    }
+    if (message.userId === this._userId) return;
+
+    const sealed = isEncryptedPayloadEnvelope(message.payload);
+    if (!this._roomSecret) {
+      if (sealed) {
+        this.warnUndecryptable(message.userId, 'missing-key');
+        return;
+      }
+      this.processMessage(message, transport);
+      return;
+    }
+
+    if (!sealed) {
+      log.warn(`Dropped unencrypted ${message.type} message in an encrypted room`);
+      return;
+    }
+
+    this._receiveChain = this._receiveChain
+      .then(async () => {
+        const key = this._roomKey ? await this._roomKey : null;
+        if (this._disposed) return;
+        const opened = key ? await openMessage(key, message) : null;
+        if (this._disposed) return;
+        if (!opened) {
+          this.warnUndecryptable(message.userId, key ? 'wrong-key' : 'missing-key');
+          return;
+        }
+        this.processMessage(opened, transport);
+      })
+      .catch((error) => {
+        log.warn('Failed to process encrypted message', error);
+      });
+  }
+
+  private warnUndecryptable(senderUserId: string, reason: 'missing-key' | 'wrong-key'): void {
+    if (this._warnedUndecryptableSenders.has(senderUserId)) return;
+    this._warnedUndecryptableSenders.add(senderUserId);
+    const message =
+      reason === 'missing-key'
+        ? 'This room is end-to-end encrypted. Open the full invite link to join it.'
+        : 'Some room messages could not be decrypted. Check that the PIN matches the host.';
+    this.emit('toastMessage', { message, type: 'warning' });
+  }
+
+  private processMessage(message: SyncMessage, transport: 'websocket' | 'webrtc'): void {
     // Deduplicate messages by ID
     if (message.id && this._recentMessageIds.has(message.id)) return;
     if (message.id) {
       this._recentMessageIds.add(message.id);
       this._recentMessageIdQueue.push(message.id);
       if (this._recentMessageIdQueue.length > 200) {
-        const evicted = this._recentMessageIdQueue.shift()!;
-        this._recentMessageIds.delete(evicted);
+        const evicted = this._recentMessageIdQueue.shift();
+        if (evicted !== undefined) this._recentMessageIds.delete(evicted);
       }
     }
 
@@ -879,6 +1051,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     // Ignore messages from self (except server-originating responses)
     if (!isServerMessage && message.userId === this._userId) return;
+
+    // Viewers may not change shared session state.
+    if (STATE_CHANGING_TYPES.has(message.type) && !this.canUserSync(message.userId)) return;
 
     switch (message.type) {
       case 'room.created':
@@ -974,6 +1149,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     };
 
     this.wsClient.setIdentity(this._userId, payload.roomId);
+    this.setKeyRoomCode(payload.roomCode);
     this.stateManager.setHost(true);
     this._permissions.set(this._userId, 'host');
     this.setConnectionState('connected');
@@ -995,7 +1171,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     };
 
     this.wsClient.setIdentity(this._userId, payload.roomId);
+    this.setKeyRoomCode(payload.roomCode);
     this.stateManager.setHost(false);
+    if (this._roomInfo.hostId) this._permissions.set(this._roomInfo.hostId, 'host');
     this.setConnectionState('connected');
 
     this.emit('roomJoined', { ...this._roomInfo });
@@ -1121,19 +1299,12 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!['add', 'remove', 'update', 'clear', 'snapshot'].includes(p.action)) return;
     if (typeof p.timestamp !== 'number') return;
     if (!this.canUserSync(senderUserId)) return;
+    // Replacing or wiping every note is reserved for the host.
+    if ((p.action === 'snapshot' || p.action === 'clear') && senderUserId !== this._roomInfo?.hostId) return;
 
-    // Override author field with authenticated sender identity
-    const sanitized = { ...p };
-    if (sanitized.note && typeof sanitized.note === 'object') {
-      sanitized.note = { ...(sanitized.note as object), author: senderUserId };
-    }
-    if (Array.isArray(sanitized.notes)) {
-      sanitized.notes = sanitized.notes.map((note: unknown) =>
-        note && typeof note === 'object' ? { ...(note as object), author: senderUserId } : note,
-      );
-    }
-
-    this.emit('syncNote', sanitized);
+    // Notes keep their original author. Edits from other peers never change
+    // authorship (the receiver only applies text/status/color style fields).
+    this.emit('syncNote', { ...p });
   }
 
   private handleSyncCursor(payload: unknown, senderUserId: string): void {
@@ -1151,7 +1322,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     const perm = payload as PermissionChangePayload;
     // Only accept permission changes from the host
-    if (this._roomInfo && senderUserId !== this._roomInfo.hostId) return;
+    if (!this._roomInfo || senderUserId !== this._roomInfo.hostId) return;
+    // The host role itself cannot be reassigned over the wire.
+    if (perm.role === 'host' || perm.targetUserId === this._roomInfo.hostId) return;
 
     this._permissions.set(perm.targetUserId, perm.role);
     this.emit('participantPermissionChanged', {
@@ -1168,6 +1341,12 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       return;
     }
 
+    // Retries reuse the request id; anything faster than that is flooding.
+    const now = Date.now();
+    const last = this._lastStateRequestAt.get(senderUserId);
+    if (last !== undefined && now - last < STATE_REQUEST_MIN_INTERVAL_MS) return;
+    this._lastStateRequestAt.set(senderUserId, now);
+
     this.emit('sessionStateRequested', {
       requestId: requestPayload.requestId,
       requesterUserId: senderUserId,
@@ -1179,6 +1358,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const responsePayload = payload as StateResponsePayload;
     if (typeof responsePayload.requestId !== 'string' || responsePayload.requestId.length === 0) return;
     if (responsePayload.targetUserId && responsePayload.targetUserId !== this._userId) return;
+    // Only the host may answer, and only a request this client actually sent.
+    if (!this._roomInfo || senderUserId !== this._roomInfo.hostId) return;
+    if (this._pendingStateRequest?.requestId !== responsePayload.requestId) return;
 
     const hasState =
       typeof responsePayload.sessionState === 'string' || responsePayload.encryptedSessionState !== undefined;
@@ -1266,16 +1448,63 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   private dispatchRealtimeMessage(message: SyncMessage): boolean {
+    if (this._roomSecret && isEncryptedMessageType(message.type)) {
+      this.enqueueSealedSend(message, (sealed) => this.transmitRealtimeMessage(sealed));
+      return this.wsClient.isConnected || this.hasOpenServerlessChannel();
+    }
+    return this.transmitRealtimeMessage(message);
+  }
+
+  /** Send a WebRTC signaling message, which always travels over the relay. */
+  private sendSignalingMessage(message: SyncMessage): void {
+    if (this._roomSecret) {
+      this.enqueueSealedSend(message, (sealed) => this.wsClient.send(sealed));
+      return;
+    }
+    this.wsClient.send(message);
+  }
+
+  /**
+   * Seal `message` with the room key and hand it to `send`. Sends are chained
+   * so they leave in the order they were queued.
+   */
+  private enqueueSealedSend(message: SyncMessage, send: (sealed: SyncMessage) => boolean): void {
+    this._pendingSealedSends++;
+    this._sendChain = this._sendChain
+      .then(async () => {
+        try {
+          const key = this._roomKey ? await this._roomKey : null;
+          if (this._disposed) return;
+          if (!key) {
+            this.recordDroppedMessage(message.type);
+            return;
+          }
+          const sealed = await sealMessage(key, message);
+          if (this._disposed) return;
+          send(sealed);
+        } finally {
+          this._pendingSealedSends--;
+        }
+      })
+      .catch((error) => {
+        log.warn(`Failed to encrypt ${message.type} message`, error);
+      });
+  }
+
+  private transmitRealtimeMessage(message: SyncMessage): boolean {
     if (this.wsClient.send(message)) return true;
     if (this.sendMessageOverServerlessPeer(message)) return true;
+    this.recordDroppedMessage(message.type);
+    return false;
+  }
 
+  private recordDroppedMessage(messageType: SyncMessage['type']): void {
     this._droppedMessageCount++;
-    log.warn(`Sync message dropped (type=${message.type}, total dropped=${this._droppedMessageCount})`);
+    log.warn(`Sync message dropped (type=${messageType}, total dropped=${this._droppedMessageCount})`);
     this.emit('syncMessageDropped', {
-      messageType: message.type,
+      messageType,
       droppedCount: this._droppedMessageCount,
     });
-    return false;
   }
 
   private hasOpenServerlessChannel(): boolean {
@@ -1418,6 +1647,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const localUser = this.getOrCreateLocalRoomUser();
     const payload: ServerlessPresencePayload = { action, user: localUser };
     const message = createMessage('user.presence', this._roomInfo.roomId, this._userId, payload);
+    if (this._roomSecret) {
+      this.enqueueSealedSend(message, (sealed) => this.sendMessageOverServerlessPeer(sealed));
+      return;
+    }
     this.sendMessageOverServerlessPeer(message);
   }
 
@@ -1541,7 +1774,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       hostUserId: this._userId,
       hostUserName: localUser.name,
       hostColor: localUser.color,
-      pinCode: this._pinCode || undefined,
+      pinRequired: this._pinCode ? true : undefined,
       createdAt: Date.now(),
       sdp: state.pc.localDescription.sdp,
     };
@@ -1628,7 +1861,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         targetUserId: peerUserId,
         candidate: event.candidate.toJSON(),
       });
-      this.wsClient.send(message);
+      this.sendSignalingMessage(message);
     };
 
     pc.onconnectionstatechange = () => {
@@ -1687,6 +1920,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   private sendStateViaWebRTC(payload: StateResponsePayload, requesterUserId: string): void {
     if (!this._roomInfo) return;
+    if (this._webrtcPeers.size >= MAX_WEBRTC_STATE_PEERS) {
+      this.sendStateResponseOverRealtimeTransport(payload);
+      return;
+    }
     const { requestId } = payload;
     const state = this.getOrCreatePeerConnection(requestId, requesterUserId);
     const key = this.getWebRTCKey(requestId, requesterUserId);
@@ -1725,12 +1962,13 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         await state.pc.setLocalDescription(offer);
         if (!state.pc.localDescription?.sdp) throw new Error('Missing local SDP offer');
 
-        const message = createWebRTCOfferMessage(this._roomInfo!.roomId, this._userId, {
+        if (!this._roomInfo) throw new Error('Room closed before the offer was sent');
+        const message = createWebRTCOfferMessage(this._roomInfo.roomId, this._userId, {
           requestId,
           targetUserId: requesterUserId,
           sdp: state.pc.localDescription.sdp,
         });
-        this.wsClient.send(message);
+        this.sendSignalingMessage(message);
       } catch {
         this.sendStateResponseOverRealtimeTransport(payload);
         this.disposeWebRTCPeer(key);
@@ -1743,9 +1981,13 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!validateWebRTCOfferPayload(payload)) return;
     const offerPayload = payload as WebRTCOfferPayload;
     if (offerPayload.targetUserId !== this._userId) return;
+    // State is only ever pushed to us by the host, for a request we sent.
+    if (!this._roomInfo || senderUserId !== this._roomInfo.hostId) return;
+    if (this._pendingStateRequest?.requestId !== offerPayload.requestId) return;
+    const key = this.getWebRTCKey(offerPayload.requestId, senderUserId);
+    if (!this._webrtcPeers.has(key) && this._webrtcPeers.size >= MAX_WEBRTC_STATE_PEERS) return;
 
     const state = this.getOrCreatePeerConnection(offerPayload.requestId, senderUserId);
-    const key = this.getWebRTCKey(offerPayload.requestId, senderUserId);
 
     state.pc.ondatachannel = (event) => {
       const channel = event.channel;
@@ -1753,15 +1995,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       channel.onmessage = (msg) => {
         if (typeof msg.data !== 'string') return;
         try {
-          const responsePayload = JSON.parse(msg.data) as StateResponsePayload;
-          if (typeof responsePayload.requestId !== 'string') return;
-          this.emit('sessionStateReceived', {
-            requestId: responsePayload.requestId,
-            senderUserId,
-            sessionState: responsePayload.sessionState,
-            encryptedSessionState: responsePayload.encryptedSessionState,
-            transport: 'webrtc',
-          });
+          this.handleStateResponse(JSON.parse(msg.data), senderUserId, 'webrtc');
         } catch (error) {
           // ignore malformed payloads
           log.debug('webrtc data channel: malformed payload ignored', { error });
@@ -1782,7 +2016,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
           targetUserId: senderUserId,
           sdp: state.pc.localDescription.sdp,
         });
-        this.wsClient.send(message);
+        this.sendSignalingMessage(message);
       } catch {
         this.disposeWebRTCPeer(key);
       }
@@ -1859,8 +2093,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this._remoteCursors.clear();
     this._recentMessageIds.clear();
     this._recentMessageIdQueue = [];
+    this._lastStateRequestAt.clear();
     this.clearPendingStateRequest();
     this.stateManager.reset();
+    this.setKeyRoomCode(null);
   }
 
   private shouldFallbackToLocalHostRoom(): boolean {
@@ -1936,6 +2172,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       maxUsers,
     };
 
+    this.setKeyRoomCode(code);
     this.stateManager.setHost(true);
     this._permissions.set(this._userId, 'host');
     this.setConnectionState('connected');

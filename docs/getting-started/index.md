@@ -63,7 +63,7 @@ There are many ways to review VFX work. Here is how OpenRV Web compares to the a
 Load EXR sequences, apply the show LUT or OCIO config, and review with the team. Annotate frames, set shot status, and export with slate and frameburn for delivery. All without leaving the browser.
 
 ### Remote Client Review
-Create a sync room, share the link, and review together in real time. The host controls playback while clients follow along. PIN-secured rooms keep confidential content protected. Each participant uses their own calibrated display.
+Create a sync room, share the link, and review together in real time. The host controls playback while clients follow along. Rooms are end-to-end encrypted, and an optional PIN keeps a leaked link from being enough to join. Each participant uses their own calibrated display.
 
 ### Color QC
 Set up your OCIO pipeline with the correct camera-to-display transform. Use scopes (histogram, waveform, vectorscope), false color, and pixel probe to verify exposure and gamut. Compare grades with A/B wipe.

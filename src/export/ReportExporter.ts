@@ -147,10 +147,16 @@ const CSV_HEADER_TAIL = ['Duration', 'Reviewed By', 'Status Date'];
 
 /**
  * Escape a single field for CSV per RFC 4180:
+ * - Text a spreadsheet would run as a formula (starting with =, +, -, @, tab
+ *   or carriage return) is prefixed with a single quote so it stays text.
+ *   Plain numbers such as "-5" are left alone.
  * - If the field contains a comma, double-quote, or newline, wrap in double-quotes
  * - Double-quotes inside the field are escaped by doubling them
  */
 export function escapeCSVField(value: string): string {
+  if (/^[=+\-@\t\r]/.test(value) && !/^[-+]?\d+(\.\d+)?$/.test(value)) {
+    value = `'${value}`;
+  }
   if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
     return '"' + value.replace(/"/g, '""') + '"';
   }

@@ -712,7 +712,7 @@ describe('NetworkSyncManager', () => {
       expect(payload.strokes[0].user).toBe(senderUserId);
     });
 
-    it('NSM-111: note has author overridden with sender ID', () => {
+    it('NSM-111: note keeps its original author (no rewrite to sender UUID)', () => {
       manager._applyLocalRoomCreation();
       manager.setSyncSettings({
         playback: true,
@@ -739,7 +739,7 @@ describe('NetworkSyncManager', () => {
           note: {
             id: 'n1',
             text: 'Test',
-            author: 'spoofed-author',
+            author: 'Alice',
             sourceIndex: 0,
             frameStart: 1,
             frameEnd: 5,
@@ -756,7 +756,39 @@ describe('NetworkSyncManager', () => {
 
       expect(handler).toHaveBeenCalledTimes(1);
       const payload = handler.mock.calls[0]![0];
-      expect(payload.note.author).toBe(senderUserId);
+      expect(payload.note.author).toBe('Alice');
+    });
+
+    it('NSM-111b: note snapshots from non-host peers are ignored', () => {
+      manager._applyLocalRoomCreation();
+      manager.setSyncSettings({ playback: true, view: true, color: true, annotations: true, cursor: true });
+      const handler = vi.fn();
+      manager.on('syncNote', handler);
+
+      (manager as any).handleMessage(
+        {
+          id: 'note-snap-1',
+          type: 'sync.note' as const,
+          roomId: manager.roomInfo!.roomId,
+          userId: 'peer-1',
+          timestamp: Date.now(),
+          payload: { action: 'snapshot', notes: [], timestamp: Date.now() },
+        },
+        'websocket',
+      );
+      (manager as any).handleMessage(
+        {
+          id: 'note-clear-1',
+          type: 'sync.note' as const,
+          roomId: manager.roomInfo!.roomId,
+          userId: 'peer-1',
+          timestamp: Date.now(),
+          payload: { action: 'clear', timestamp: Date.now() },
+        },
+        'websocket',
+      );
+
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 
@@ -805,6 +837,7 @@ describe('NetworkSyncManager', () => {
 
     it('NSM-122: handleStateResponse clears pending request', () => {
       manager._applyLocalRoomCreation();
+      (manager as any)._roomInfo.hostId = 'host-1';
 
       manager.requestStateSync('host-1');
       expect((manager as any)._pendingStateRequest).not.toBeNull();
@@ -829,6 +862,34 @@ describe('NetworkSyncManager', () => {
       // No retry should fire
       vi.advanceTimersByTime(10000);
       // No warning toast
+    });
+
+    it('NSM-122b: state responses from non-hosts or for unknown requests are ignored', () => {
+      manager._applyLocalRoomCreation();
+      (manager as any)._roomInfo.hostId = 'host-1';
+      const handler = vi.fn();
+      manager.on('sessionStateReceived', handler);
+
+      manager.requestStateSync('host-1');
+      const requestId = (manager as any)._pendingStateRequest.requestId;
+      const respond = (id: string, userId: string, forRequest: string) =>
+        (manager as any).handleMessage(
+          {
+            id,
+            type: 'sync.state-response' as const,
+            roomId: manager.roomInfo!.roomId,
+            userId,
+            timestamp: Date.now(),
+            payload: { requestId: forRequest, targetUserId: manager.userId, sessionState: 'forged' },
+          },
+          'websocket',
+        );
+
+      respond('resp-a', 'intruder', requestId);
+      respond('resp-b', 'host-1', 'not-our-request');
+
+      expect(handler).not.toHaveBeenCalled();
+      expect((manager as any)._pendingStateRequest).not.toBeNull();
     });
   });
 
