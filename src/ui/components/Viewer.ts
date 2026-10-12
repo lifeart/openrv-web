@@ -43,6 +43,7 @@ import {
   type ExportFormat,
   exportCanvas as doExportCanvas,
   copyCanvasToClipboard,
+  downloadBlob,
 } from '../../utils/export/FrameExporter';
 import { type StackLayer } from './StackControl';
 import { getIconSvg } from './shared/Icons';
@@ -123,10 +124,13 @@ import { calculateFitScale, ratioToZoom, zoomToRatio } from './ScalePresets';
 import { ScaleRatioIndicator } from './ScaleRatioIndicator';
 import {
   createExportCanvas as createExportCanvasUtil,
+  createExportCanvasFromGradedFrame,
   createSourceExportCanvas as createSourceExportCanvasUtil,
   renderFrameToCanvas as renderFrameToCanvasUtil,
   type BugOverlayExportConfig,
 } from './ViewerExport';
+import { renderGradedExportFrame, cropFloatFrame, type GradedExportContext } from './ViewerGradedExport';
+import { floatFrameToCanvas, floatFrameToEXR } from '../../utils/export/GradedFrameExport';
 import type { FrameburnTimecodeOptions } from './FrameburnCompositor';
 import {
   createFrameLoader,
@@ -3702,16 +3706,98 @@ export class Viewer implements ViewerAccessor {
   }
 
   // Export methods
-  exportFrame(format: ExportFormat = 'png', includeAnnotations = true, quality = 0.92): void {
-    const canvas = this.createExportCanvas(includeAnnotations);
-    if (!canvas) return;
 
+  /**
+   * Export the current frame as PNG/JPEG/WebP. The frame is rendered through
+   * the GL pipeline (the viewer's grading, LUTs, tone mapping and color
+   * management, SDR display encoding, source resolution); the 2D canvas path
+   * with CSS filters is used only when GL cannot render the frame.
+   */
+  async exportFrame(format: ExportFormat = 'png', includeAnnotations = true, quality = 0.92): Promise<void> {
     const source = this.session.currentSource;
     const frame = this.session.currentFrame;
+    const canvas = await this.createGradedExportCanvas(includeAnnotations);
+    if (!canvas) return;
+
     const name = source?.name?.replace(/\.[^.]+$/, '') || 'frame';
     const filename = `${name}_frame${frame}.${format}`;
 
     doExportCanvas(canvas, { format, quality, filename });
+  }
+
+  /**
+   * Export the current frame as a scene-linear OpenEXR file (half float RGBA,
+   * uncompressed, chromaticities of the source gamut). Grading and LUTs are
+   * applied; display stages (tone mapping, display transfer/gamma/brightness),
+   * diagnostic overlays, annotations and burn-ins are not. Rotation, flip and
+   * crop are applied. Returns false when the GL pipeline cannot render it.
+   */
+  async exportFrameEXR(): Promise<boolean> {
+    const source = this.session.currentSource;
+    if (!source) return false;
+    const frame = this.session.currentFrame;
+    const transform = this.transformManager.transform;
+    const graded = await renderGradedExportFrame(this.getGradedExportContext(), 'scene-linear');
+    if (!graded) return false;
+
+    const cropped = cropFloatFrame(
+      graded,
+      source.width,
+      source.height,
+      transform,
+      this.cropManager.getExportCropRegion(),
+    );
+    const name = source.name?.replace(/\.[^.]+$/, '') || 'frame';
+    downloadBlob(new Blob([floatFrameToEXR(cropped)], { type: 'image/x-exr' }), `${name}_frame${frame}.exr`);
+    return true;
+  }
+
+  /**
+   * Export canvas for the current frame rendered through the GL pipeline,
+   * falling back to createExportCanvas() (2D canvas + CSS filters) when GL
+   * cannot render the frame (no WebGL2 float support, OCIO or CPU-only
+   * effects on an SDR source).
+   */
+  async createGradedExportCanvas(
+    includeAnnotations: boolean,
+    colorSpace?: 'srgb' | 'display-p3',
+  ): Promise<HTMLCanvasElement | null> {
+    const frame = this.session.currentFrame;
+    const graded = await renderGradedExportFrame(this.getGradedExportContext(), 'display', colorSpace ?? 'srgb');
+    if (!graded) return this.createExportCanvas(includeAnnotations, colorSpace);
+
+    const canvas = createExportCanvasFromGradedFrame(
+      this.session,
+      this.paintEngine,
+      this.paintRenderer,
+      floatFrameToCanvas(graded),
+      includeAnnotations,
+      frame,
+      this.transformManager.transform,
+      this.cropManager.getExportCropRegion(),
+      colorSpace,
+      this.getExportFrameburnOptions(frame),
+      undefined,
+      undefined,
+      this.getExportBugOverlayConfig(),
+    );
+    if (canvas) {
+      this.applyWatermarkToCanvas(canvas);
+    }
+    return canvas;
+  }
+
+  private getGradedExportContext(): GradedExportContext {
+    return {
+      session: this.session,
+      renderFrameForExport: (input, width, height, target, outputColorSpace) =>
+        this.glRendererManager.renderFrameForExport(input, width, height, target, outputColorSpace),
+      applyLUTMetadataCascade: (image) => this.applyLUTMetadataCascade(image),
+      isOCIOActive: () => this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null,
+      hdrBypassesOCIO: () => this.glRendererManager.isWebGPUBlitReady,
+      hasCPUOnlyEffectsActive: () => this.glRendererManager.hasCPUOnlyEffectsActive(),
+      getTransform: () => this.transformManager.transform,
+    };
   }
 
   exportSourceFrame(format: ExportFormat = 'png', quality = 0.92): void {
@@ -3727,7 +3813,7 @@ export class Viewer implements ViewerAccessor {
   }
 
   async copyFrameToClipboard(includeAnnotations = true): Promise<boolean> {
-    const canvas = this.createExportCanvas(includeAnnotations);
+    const canvas = await this.createGradedExportCanvas(includeAnnotations);
     if (!canvas) return false;
 
     return copyCanvasToClipboard(canvas);
@@ -3862,6 +3948,10 @@ export class Viewer implements ViewerAccessor {
       advancedFrameburnConfig,
       advancedFrameburnContext,
       bugOverlayConfig,
+      async () => {
+        const graded = await renderGradedExportFrame(this.getGradedExportContext(), 'display');
+        return graded ? floatFrameToCanvas(graded) : null;
+      },
     );
     if (canvas) {
       this.applyWatermarkToCanvas(canvas);

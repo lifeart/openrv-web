@@ -573,6 +573,21 @@ describe('ExportControl keyboard accessibility', () => {
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ format: 'png' }));
   });
 
+  it('EXP-H15-1: selecting the EXR item should emit exrExportRequested', () => {
+    const callback = vi.fn();
+    control.on('exrExportRequested', callback);
+
+    openDropdown();
+    const exrItem = Array.from(getDropdown().querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save as EXR'),
+    ) as HTMLButtonElement | undefined;
+
+    expect(exrItem).toBeDefined();
+    exrItem!.click();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
   it('EXP-H10c-2: selecting source export item should emit sourceExportRequested', () => {
     const callback = vi.fn();
     control.on('sourceExportRequested', callback);

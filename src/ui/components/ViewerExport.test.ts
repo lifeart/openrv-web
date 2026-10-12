@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createExportCanvas,
+  createExportCanvasFromGradedFrame,
   createSourceExportCanvas,
   renderFrameToCanvas,
   renderSourceToImageData,
@@ -2087,6 +2088,133 @@ describe('ViewerExport', () => {
       const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
       const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
       expect(ctx.drawImage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('GL-graded export frames', () => {
+    function lastContext() {
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      return getContextMock.mock.results.at(-1)?.value as {
+        drawImage: ReturnType<typeof vi.fn>;
+        filter?: string;
+      };
+    }
+
+    beforeEach(() => {
+      mockPaintEngine = createRealPaintEngine();
+      mockPaintRenderer = createRealPaintRenderer();
+    });
+
+    it('VEXP-GL-001: draws the graded frame without CSS filters or transforms', () => {
+      mockSession = createMockSession(createMockMediaSource('image', 4, 2));
+      const graded = document.createElement('canvas');
+      const transform = { ...defaultTransform(), rotation: 90 };
+
+      const canvas = createExportCanvasFromGradedFrame(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        graded,
+        false,
+        1,
+        transform,
+      );
+
+      // Rotation is already in the graded pixels: the output takes its rotated size.
+      expect(canvas!.width).toBe(2);
+      expect(canvas!.height).toBe(4);
+      const ctx = lastContext();
+      expect(ctx.drawImage).toHaveBeenCalledWith(graded, 0, 0);
+      expect(ctx.filter ?? 'none').toBe('none');
+    });
+
+    it('VEXP-GL-002: applies the crop to the graded frame', () => {
+      mockSession = createMockSession(createMockMediaSource('image', 4, 2));
+      const graded = document.createElement('canvas');
+      const canvas = createExportCanvasFromGradedFrame(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        graded,
+        false,
+        1,
+        defaultTransform(),
+        { x: 0.5, y: 0, width: 0.5, height: 1 },
+      );
+      expect(canvas!.width).toBe(2);
+      expect(canvas!.height).toBe(2);
+      expect(lastContext().drawImage).toHaveBeenCalledWith(graded, 2, 0, 2, 2, 0, 0, 2, 2);
+    });
+
+    it('VEXP-GL-003: composites annotations for the given frame over the graded frame', () => {
+      mockSession = createMockSession(createMockMediaSource('image', 4, 2));
+      (mockPaintEngine.getAnnotationsWithGhost as ReturnType<typeof vi.fn>).mockReturnValue([{ id: '1' }]);
+      createExportCanvasFromGradedFrame(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        document.createElement('canvas'),
+        true,
+        12,
+      );
+      expect(mockPaintEngine.getAnnotationsWithGhost).toHaveBeenCalledWith(12);
+      expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalled();
+    });
+
+    it('VEXP-GL-004: renderFrameToCanvas uses the graded frame once the target frame is loaded', async () => {
+      mockSession = createMockSession(createMockMediaSource('image', 4, 2));
+      mockSession.currentFrame = 3;
+      const graded = document.createElement('canvas');
+      let frameAtRender = -1;
+      const renderGraded = vi.fn(async () => {
+        frameAtRender = mockSession.currentFrame;
+        return graded;
+      });
+
+      const canvas = await renderFrameToCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        9,
+        defaultTransform(),
+        'brightness(2)',
+        false,
+        undefined,
+        undefined,
+        null,
+        null,
+        null,
+        null,
+        renderGraded,
+      );
+
+      expect(renderGraded).toHaveBeenCalledTimes(1);
+      expect(frameAtRender).toBe(9);
+      expect(lastContext().drawImage).toHaveBeenCalledWith(graded, 0, 0);
+      expect(canvas!.width).toBe(4);
+      expect(mockSession.currentFrame).toBe(3);
+    });
+
+    it('VEXP-GL-005: renderFrameToCanvas falls back to the CSS-filter draw when GL returns null', async () => {
+      mockSession = createMockSession(createMockMediaSource('image', 4, 2));
+      const canvas = await renderFrameToCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        2,
+        defaultTransform(),
+        'brightness(2)',
+        false,
+        undefined,
+        undefined,
+        null,
+        null,
+        null,
+        null,
+        async () => null,
+      );
+      expect(canvas).not.toBeNull();
+      expect(lastContext().filter).toBe('none'); // reset after the filtered image draw
     });
   });
 });

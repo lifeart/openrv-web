@@ -16,7 +16,14 @@ import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import { WebGPUHDRBlit } from '../../render/WebGPUHDRBlit';
 import { Canvas2DHDRBlit } from '../../render/Canvas2DHDRBlit';
 import type { RenderState } from '../../render/RenderState';
-import { OUTPUT_ENCODING_EXTENDED_SRGB, outputEncodingForCanvasColorSpace } from '../../config/RenderConfig';
+import {
+  OUTPUT_ENCODING_DISPLAY,
+  OUTPUT_ENCODING_EXTENDED_SRGB,
+  OUTPUT_ENCODING_LINEAR,
+  outputEncodingForCanvasColorSpace,
+} from '../../config/RenderConfig';
+import type { SDRFrameSource } from '../../render/Renderer';
+import { DEFAULT_BACKGROUND_PATTERN_STATE } from '../../core/types/background';
 import type { IPImage } from '../../core/image/Image';
 import type { TextureFilterMode } from '../../core/types/filter';
 import {
@@ -58,6 +65,38 @@ import { PerfTrace } from '../../utils/PerfTrace';
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ViewerGLRenderer');
+
+/** How long an idle main-thread export renderer is kept before it is disposed. */
+const EXPORT_RENDERER_IDLE_MS = 10_000;
+
+/** The frame an export renders: an IPImage (HDR/float path) or a display-encoded SDR source. */
+export type ExportFrameInput = { kind: 'image'; image: IPImage } | { kind: 'sdr'; source: SDRFrameSource };
+
+/** 'display': SDR display-encoded pixels. 'scene-linear': unclamped linear light for EXR. */
+export type ExportFrameTarget = 'display' | 'scene-linear';
+
+/** Pixels of an export render: RGBA float, rows top-to-bottom. */
+export interface ExportedFrame {
+  data: Float32Array;
+  width: number;
+  height: number;
+  /** Color space the pixels are in (selects the output primaries). */
+  colorSpace: 'srgb' | 'display-p3' | 'rec2020';
+}
+
+/**
+ * Turn a viewer RenderState into a scene-referred one: keep grading and
+ * LUTs, drop the display stages (tone mapping, display transfer, display
+ * gamma/brightness) and the diagnostic overlays.
+ */
+export function neutralizeDisplayStages(state: RenderState): void {
+  state.toneMappingState = { ...state.toneMappingState, enabled: false };
+  state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+  state.falseColor = { ...state.falseColor, enabled: false };
+  state.zebraStripes = { ...state.zebraStripes, enabled: false };
+  if (state.luminanceVis) state.luminanceVis = { ...state.luminanceVis, mode: 'off' };
+  state.channelMode = 'rgb';
+}
 /**
  * Context interface for the ViewerGLRenderer to access Viewer state
  * without tight coupling. The Viewer implements this interface.
@@ -230,6 +269,14 @@ export class ViewerGLRenderer {
   private _luminanceFallbackWarned = false;
   private _gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
 
+  // Last spherical projection forwarded to the renderer (replayed on the export renderer).
+  private _sphericalProjection: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number } | null =
+    null;
+
+  // Main-thread renderer used for export while the viewer renders in a worker.
+  private _exportRenderer: Renderer | null = null;
+  private _exportRendererReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+
   get glCanvas(): HTMLCanvasElement | null {
     return this._glCanvas;
   }
@@ -325,7 +372,7 @@ export class ViewerGLRenderer {
    * Auto-detect source gamut from image metadata and determine
    * target gamut from display capabilities.
    */
-  private detectGamutMapping(image: IPImage): GamutMappingState {
+  private detectGamutMapping(image: IPImage, target?: 'srgb' | 'display-p3'): GamutMappingState {
     if (this._gamutMappingState.mode === 'off') {
       return this._gamutMappingState;
     }
@@ -335,9 +382,10 @@ export class ViewerGLRenderer {
     const sourceGamut: GamutIdentifier =
       primaries === 'bt2020' ? 'rec2020' : primaries === 'p3' ? 'display-p3' : 'srgb';
     const targetGamut: GamutIdentifier =
-      this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020'
+      target ??
+      (this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020'
         ? 'display-p3'
-        : 'srgb';
+        : 'srgb');
 
     // No mapping needed if source matches target or source is already
     // within the target gamut (sRGB fits in any display gamut).
@@ -1614,6 +1662,186 @@ export class ViewerGLRenderer {
   }
 
   /**
+   * Render one frame through the viewer's shader pipeline for export, at an
+   * explicit size (the source resolution, after rotation) instead of the
+   * display size.
+   *
+   * - `target: 'display'` gives SDR display-encoded pixels in [0,1] in
+   *   `outputColorSpace` (OUTPUT_ENCODING_DISPLAY with the SDR clamp): the
+   *   grading, LUTs, tone mapping and display transfer of the SDR viewer.
+   * - `target: 'scene-linear'` gives unclamped linear light (1.0 = SDR
+   *   reference white) for EXR: the grading and LUTs, without tone mapping,
+   *   display transfer/gamma/brightness or diagnostic overlays. Primaries
+   *   follow the source gamut (BT.2020, P3 or BT.709).
+   *
+   * The background pattern is never baked in, so alpha survives.
+   *
+   * When the viewer renders on the main thread its own Renderer is used, so
+   * the export sees exactly the state the screen sees. When the viewer uses
+   * the worker renderer (or no GL renderer yet) a main-thread Renderer is
+   * created for export, given the same RenderState, and kept for a short
+   * while so sequence exports do not recompile the shader per frame.
+   *
+   * Returns null when no GL path is available; callers fall back to the
+   * 2D-canvas export.
+   */
+  async renderFrameForExport(
+    input: ExportFrameInput,
+    width: number,
+    height: number,
+    target: ExportFrameTarget,
+    outputColorSpace: 'srgb' | 'display-p3' = 'srgb',
+  ): Promise<ExportedFrame | null> {
+    const renderer = await this.getExportRenderer();
+    if (!renderer) return null;
+    const usesViewerRenderer = renderer === this._glRenderer;
+    const image = input.kind === 'image' ? input.image : null;
+
+    // A main-thread export renderer has its own GL context: the image's cached
+    // texture handle (if any) belongs to another context and must neither be
+    // bound there nor be replaced by one from the export context.
+    const savedTexture =
+      !usesViewerRenderer && image ? { texture: image.texture, dirty: image.textureNeedsUpdate } : null;
+    if (savedTexture && image) {
+      image.texture = null;
+      image.textureNeedsUpdate = true;
+    }
+
+    let data: Float32Array | null;
+    let colorSpace: ExportedFrame['colorSpace'] = outputColorSpace;
+    try {
+      const state = this.buildRenderState();
+      // A viewing aid: exports keep their alpha instead of the viewer backdrop.
+      state.backgroundPattern = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+      if (target === 'scene-linear') {
+        neutralizeDisplayStages(state);
+        const primaries = image?.metadata?.colorPrimaries;
+        colorSpace = primaries === 'bt2020' ? 'rec2020' : primaries === 'p3' ? 'display-p3' : 'srgb';
+      } else if (image && (!state.gamutMapping || state.gamutMapping.mode === 'off')) {
+        state.gamutMapping = this.detectGamutMapping(image, outputColorSpace);
+      }
+      if (image) {
+        this.applySceneLuminanceForExport(renderer, image, state, usesViewerRenderer);
+      }
+
+      renderer.applyRenderState(state);
+      const { rotation, flipH, flipV } = this.ctx.getTransformManager().transform;
+      renderer.setUserTransform(rotation, flipH, flipV);
+      if (!usesViewerRenderer) {
+        renderer.setTextureFilterMode(this._glRenderer?.getTextureFilterMode() ?? 'linear');
+        if (this._sphericalProjection) renderer.setSphericalProjection(this._sphericalProjection);
+        renderer.setHDRHeadroom(this._hdrHeadroom ?? 1);
+      }
+
+      const source = input.kind === 'image' ? input.image : input.source;
+      data = renderer.renderFrameForExport(source, width, height, {
+        encoding: target === 'scene-linear' ? OUTPUT_ENCODING_LINEAR : OUTPUT_ENCODING_DISPLAY,
+        outputMode: target === 'scene-linear' ? 'hdr' : 'sdr',
+        outputColorSpace: colorSpace,
+      });
+    } finally {
+      if (savedTexture && image) {
+        renderer.releaseImageTexture(image);
+        image.texture = savedTexture.texture;
+        image.textureNeedsUpdate = savedTexture.dirty;
+      }
+      if (usesViewerRenderer) {
+        // The export left its state and primaries on the viewer's renderer;
+        // make the next frame re-apply the viewer state and redraw.
+        this.invalidateRenderCache();
+        this.ctx.scheduleRender();
+      } else {
+        this.scheduleExportRendererRelease();
+      }
+    }
+    return data ? { data, width, height, colorSpace } : null;
+  }
+
+  /** The renderer export draws with: the viewer's sync Renderer, or a main-thread one. */
+  private async getExportRenderer(): Promise<Renderer | null> {
+    const viewerRenderer = this._glRenderer;
+    if (viewerRenderer && !this._isAsyncRenderer && typeof viewerRenderer.renderFrameForExport === 'function') {
+      if (viewerRenderer.isContextLost()) return null;
+      return viewerRenderer;
+    }
+    if (this._exportRenderer) return this._exportRenderer;
+    if (typeof document === 'undefined') return null;
+    try {
+      const renderer = createRenderer(DEFAULT_CAPABILITIES) as Renderer;
+      if (typeof renderer.renderFrameForExport !== 'function') {
+        // Only the WebGL2 Renderer implements the export render.
+        renderer.dispose();
+        return null;
+      }
+      renderer.initialize(document.createElement('canvas'), DEFAULT_CAPABILITIES);
+      await renderer.initAsync();
+      if (this._exportRenderer) {
+        // A concurrent export created one first; keep a single instance.
+        renderer.dispose();
+        return this._exportRenderer;
+      }
+      this._exportRenderer = renderer;
+      return renderer;
+    } catch (e) {
+      logger.warn('Export renderer init failed; falling back to the 2D export path:', e);
+      return null;
+    }
+  }
+
+  private scheduleExportRendererRelease(): void {
+    if (this._exportRendererReleaseTimer !== null) clearTimeout(this._exportRendererReleaseTimer);
+    this._exportRendererReleaseTimer = setTimeout(() => this.releaseExportRenderer(), EXPORT_RENDERER_IDLE_MS);
+  }
+
+  /** Dispose the main-thread export renderer, if one was created. */
+  releaseExportRenderer(): void {
+    if (this._exportRendererReleaseTimer !== null) {
+      clearTimeout(this._exportRendererReleaseTimer);
+      this._exportRendererReleaseTimer = null;
+    }
+    this._exportRenderer?.dispose();
+    this._exportRenderer = null;
+  }
+
+  /**
+   * Auto-exposure and Drago inputs for an export render. Auto-exposure uses
+   * the exposure the viewer has adapted to (no temporal update); Drago gets
+   * scene statistics of the exported image.
+   */
+  private applySceneLuminanceForExport(
+    renderer: Renderer,
+    image: IPImage,
+    state: RenderState,
+    usesViewerRenderer: boolean,
+  ): void {
+    if (this._autoExposureState.enabled) {
+      const exposure = this._autoExposureController.currentExposure + state.colorAdjustments.exposure;
+      state.colorAdjustments = { ...state.colorAdjustments, exposure };
+    }
+    if (!state.toneMappingState.enabled || state.toneMappingState.operator !== 'drago') return;
+
+    const gl = renderer.getContext();
+    if (!gl) return;
+    const analyzer = usesViewerRenderer
+      ? (this._luminanceAnalyzer ??= new LuminanceAnalyzer(gl))
+      : new LuminanceAnalyzer(gl);
+    try {
+      const texture = renderer.ensureImageTexture(image);
+      if (!texture) return;
+      const inputTransfer = this.getInputTransferCode(image);
+      const stats = analyzer.computeLuminanceStats(texture, inputTransfer);
+      const drMultiplier = inputTransfer === 2 ? 10 : inputTransfer === 1 ? 6 : 4;
+      state.toneMappingState = {
+        ...state.toneMappingState,
+        dragoLwa: stats.avg,
+        dragoLmax: stats.linearAvg * drMultiplier,
+      };
+    } finally {
+      if (!usesViewerRenderer) analyzer.dispose();
+    }
+  }
+
+  /**
    * Resize the GL canvas/renderer if HDR or SDR WebGL mode is active.
    * Called from Viewer.setCanvasSize() with physical (DPR-scaled) dimensions.
    * logicalWidth/logicalHeight are the exact CSS display dimensions (avoids
@@ -1686,6 +1914,7 @@ export class ViewerGLRenderer {
   }
 
   setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this._sphericalProjection = { ...state };
     this._glRenderer?.setSphericalProjection(state);
   }
 
@@ -1724,6 +1953,8 @@ export class ViewerGLRenderer {
    * Dispose all GL resources (renderer, worker proxy, WebGPU blit, canvas reference).
    */
   dispose(): void {
+    this.releaseExportRenderer();
+
     // Cleanup render worker proxy (Phase 4)
     if (this._renderWorkerProxy) {
       this._renderWorkerProxy.dispose();

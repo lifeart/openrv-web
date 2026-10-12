@@ -167,7 +167,7 @@ function drawElementWithTransformAndCrop(
   }
 }
 
-interface ExportParams {
+export interface ExportParams {
   effectiveWidth: number;
   effectiveHeight: number;
   outputWidth: number;
@@ -175,7 +175,12 @@ interface ExportParams {
   crop: { x: number; y: number } | null;
 }
 
-function getSourceElementForFrame(session: Session): CanvasImageSource | null {
+/**
+ * The drawable for the current frame of the current source (sequence frame,
+ * decoded video frame, file canvas or element), or null. HDR video has none:
+ * its frames are VideoFrame-backed IPImages that only the GL path can draw.
+ */
+export function getSourceElementForFrame(session: Session): CanvasImageSource | null {
   const source = session.currentSource;
   if (!source) return null;
 
@@ -199,7 +204,7 @@ function getSourceElementForFrame(session: Session): CanvasImageSource | null {
 /**
  * Compute export parameters from source dimensions, transform, and crop region.
  */
-function computeExportParams(
+export function computeExportParams(
   sourceWidth: number,
   sourceHeight: number,
   transform: Transform2D | undefined,
@@ -229,6 +234,121 @@ function computeExportParams(
     : null;
 
   return { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop: cropOffset };
+}
+
+/** Annotations and burn-ins composited over an export frame, in that order. */
+interface ExportOverlays {
+  includeAnnotations: boolean;
+  frame: number;
+  transform: Transform2D | undefined;
+  frameburnOptions?: FrameburnTimecodeOptions | null;
+  frameburnConfig?: FrameburnConfig | null;
+  frameburnContext?: FrameburnContext | null;
+  bugOverlayConfig?: BugOverlayExportConfig | null;
+}
+
+/**
+ * Composite annotations, the bug overlay and frameburn onto an export canvas
+ * whose image has already been drawn (cropped and transformed).
+ */
+function compositeExportOverlays(
+  ctx: CanvasRenderingContext2D,
+  paintEngine: PaintEngine,
+  paintRenderer: PaintRenderer,
+  sourceWidth: number,
+  sourceHeight: number,
+  params: ExportParams,
+  overlays: ExportOverlays,
+): void {
+  const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } = params;
+
+  // Reset filter for annotations
+  ctx.filter = 'none';
+
+  // Draw annotations if requested
+  if (overlays.includeAnnotations) {
+    const annotations = paintEngine.getAnnotationsWithGhost(overlays.frame);
+    if (annotations.length > 0) {
+      paintRenderer.renderAnnotations(annotations, {
+        width: sourceWidth,
+        height: sourceHeight,
+      });
+
+      drawElementWithTransformAndCrop(
+        ctx,
+        paintRenderer.getCanvas(),
+        sourceWidth,
+        sourceHeight,
+        effectiveWidth,
+        effectiveHeight,
+        outputWidth,
+        outputHeight,
+        overlays.transform,
+        crop,
+      );
+    }
+  }
+
+  // Composite bug overlay so the logo is burned into the export.
+  compositeBugOverlay(ctx, outputWidth, outputHeight, overlays.bugOverlayConfig);
+
+  // Composite frameburn last so it stays readable over annotations and bug overlay.
+  compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, overlays.frameburnOptions);
+  if (overlays.frameburnConfig && overlays.frameburnContext) {
+    compositeFrameburn(ctx, outputWidth, outputHeight, overlays.frameburnConfig, overlays.frameburnContext);
+  }
+}
+
+/**
+ * Create an export canvas from a frame the GL pipeline has already graded.
+ *
+ * `graded` holds the current frame at source resolution with the color
+ * pipeline and the user rotation/flip applied (Renderer.renderFrameForExport),
+ * so it is drawn without CSS filters or transforms: only the crop, the
+ * annotations and the burn-ins are added here, as in createExportCanvas().
+ */
+export function createExportCanvasFromGradedFrame(
+  session: Session,
+  paintEngine: PaintEngine,
+  paintRenderer: PaintRenderer,
+  graded: CanvasImageSource,
+  includeAnnotations: boolean,
+  frame: number,
+  transform?: Transform2D,
+  cropRegion?: CropRegion,
+  colorSpace?: 'srgb' | 'display-p3',
+  frameburnOptions?: FrameburnTimecodeOptions | null,
+  frameburnConfig?: FrameburnConfig | null,
+  frameburnContext?: FrameburnContext | null,
+  bugOverlayConfig?: BugOverlayExportConfig | null,
+): HTMLCanvasElement | null {
+  const source = session.currentSource;
+  if (!source) return null;
+
+  const params = computeExportParams(source.width, source.height, transform, cropRegion);
+  const { outputWidth, outputHeight, crop } = params;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  const ctx = safeCanvasContext2D(canvas, {}, colorSpace === 'display-p3' ? 'display-p3' : undefined);
+  ctx.imageSmoothingEnabled = false;
+  if (crop) {
+    ctx.drawImage(graded, crop.x, crop.y, outputWidth, outputHeight, 0, 0, outputWidth, outputHeight);
+  } else {
+    ctx.drawImage(graded, 0, 0);
+  }
+
+  compositeExportOverlays(ctx, paintEngine, paintRenderer, source.width, source.height, params, {
+    includeAnnotations,
+    frame,
+    transform,
+    frameburnOptions,
+    frameburnConfig,
+    frameburnContext,
+    bugOverlayConfig,
+  });
+  return canvas;
 }
 
 /**
@@ -288,41 +408,23 @@ export function createExportCanvas(
     filterString,
   );
 
-  // Reset filter for annotations
-  ctx.filter = 'none';
-
-  // Draw annotations if requested
-  if (includeAnnotations) {
-    const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
-    if (annotations.length > 0) {
-      paintRenderer.renderAnnotations(annotations, {
-        width: source.width,
-        height: source.height,
-      });
-
-      drawElementWithTransformAndCrop(
-        ctx,
-        paintRenderer.getCanvas(),
-        source.width,
-        source.height,
-        effectiveWidth,
-        effectiveHeight,
-        outputWidth,
-        outputHeight,
-        transform,
-        crop,
-      );
-    }
-  }
-
-  // Composite bug overlay so the logo is burned into the export.
-  compositeBugOverlay(ctx, outputWidth, outputHeight, bugOverlayConfig);
-
-  // Composite frameburn last so it stays readable over annotations and bug overlay.
-  compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
-  if (frameburnConfig && frameburnContext) {
-    compositeFrameburn(ctx, outputWidth, outputHeight, frameburnConfig, frameburnContext);
-  }
+  compositeExportOverlays(
+    ctx,
+    paintEngine,
+    paintRenderer,
+    source.width,
+    source.height,
+    { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop },
+    {
+      includeAnnotations,
+      frame: session.currentFrame,
+      transform,
+      frameburnOptions,
+      frameburnConfig,
+      frameburnContext,
+      bugOverlayConfig,
+    },
+  );
 
   return canvas;
 }
@@ -358,6 +460,10 @@ export function createSourceExportCanvas(
  * Render a specific frame to a canvas for sequence export.
  * Seeks to the frame, renders, and returns the canvas.
  * Crop is applied in display space (after transforms), matching what the user sees.
+ *
+ * `renderGradedFrame`, when given, is asked for the frame once it is loaded
+ * (session.currentFrame === frame); a non-null result is the GL-graded frame
+ * (see createExportCanvasFromGradedFrame) and replaces the CSS-filter draw.
  */
 export async function renderFrameToCanvas(
   session: Session,
@@ -373,6 +479,7 @@ export async function renderFrameToCanvas(
   frameburnConfig?: FrameburnConfig | null,
   frameburnContext?: FrameburnContext | null,
   bugOverlayConfig?: BugOverlayExportConfig | null,
+  renderGradedFrame?: (() => Promise<CanvasImageSource | null>) | null,
 ): Promise<HTMLCanvasElement | null> {
   const source = session.currentSource;
   if (!source) return null;
@@ -406,6 +513,25 @@ export async function renderFrameToCanvas(
           video.addEventListener('seeked', onSeeked);
         });
       }
+    }
+
+    const graded = renderGradedFrame ? await renderGradedFrame() : null;
+    if (graded) {
+      return createExportCanvasFromGradedFrame(
+        session,
+        paintEngine,
+        paintRenderer,
+        graded,
+        includeAnnotations,
+        frame,
+        transform,
+        cropRegion,
+        colorSpace,
+        frameburnOptions,
+        frameburnConfig,
+        frameburnContext,
+        bugOverlayConfig,
+      );
     }
 
     // Get the element to render
@@ -456,41 +582,15 @@ export async function renderFrameToCanvas(
       filterString,
     );
 
-    // Reset filter for annotations
-    ctx.filter = 'none';
-
-    // Draw annotations if requested
-    if (includeAnnotations) {
-      const annotations = paintEngine.getAnnotationsWithGhost(frame);
-      if (annotations.length > 0) {
-        paintRenderer.renderAnnotations(annotations, {
-          width: source.width,
-          height: source.height,
-        });
-
-        drawElementWithTransformAndCrop(
-          ctx,
-          paintRenderer.getCanvas(),
-          source.width,
-          source.height,
-          effectiveWidth,
-          effectiveHeight,
-          outputWidth,
-          outputHeight,
-          transform,
-          crop,
-        );
-      }
-    }
-
-    // Composite bug overlay so the logo is burned into the export.
-    compositeBugOverlay(ctx, outputWidth, outputHeight, bugOverlayConfig);
-
-    // Composite frameburn last so it stays readable over annotations and bug overlay.
-    compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
-    if (frameburnConfig && frameburnContext) {
-      compositeFrameburn(ctx, outputWidth, outputHeight, frameburnConfig, frameburnContext);
-    }
+    compositeExportOverlays(
+      ctx,
+      paintEngine,
+      paintRenderer,
+      source.width,
+      source.height,
+      { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop },
+      { includeAnnotations, frame, transform, frameburnOptions, frameburnConfig, frameburnContext, bugOverlayConfig },
+    );
 
     return canvas;
   } finally {

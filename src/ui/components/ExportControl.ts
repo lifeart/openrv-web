@@ -33,6 +33,8 @@ export interface PluginExportRequest {
 export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
   sourceExportRequested: { format: ExportFormat; quality: number };
+  /** Scene-linear OpenEXR still of the current frame (HDR-preserving). */
+  exrExportRequested: void;
   copyRequested: { includeAnnotations: boolean };
   sequenceExportRequested: SequenceExportRequest;
   videoExportRequested: VideoExportRequest;
@@ -174,6 +176,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addMenuItem('image', 'Save as PNG', () => this.exportAs('png'), 'Ctrl+S');
     this.addMenuItem('image', 'Save as JPEG', () => this.exportAs('jpeg'));
     this.addMenuItem('image', 'Save as WebP', () => this.exportAs('webp'));
+    this.addMenuItem('image', 'Save as EXR (HDR, linear)', () => this.emit('exrExportRequested', undefined));
     this.addMenuItem('camera', 'Save Source as PNG', () => this.exportSourceAs('png'));
     this.addMenuItem('camera', 'Save Source as JPEG', () => this.exportSourceAs('jpeg'));
     this.addMenuItem('camera', 'Save Source as WebP', () => this.exportSourceAs('webp'));
