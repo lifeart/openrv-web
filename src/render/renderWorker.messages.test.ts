@@ -307,6 +307,7 @@ describe('renderWorker.messages', () => {
         { type: 'renderDone', id: 1 },
         { type: 'renderError', id: 1, error: '' },
         { type: 'pixelData', id: 1, data: null },
+        { type: 'scopeData', id: 1, data: null, width: 0, height: 0 },
         { type: 'contextLost' },
         { type: 'contextRestored' },
       ];
@@ -360,6 +361,14 @@ describe('renderWorker.messages', () => {
         ditherMode: 0,
         quantizeBits: 0,
         hdrHeadroom: 1.0,
+        renderState: { state: {} as any, reused: [] },
+        colorPrimaries: { input: 'bt709', output: 'srgb' },
+        linearize: { logType: 0, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1.0, alphaType: 0 },
+        outOfRange: 0,
+        channelSwizzle: [0, 1, 2, 3],
+        textureFilterMode: 'linear',
+        sphericalProjection: { enabled: false, fov: 90, aspect: 1, yaw: 0, pitch: 0 },
+        userTransform: { rotation: 0, flipH: false, flipV: false },
       };
       expect(Object.keys(state).length).toBeGreaterThan(10);
     });

@@ -281,6 +281,8 @@ export interface ViewerState {
   histogramHDRActive: boolean;
   histogramMaxValue: number;
   histogramPixelCount: number;
+  /** True when the GL renderer is the OffscreenCanvas worker proxy (production default). */
+  glRendererIsWorker: boolean;
   waveformVisible: boolean;
   waveformMode: 'luma' | 'rgb' | 'parade';
   vectorscopeVisible: boolean;
@@ -723,6 +725,7 @@ export function exposeForTesting(app: App): void {
         histogramHDRActive: histogram?.isHDRActive?.() ?? false,
         histogramMaxValue: histogram?.getMaxValue?.() ?? 1.0,
         histogramPixelCount: histogram?.getData?.()?.pixelCount ?? 0,
+        glRendererIsWorker: viewer?.getGLRenderer?.()?.isAsync === true,
         waveformVisible: waveform?.isVisible?.() ?? false,
         waveformMode: waveform?.getMode?.() ?? 'luma',
         vectorscopeVisible: vectorscope?.isVisible?.() ?? false,

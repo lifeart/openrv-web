@@ -98,6 +98,7 @@ export interface ViewerState {
   histogramHDRActive: boolean;
   histogramMaxValue: number;
   histogramPixelCount: number;
+  glRendererIsWorker: boolean;
   waveformVisible: boolean;
   waveformMode: 'luma' | 'rgb' | 'parade';
   vectorscopeVisible: boolean;
@@ -450,6 +451,7 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
         histogramHDRActive: false,
         histogramMaxValue: 1.0,
         histogramPixelCount: 0,
+        glRendererIsWorker: false,
         waveformVisible: false,
         waveformMode: 'luma',
         vectorscopeVisible: false,

@@ -84,6 +84,18 @@ export interface GLRendererContext {
   getPerspectiveParams(): PerspectiveCorrectionParams;
   getGamutMappingState(): GamutMappingState;
   getLuminanceVisualization(): LuminanceVisualization;
+  /** The worker renderer finished an async scope readback; scopes should re-read. */
+  notifyScopeDataReady(): void;
+}
+
+/**
+ * Renderer selection override from the page URL: `?renderer=worker` forces the
+ * OffscreenCanvas worker (even in E2E test mode), `?renderer=main` forces the
+ * main-thread Renderer. Anything else keeps the automatic choice.
+ */
+export function getRendererOverride(search: string): 'worker' | 'main' | null {
+  const value = new URLSearchParams(search).get('renderer');
+  return value === 'worker' || value === 'main' ? value : null;
 }
 
 // Deinterlace method → shader integer code
@@ -445,8 +457,13 @@ export class ViewerGLRenderer {
     // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
     // Skip worker path when WebGPU HDR blit is ready (blit needs FBO readback via sync Renderer)
     // or when in E2E test mode (tests need main-thread access to sample pixels).
-    const isTest = typeof window !== 'undefined' && (window as any).__OPENRV_TEST__;
-    const skipWorker = this._webgpuBlit?.initialized === true || this._canvas2dBlit?.initialized === true || !!isTest;
+    const override = typeof window !== 'undefined' ? getRendererOverride(window.location.search) : null;
+    const isTest = typeof window !== 'undefined' && !!window.__OPENRV_TEST__;
+    const skipWorker =
+      this._webgpuBlit?.initialized === true ||
+      this._canvas2dBlit?.initialized === true ||
+      override === 'main' ||
+      (isTest && override !== 'worker');
     if (!skipWorker && !this._renderWorkerProxy && !this._isAsyncRenderer) {
       try {
         if (
@@ -480,6 +497,7 @@ export class ViewerGLRenderer {
           proxy.setOnContextRestored(() => {
             console.log('[Viewer] Worker WebGL context restored');
           });
+          proxy.setOnScopeDataReady(() => this.ctx.notifyScopeDataReady());
 
           this._renderWorkerProxy = proxy;
           this._isAsyncRenderer = true;
