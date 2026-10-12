@@ -7,6 +7,8 @@ export type { GainMapMetadata } from './GainMapMetadata';
 export {
   parseGainMapMetadataFromXMP,
   reconstructHDR,
+  applyGainMap,
+  computeGainMapWeight,
   srgbToLinear as srgbToLinearShared,
   isSimpleGainMap,
 } from './GainMapMetadata';

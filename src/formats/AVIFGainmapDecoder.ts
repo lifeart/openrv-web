@@ -7,20 +7,34 @@
  * AVIF gain maps use:
  * - Primary image item (av01) — SDR base
  * - Auxiliary image item linked via `auxC` with type `urn:com:photo:aux:hdrgainmap`
- * - Headroom stored in XMP metadata (mime item) or tmap box
+ * - Metadata from an ISO 21496-1 'tmap' derived item, XMP (mime item), or a
+ *   legacy 'tmap' property in ipco
  *
- * HDR reconstruction formula (same as JPEG gainmap):
- *   HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)
+ * HDR reconstruction follows ISO 21496-1 (GainMapMetadata.applyGainMap) with
+ * W = 1, the full HDR rendition. The base is decoded in its declared colour
+ * space (colr nclx / ICC; see GainMapColor) and linearised to float.
  */
 
-import { drawImageWithOrientation } from './shared';
 import {
   type GainMapMetadata,
+  type TmapMetadata,
   parseGainMapMetadataFromXMP,
+  parseTmapItemPayload,
   tmapToGainMapMetadata,
-  reconstructHDR,
+  applyGainMap,
   defaultGainMapMetadata,
 } from './GainMapMetadata';
+import {
+  type GainMapBaseColor,
+  GAIN_MAP_BITMAP_OPTIONS,
+  decodeGainMapBase,
+  mergeBaseColor,
+  parseColrPayload,
+  readGainMapPixels,
+} from './GainMapColor';
+import type { ColorPrimaries } from '../core/image/Image';
+
+export type { TmapMetadata } from './GainMapMetadata';
 
 export interface AVIFGainmapInfo {
   primaryItemId: number;
@@ -33,6 +47,8 @@ export interface AVIFGainmapInfo {
   headroom: number;
   /** Full gain map metadata (ISO 21496-1) */
   gainMapMetadata?: GainMapMetadata;
+  /** Base (primary item) colour from its colr properties (null/absent: sRGB) */
+  baseColor?: GainMapBaseColor | null;
 }
 
 // =============================================================================
@@ -262,8 +278,13 @@ export function parseGainmapAVIF(buffer: ArrayBuffer): AVIFGainmapInfo | null {
   const gainmapOffset = gainmapLoc.baseOffset + gainmapLoc.extents[0]!.offset;
   const gainmapLength = gainmapLoc.extents.reduce((sum, e) => sum + e.length, 0);
 
-  // 6. Extract headroom and full metadata from XMP mime items or tmap box
-  const metaResult = extractGainMapMetadata(view, buffer, items, locations, ipco.dataStart, ipco.dataEnd);
+  // 6. Extract headroom and full metadata: ISO 21496-1 'tmap' item first,
+  // then XMP mime items or a legacy tmap property
+  const tmapItem = extractTmapItemMetadata(view, buffer, items, locations, meta.dataStart, meta.dataEnd);
+  const tmapItemMeta = tmapItem ? tmapToGainMapMetadata(tmapItem) : null;
+  const metaResult = tmapItemMeta
+    ? { headroom: tmapItemMeta.hdrCapacityMax, metadata: tmapItemMeta }
+    : extractGainMapMetadata(view, buffer, items, locations, ipco.dataStart, ipco.dataEnd);
   let headroom = metaResult?.headroom ?? null;
   const gainMapMetadata = metaResult?.metadata;
 
@@ -280,7 +301,91 @@ export function parseGainmapAVIF(buffer: ArrayBuffer): AVIFGainmapInfo | null {
     gainmapLength,
     headroom,
     gainMapMetadata,
+    baseColor: ipma ? findItemColor(view, ipco.dataStart, ipco.dataEnd, ipma, primaryItemId) : null,
   };
+}
+
+/**
+ * Read an item's payload from iloc extents (construction_method 0: file
+ * offsets; 1: offsets into the meta box's idat). Returns null when the
+ * extents fall outside the buffer.
+ */
+function readItemPayload(
+  view: DataView,
+  buffer: ArrayBuffer,
+  loc: ItemLocation,
+  metaStart: number,
+  metaEnd: number,
+): Uint8Array | null {
+  let base = loc.baseOffset;
+  if (loc.constructionMethod === 1) {
+    const idat = findBox(view, 'idat', metaStart, metaEnd);
+    if (!idat) return null;
+    base += idat.dataStart;
+  } else if (loc.constructionMethod !== 0) {
+    return null;
+  }
+  const total = loc.extents.reduce((sum, e) => sum + e.length, 0);
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const e of loc.extents) {
+    const start = base + e.offset;
+    if (start + e.length > buffer.byteLength) return null;
+    out.set(new Uint8Array(buffer, start, e.length), pos);
+    pos += e.length;
+  }
+  return out;
+}
+
+/**
+ * ISO 21496-1 metadata from a 'tmap' derived image item (AVIF gain maps,
+ * HEIC from iOS 18 / libheif), or null when the file has none.
+ */
+export function extractTmapItemMetadata(
+  view: DataView,
+  buffer: ArrayBuffer,
+  items: ItemEntry[],
+  locations: ItemLocation[],
+  metaStart: number,
+  metaEnd: number,
+): TmapMetadata | null {
+  for (const item of items) {
+    if (item.type !== 'tmap') continue;
+    const loc = locations.find((l) => l.itemId === item.id);
+    if (!loc || loc.extents.length === 0) continue;
+    const payload = readItemPayload(view, buffer, loc, metaStart, metaEnd);
+    if (!payload) continue;
+    const tmap = parseTmapItemPayload(new DataView(payload.buffer), 0, payload.byteLength);
+    if (tmap) return tmap;
+  }
+  return null;
+}
+
+/**
+ * Colour of an item from its associated 'colr' properties (nclx and/or ICC),
+ * or null when it has none.
+ */
+export function findItemColor(
+  view: DataView,
+  ipcoStart: number,
+  ipcoEnd: number,
+  ipma: BoxInfo,
+  itemId: number,
+): GainMapBaseColor | null {
+  const wanted = new Set(getItemPropertyIndices(view, ipma, itemId));
+  const colors: Array<GainMapBaseColor | null> = [];
+  let index = 0;
+  let offset = ipcoStart;
+  while (offset + 8 <= ipcoEnd) {
+    const box = readBox(view, offset, ipcoEnd);
+    if (!box) break;
+    index++; // 1-based
+    if (box.type === 'colr' && wanted.has(index)) {
+      colors.push(parseColrPayload(view, box.dataStart, box.dataEnd));
+    }
+    offset = box.boxEnd;
+  }
+  return mergeBaseColor(colors);
 }
 
 // =============================================================================
@@ -705,23 +810,13 @@ export function parseHeadroomFromXMPText(xmpText: string): number | null {
 }
 
 /**
- * Parsed ISO 21496-1 tone_map_metadata from tmap box.
- */
-export interface TmapMetadata {
-  channelCount: number;
-  gainMapMin: number[];
-  gainMapMax: number[];
-  gainMapGamma: number[];
-  baseOffset: number[];
-  alternateOffset: number[];
-  baseHdrHeadroom: number;
-  alternateHdrHeadroom: number;
-}
-
-/**
- * Parse tmap box per ISO 21496-1 tone_map_metadata_box structure.
+ * Parse a 'tmap' payload found as an ipco property.
  *
- * Layout (all uint32 big-endian):
+ * Accepts the ISO 21496-1 item payload (u8 version + binary metadata, see
+ * parseTmapItemPayload) and, when the payload size matches it exactly, the
+ * legacy layout this decoder used before ISO parsing existed:
+ *
+ * Legacy layout (all uint32 big-endian):
  *   version (1 byte): 0
  *   flags (3 bytes): bit 0 of flags byte = channel_count flag
  *     0 → 1 channel (monochrome gain map), 1 → 3 channels
@@ -736,6 +831,14 @@ export interface TmapMetadata {
  *     alternateHdrHeadroomN (uint32), alternateHdrHeadroomD (uint32)
  */
 export function parseTmapBox(view: DataView, start: number, end: number): TmapMetadata | null {
+  if (start + 4 <= end) {
+    const legacyChannels = view.getUint8(start + 3) & 1 ? 3 : 1;
+    if (end - start === 4 + legacyChannels * 40 + 16) return parseLegacyTmapBox(view, start, end);
+  }
+  return parseTmapItemPayload(view, start, end);
+}
+
+function parseLegacyTmapBox(view: DataView, start: number, end: number): TmapMetadata | null {
   // Need at least version(1) + flags(3) = 4 bytes
   if (start + 4 > end) return null;
 
@@ -1215,6 +1318,9 @@ export async function decodeAVIFGainmapToFloat32(
   height: number;
   data: Float32Array;
   channels: number;
+  /** Primaries of the linear result (the base image's colour space) */
+  colorPrimaries: ColorPrimaries;
+  transferFunction: 'linear';
 }> {
   // Parse orientation from ISOBMFF container
   const view = new DataView(buffer);
@@ -1230,40 +1336,27 @@ export async function decodeAVIFGainmapToFloat32(
   const gainmapAVIF = buildStandaloneAVIF(gainmapCodedData);
   const gainmapBlob = new Blob([gainmapAVIF], { type: 'image/avif' });
 
-  const [baseBitmap, gainmapBitmap] = await Promise.all([createImageBitmap(baseBlob), createImageBitmap(gainmapBlob)]);
-
-  const width = baseBitmap.width;
-  const height = baseBitmap.height;
-
-  function createCanvas(w: number, h: number): OffscreenCanvas | HTMLCanvasElement {
-    if (typeof OffscreenCanvas !== 'undefined') {
-      return new OffscreenCanvas(w, h);
-    }
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    return c;
-  }
-
-  // Draw base to canvas and get pixel data
-  const baseCanvas = createCanvas(width, height);
-  const baseCtx = baseCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  baseCtx.drawImage(baseBitmap, 0, 0);
-  const baseData = baseCtx.getImageData(0, 0, width, height).data;
-  baseBitmap.close();
+  // Base: linear float in its declared colour space. Gain map: raw samples.
+  const [base, gainmapBitmap] = await Promise.all([
+    decodeGainMapBase(baseBlob, info.baseColor ?? null),
+    createImageBitmap(gainmapBlob, GAIN_MAP_BITMAP_OPTIONS),
+  ]);
+  const { width, height } = base;
 
   // Gainmap may be smaller — scale up to base image size
   // Apply orientation transform so gainmap pixels align with the display-rotated base
-  const gainCanvas = createCanvas(width, height);
-  const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  drawImageWithOrientation(gainCtx, gainmapBitmap, width, height, orientation);
-  const gainData = gainCtx.getImageData(0, 0, width, height).data;
-  gainmapBitmap.close();
+  const gainData = readGainMapPixels(gainmapBitmap, width, height, orientation);
 
-  // Apply HDR reconstruction per-pixel using shared module
-  const pixelCount = width * height;
+  // Apply the gain map (W = 1: full HDR rendition) using the shared module
   const gainMeta = info.gainMapMetadata ?? defaultGainMapMetadata(info.headroom);
-  const result = reconstructHDR(baseData, gainData, pixelCount, gainMeta);
+  const result = applyGainMap(base.data, gainData, width * height, gainMeta);
 
-  return { width, height, data: result, channels: 4 };
+  return {
+    width,
+    height,
+    data: result,
+    channels: 4,
+    colorPrimaries: base.colorPrimaries,
+    transferFunction: 'linear',
+  };
 }
