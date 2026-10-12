@@ -260,3 +260,18 @@ export function chromaticitiesFromICCMatrix(
   const w = xy(m[0] + m[1] + m[2], m[3] + m[4] + m[5], m[6] + m[7] + m[8]);
   return [r[0], r[1], g[0], g[1], b[0], b[1], w[0], w[1]];
 }
+
+/**
+ * Image metadata for source chromaticities: a named `colorPrimaries` when the
+ * renderer has a fast path for them, raw `chromaticities` otherwise. BT.709
+ * (the working space) and invalid input produce no tag.
+ */
+export function primariesMetadataFromChromaticities(c: ArrayLike<number> | undefined | null): {
+  colorPrimaries?: ColorPrimaries;
+  chromaticities?: number[];
+} {
+  if (!isValidChromaticities(c)) return {};
+  const named = namedPrimariesForChromaticities(c);
+  if (named) return named === 'bt709' ? {} : { colorPrimaries: named };
+  return { chromaticities: Array.from(c.slice(0, 8)) };
+}

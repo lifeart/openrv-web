@@ -156,6 +156,8 @@ export class SequenceSourceNode extends BaseSourceNode {
           colorSpace: decoded.colorSpace,
           sourcePath: frameData?.file?.name,
           frameNumber: context.frame,
+          ...(decoded.colorPrimaries ? { colorPrimaries: decoded.colorPrimaries } : {}),
+          ...(decoded.chromaticities ? { chromaticities: decoded.chromaticities } : {}),
         },
       });
     }

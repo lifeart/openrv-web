@@ -1120,6 +1120,8 @@ export class FileSourceNode extends BaseSourceNode {
         ...decodeResult.metadata,
         formatName,
       },
+      ...(decodeResult.colorPrimaries ? { colorPrimaries: decodeResult.colorPrimaries } : {}),
+      ...(decodeResult.chromaticities ? { chromaticities: decodeResult.chromaticities } : {}),
     };
 
     this.cachedIPImage = new IPImage({

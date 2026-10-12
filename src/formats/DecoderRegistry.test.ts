@@ -398,6 +398,16 @@ describe('DecoderRegistry', () => {
       expect(result!.data).toBeInstanceOf(Float32Array);
     });
 
+    it('carries Radiance PRIMARIES through as source chromaticities', async () => {
+      const registry = new DecoderRegistry();
+      const header =
+        '#?RADIANCE\nFORMAT=32-bit_rle_rgbe\nPRIMARIES=0.713 0.293 0.165 0.830 0.128 0.044 0.32168 0.33767\n\n-Y 1 +X 1\n';
+      const bytes = [...Array.from(header).map((c) => c.charCodeAt(0)), 128, 128, 128, 128];
+      const result = await registry.detectAndDecode(new Uint8Array(bytes).buffer);
+      expect(result?.colorPrimaries).toBeUndefined();
+      expect(result?.chromaticities).toEqual([0.713, 0.293, 0.165, 0.83, 0.128, 0.044, 0.32168, 0.33767]);
+    });
+
     it('should detect, decode, and include formatName in result', async () => {
       const registry = new DecoderRegistry();
       const customDecoder: FormatDecoder = {

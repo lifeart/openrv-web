@@ -2,10 +2,13 @@
  * Radiance HDR (.hdr / .pic) File Format Decoder
  *
  * Supports:
- * - RGBE pixel format (XYZE files are decoded as-is without XYZ→RGB conversion)
+ * - RGBE pixel format; XYZE files keep their XYZ values and are tagged with
+ *   CIE XYZ chromaticities so the renderer converts them to RGB
  * - New-style adaptive run-length encoding (RLE)
  * - Uncompressed RGBE data
- * - Standard header fields (FORMAT, EXPOSURE, GAMMA, PRIMARIES)
+ * - Standard header fields: FORMAT, EXPOSURE (pixels are divided by the
+ *   product of all EXPOSURE lines, giving the original radiance), GAMMA, and
+ *   PRIMARIES (mapped to colour primaries / chromaticities metadata)
  * - Resolution line parsing with full orientation support (all 8 modes rearranged to -Y +X)
  *
  * Radiance HDR stores high dynamic range images using a shared-exponent
@@ -15,6 +18,8 @@
 
 import { validateImageDimensions, toRGBA as sharedToRGBA } from './shared';
 import { DecoderError } from '../core/errors';
+import type { ColorPrimaries } from '../core/image/Image';
+import { CHROMATICITIES, primariesMetadataFromChromaticities } from '../color/ColorPrimariesMath';
 
 export interface HDRInfo {
   width: number;
@@ -32,6 +37,10 @@ export interface HDRDecodeResult {
   channels: number;
   colorSpace: string;
   metadata: Record<string, unknown>;
+  /** Named primaries from the PRIMARIES header (BT.2020 / Display P3). */
+  colorPrimaries?: ColorPrimaries;
+  /** [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy] for other PRIMARIES, or CIE XYZ for XYZE files. */
+  chromaticities?: number[];
 }
 
 const RADIANCE_MAGIC = '#?RADIANCE';
@@ -453,6 +462,13 @@ export async function decodeHDR(buffer: ArrayBuffer): Promise<HDRDecodeResult> {
     }
   }
 
+  // EXPOSURE lines record multipliers already applied to the pixels; divide
+  // by their product to recover the original values.
+  if (headers.exposure !== 1 && Number.isFinite(headers.exposure) && headers.exposure > 0) {
+    const inv = 1 / headers.exposure;
+    for (let i = 0; i < rgbFloat.length; i++) rgbFloat[i] = (rgbFloat[i] ?? 0) * inv;
+  }
+
   // Rearrange pixel data from file scan order to standard -Y +X orientation
   const oriented = rearrangeOrientation(rgbFloat, scanWidth, scanHeight, firstAxis, secondAxis);
 
@@ -472,5 +488,22 @@ export async function decodeHDR(buffer: ArrayBuffer): Promise<HDRDecodeResult> {
       gamma: headers.gamma,
       ...(headers.primaries ? { primaries: headers.primaries } : {}),
     },
+    ...radiancePrimaries(headers.format, headers.primaries),
   };
+}
+
+/**
+ * Colour primaries metadata for a Radiance file. XYZE pixels are CIE XYZ
+ * (equal-energy white); RGBE pixels use PRIMARIES when present. Files without
+ * PRIMARIES stay untagged (treated as BT.709, like other untagged images).
+ */
+function radiancePrimaries(
+  format: string,
+  primaries: string | undefined,
+): { colorPrimaries?: ColorPrimaries; chromaticities?: number[] } {
+  if (/xyze/i.test(format)) return { chromaticities: [...CHROMATICITIES.cieXYZ] };
+  if (!primaries) return {};
+  const values = primaries.trim().split(/\s+/).map(Number);
+  if (values.length !== 8) return {};
+  return primariesMetadataFromChromaticities(values);
 }

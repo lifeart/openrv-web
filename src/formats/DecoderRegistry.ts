@@ -14,6 +14,7 @@ import type { DPXDecodeOptions } from './DPXDecoder';
 import type { CineonDecodeOptions } from './CineonDecoder';
 import type { EXRDecodeOptions } from './EXRDecoder';
 import type { JP2DecodeOptions } from './JP2Decoder';
+import type { ColorPrimaries } from '../core/image/Image';
 
 /** Built-in format names (autocomplete-friendly) */
 export type BuiltinFormatName =
@@ -61,6 +62,10 @@ export interface DecodeResult {
   channels: number;
   colorSpace: string;
   metadata: Record<string, unknown>;
+  /** Named source primaries, when the file declares non-BT.709 ones. */
+  colorPrimaries?: ColorPrimaries;
+  /** Source chromaticities [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy] without a named value. */
+  chromaticities?: number[];
 }
 
 /** Options type for decoders that accept no options */
@@ -489,6 +494,7 @@ const exrDecoder: FormatDecoder<EXRDecodeOptions> = {
   canDecode: isEXRFile,
   async decode(buffer: ArrayBuffer, options?: EXRDecodeOptions) {
     const { decodeEXR } = await import('./EXRDecoder');
+    const { primariesMetadataFromChromaticities } = await import('../color/ColorPrimariesMath');
     const result = await decodeEXR(buffer, options);
     return {
       width: result.width,
@@ -500,6 +506,7 @@ const exrDecoder: FormatDecoder<EXRDecodeOptions> = {
         format: 'exr',
         compression: result.header.compression,
       },
+      ...primariesMetadataFromChromaticities(result.header.chromaticities),
     };
   },
 };
@@ -733,6 +740,8 @@ const hdrDecoder: FormatDecoder = {
       channels: result.channels,
       colorSpace: result.colorSpace,
       metadata: result.metadata,
+      ...(result.colorPrimaries ? { colorPrimaries: result.colorPrimaries } : {}),
+      ...(result.chromaticities ? { chromaticities: result.chromaticities } : {}),
     };
   },
 };
