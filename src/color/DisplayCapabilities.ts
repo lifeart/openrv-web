@@ -504,13 +504,47 @@ export function resolveActiveColorSpace(
 // WebGPU HDR Detection (async)
 // =============================================================================
 
+/** Minimal structural types for the WebGPU HDR probe (no @webgpu/types dependency). */
+interface WebGPUHDRProbeDevice {
+  destroy(): void;
+}
+interface WebGPUHDRProbeAdapter {
+  requestDevice(): Promise<WebGPUHDRProbeDevice>;
+}
+interface WebGPUHDRProbeContext {
+  configure(config: {
+    device: WebGPUHDRProbeDevice;
+    format: string;
+    toneMapping?: { mode: string };
+    alphaMode?: string;
+  }): void;
+  getConfiguration?(): { toneMapping?: { mode?: string } } | null;
+  unconfigure(): void;
+}
+
+function createWebGPUProbeCanvas(): { getContext(id: string): unknown } | null {
+  if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(1, 1);
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    return canvas;
+  }
+  return null;
+}
+
 /**
- * Detect whether WebGPU HDR output is likely available.
+ * Detect whether WebGPU can present HDR (extended-range) output.
  *
- * Requests a GPU adapter to verify WebGPU works. The adapter is a
- * lightweight object that does not allocate a device. The actual device
- * creation happens in WebGPUHDRBlit.initialize() — no need to create
- * and immediately destroy a device here just for probing.
+ * An adapter alone says nothing about HDR presentation: browsers without HDR
+ * canvas support silently drop `toneMapping` and clip to SDR. This probe
+ * creates a device, configures a throwaway 1x1 canvas with an rgba16float
+ * format and `toneMapping: { mode: 'extended' }`, and reads back
+ * `getConfiguration()` (Chrome 131+). It reports true only when the applied
+ * configuration keeps extended tone mapping. When `getConfiguration()` is
+ * unavailable the result cannot be verified and the probe reports false, so
+ * the caller falls back to the Canvas2D path instead of trusting a blit that
+ * may clip. The device is destroyed before returning.
  *
  * This is intentionally separate from detectDisplayCapabilities()
  * because it requires async operations.
@@ -518,12 +552,33 @@ export function resolveActiveColorSpace(
 export async function detectWebGPUHDR(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
   const adapter = await probeAsync('webgpuRequestAdapter', async () => {
-    const gpu = (
-      navigator as unknown as { gpu: { requestAdapter(opts?: { powerPreference?: string }): Promise<object | null> } }
-    ).gpu;
+    const gpu = (navigator as unknown as { gpu: { requestAdapter(): Promise<WebGPUHDRProbeAdapter | null> } }).gpu;
     return gpu.requestAdapter();
   });
-  return adapter != null;
+  if (!adapter || typeof adapter.requestDevice !== 'function') return false;
+
+  const device = await probeAsync('webgpuRequestDevice', () => adapter.requestDevice());
+  if (!device) return false;
+
+  try {
+    const result = probe('webgpuHDRCanvasConfigure', () => {
+      const canvas = createWebGPUProbeCanvas();
+      const ctx = canvas?.getContext('webgpu') as WebGPUHDRProbeContext | null | undefined;
+      if (!ctx) return false;
+      ctx.configure({
+        device,
+        format: 'rgba16float',
+        toneMapping: { mode: 'extended' },
+        alphaMode: 'opaque',
+      });
+      const applied = typeof ctx.getConfiguration === 'function' ? ctx.getConfiguration() : null;
+      probe('webgpuHDRCanvasUnconfigure', () => ctx.unconfigure());
+      return applied?.toneMapping?.mode === 'extended';
+    });
+    return result === true;
+  } finally {
+    probe('webgpuHDRDeviceDestroy', () => device.destroy());
+  }
 }
 
 // =============================================================================

@@ -395,7 +395,7 @@ describe('DisplayCapabilities', () => {
       expect(result).toBe(false);
     });
 
-    it('DC-WGPU-003: returns true when adapter is obtained', async () => {
+    it('DC-WGPU-003: returns false when only an adapter is obtained (no HDR verification possible)', async () => {
       const mockAdapter = { features: new Set<string>() };
       Object.defineProperty(navigator, 'gpu', {
         value: { requestAdapter: vi.fn().mockResolvedValue(mockAdapter) },
@@ -404,7 +404,7 @@ describe('DisplayCapabilities', () => {
       });
 
       const result = await detectWebGPUHDR();
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
     it('DC-WGPU-004: returns false when requestAdapter throws', async () => {
@@ -428,22 +428,95 @@ describe('DisplayCapabilities', () => {
       await expect(detectWebGPUHDR()).resolves.not.toThrow();
     });
 
-    it('DC-WGPU-006: does not create a device (lightweight probe)', async () => {
-      const mockRequestDevice = vi.fn();
-      const mockAdapter = {
-        features: new Set<string>(),
-        requestDevice: mockRequestDevice,
-      };
-      Object.defineProperty(navigator, 'gpu', {
-        value: { requestAdapter: vi.fn().mockResolvedValue(mockAdapter) },
-        configurable: true,
-        writable: true,
+    describe('HDR presentation verification', () => {
+      function installGPU(ctx: Record<string, unknown> | null) {
+        const device = { destroy: vi.fn() };
+        const adapter = { requestDevice: vi.fn().mockResolvedValue(device) };
+        Object.defineProperty(navigator, 'gpu', {
+          value: { requestAdapter: vi.fn().mockResolvedValue(adapter) },
+          configurable: true,
+          writable: true,
+        });
+        const getContext = vi.fn().mockReturnValue(ctx);
+        class FakeOffscreenCanvas {
+          constructor(
+            public width: number,
+            public height: number,
+          ) {}
+          getContext = getContext;
+        }
+        vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas);
+        return { device, adapter, getContext };
+      }
+
+      function makeCtx(applied: unknown, opts: { noGetConfiguration?: boolean } = {}) {
+        const ctx: Record<string, unknown> = {
+          configure: vi.fn(),
+          unconfigure: vi.fn(),
+        };
+        if (!opts.noGetConfiguration) ctx.getConfiguration = vi.fn().mockReturnValue(applied);
+        return ctx;
+      }
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
       });
 
-      await detectWebGPUHDR();
+      it('DC-WGPU-006: returns true when the canvas keeps extended tone mapping, and destroys the device', async () => {
+        const ctx = makeCtx({ format: 'rgba16float', toneMapping: { mode: 'extended' } });
+        const { device, getContext } = installGPU(ctx);
 
-      // detectWebGPUHDR should NOT call requestDevice (lightweight adapter-only check)
-      expect(mockRequestDevice).not.toHaveBeenCalled();
+        await expect(detectWebGPUHDR()).resolves.toBe(true);
+
+        expect(getContext).toHaveBeenCalledWith('webgpu');
+        expect(ctx.configure).toHaveBeenCalledWith(
+          expect.objectContaining({ device, format: 'rgba16float', toneMapping: { mode: 'extended' } }),
+        );
+        expect(ctx.unconfigure).toHaveBeenCalled();
+        expect(device.destroy).toHaveBeenCalledTimes(1);
+      });
+
+      it('DC-WGPU-007: returns false when the browser drops extended tone mapping', async () => {
+        const ctx = makeCtx({ format: 'rgba16float', toneMapping: { mode: 'standard' } });
+        const { device } = installGPU(ctx);
+
+        await expect(detectWebGPUHDR()).resolves.toBe(false);
+        expect(device.destroy).toHaveBeenCalledTimes(1);
+      });
+
+      it('DC-WGPU-008: returns false when getConfiguration() is unavailable (cannot verify)', async () => {
+        const ctx = makeCtx(null, { noGetConfiguration: true });
+        const { device } = installGPU(ctx);
+
+        await expect(detectWebGPUHDR()).resolves.toBe(false);
+        expect(ctx.configure).toHaveBeenCalled();
+        expect(device.destroy).toHaveBeenCalledTimes(1);
+      });
+
+      it('DC-WGPU-009: returns false when the webgpu canvas context is unavailable', async () => {
+        const { device } = installGPU(null);
+
+        await expect(detectWebGPUHDR()).resolves.toBe(false);
+        expect(device.destroy).toHaveBeenCalledTimes(1);
+      });
+
+      it('DC-WGPU-010: returns false (and destroys the device) when configure throws', async () => {
+        const ctx = makeCtx({ toneMapping: { mode: 'extended' } });
+        (ctx.configure as ReturnType<typeof vi.fn>).mockImplementation(() => {
+          throw new TypeError('unsupported format');
+        });
+        const { device } = installGPU(ctx);
+
+        await expect(detectWebGPUHDR()).resolves.toBe(false);
+        expect(device.destroy).toHaveBeenCalledTimes(1);
+      });
+
+      it('DC-WGPU-011: returns false when requestDevice rejects', async () => {
+        const { adapter } = installGPU(makeCtx({ toneMapping: { mode: 'extended' } }));
+        adapter.requestDevice.mockRejectedValue(new Error('device lost'));
+
+        await expect(detectWebGPUHDR()).resolves.toBe(false);
+      });
     });
   });
 
