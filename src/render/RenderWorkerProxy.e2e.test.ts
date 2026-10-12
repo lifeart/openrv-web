@@ -22,6 +22,16 @@ import type { ColorAdjustments } from '../ui/components/ColorControls';
 import { DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 import type { ToneMappingState } from '../ui/components/ToneMappingControl';
 import type { RenderWorkerMessage, RenderWorkerResult, SyncStateMessage } from './renderWorker.messages';
+import { DEFAULT_CAPABILITIES, type DisplayCapabilities } from '../color/DisplayCapabilities';
+
+/** Capabilities under which the worker's Renderer can enter every HDR mode. */
+const HDR_CAPS: DisplayCapabilities = {
+  ...DEFAULT_CAPABILITIES,
+  displayHDR: true,
+  webglHLG: true,
+  webglPQ: true,
+  webglDrawingBufferStorage: true,
+};
 
 // =============================================================================
 // Environment polyfills for jsdom
@@ -416,23 +426,23 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-017: set HDR mode to hlg and get returns hlg', () => {
-      proxy.setHDROutputMode('hlg', {} as any);
+      proxy.setHDROutputMode('hlg', HDR_CAPS);
       expect(proxy.getHDROutputMode()).toBe('hlg');
     });
 
     it('RWP-E2E-018: set HDR mode to pq and get returns pq', () => {
-      proxy.setHDROutputMode('pq', {} as any);
+      proxy.setHDROutputMode('pq', HDR_CAPS);
       expect(proxy.getHDROutputMode()).toBe('pq');
     });
 
     it('RWP-E2E-019: set HDR mode back to sdr and get returns sdr', () => {
-      proxy.setHDROutputMode('hlg', {} as any);
-      proxy.setHDROutputMode('sdr', {} as any);
+      proxy.setHDROutputMode('hlg', HDR_CAPS);
+      proxy.setHDROutputMode('sdr', HDR_CAPS);
       expect(proxy.getHDROutputMode()).toBe('sdr');
     });
 
     it('RWP-E2E-020: setHDROutputMode returns true', () => {
-      const result = proxy.setHDROutputMode('hlg', {} as any);
+      const result = proxy.setHDROutputMode('hlg', HDR_CAPS);
       expect(result).toBe(true);
     });
   });
@@ -482,7 +492,7 @@ describe('RenderWorkerProxy E2E', () => {
     it('RWP-E2E-024: multiple state changes are tracked independently', () => {
       proxy.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 2.0 });
       proxy.setToneMappingState({ ...DEFAULT_TONE_MAPPING_STATE, enabled: true, operator: 'aces' });
-      proxy.setHDROutputMode('hlg', {} as any);
+      proxy.setHDROutputMode('hlg', HDR_CAPS);
       proxy.setColorInversion(true);
 
       expect(proxy.getColorAdjustments().exposure).toBe(2.0);
