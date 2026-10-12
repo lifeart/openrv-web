@@ -599,6 +599,62 @@ describe('PlaybackEngine', () => {
       expect(listener).toHaveBeenCalledWith(-1);
     });
 
+    it('PE-099b: pingpong bounce updates audio sync and preload direction (L18)', () => {
+      const videoSourceNode = {
+        isUsingMediabunny: () => true,
+        setPlaybackDirection: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        preloadFrames: (): Promise<void> => Promise.resolve(),
+      };
+      const video = document.createElement('video');
+      video.pause = vi.fn();
+      const mockSource = { type: 'video', duration: 100, element: video, videoSourceNode };
+      const customHost = { ...createMockPlaybackEngineHost(100), getCurrentSource: () => mockSource as never };
+      engine.setHost(customHost as PlaybackEngineHost);
+      engine.setInOutRange(1, 10);
+      engine.loopMode = 'pingpong';
+      engine.setIsPlayingInternal(true);
+      engine.setCurrentFrameInternal(10);
+
+      engine.advanceFrame(1);
+
+      expect(customHost.setAudioSyncEnabled).toHaveBeenLastCalledWith(false);
+      expect(videoSourceNode.setPlaybackDirection).toHaveBeenCalledWith(-1);
+      expect(videoSourceNode.startPlaybackPreload).toHaveBeenCalledWith(10, -1);
+      expect(video.pause).toHaveBeenCalled();
+    });
+
+    it.each([
+      [false, 0],
+      [true, 1],
+    ])('PE-099c: mediabunny play only starts the hidden video when its audio is needed (%s) (L16)', (needed, plays) => {
+      const videoSourceNode = {
+        isUsingMediabunny: () => true,
+        hasFrameCached: () => true,
+        getFrameAsync: () => Promise.resolve(),
+        updatePlaybackBuffer: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+        setPlaybackDirection: vi.fn(),
+        preloadFrames: (): Promise<void> => Promise.resolve(),
+        isHDR: () => false,
+      };
+      const video = document.createElement('video');
+      video.pause = vi.fn();
+      const mockSource = { type: 'video', duration: 100, element: video, videoSourceNode };
+      const customHost = {
+        ...createMockPlaybackEngineHost(100),
+        getCurrentSource: () => mockSource as never,
+        isVideoElementAudioNeeded: () => needed,
+      };
+      engine.setHost(customHost as PlaybackEngineHost);
+      engine.setOutPointInternal(100);
+
+      engine.play();
+
+      expect(customHost.safeVideoPlay).toHaveBeenCalledTimes(plays);
+    });
+
     it('PE-100: resetInOutPoints resets to full range', () => {
       engine.setInOutRange(20, 50);
       engine.resetInOutPoints();

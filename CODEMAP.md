@@ -570,7 +570,6 @@ openrv-web/
 │   │
 │   ├── services/                # Extracted application services
 │   │   ├── RenderLoopService.ts     # Render tick/start/stop with PerfTrace
-│   │   ├── AudioOrchestrator.ts     # AudioMixer lifecycle, lazy AudioContext
 │   │   ├── FrameNavigationService.ts # 9 playlist/annotation navigation methods
 │   │   ├── SessionURLService.ts     # URL state capture/apply/bootstrap
 │   │   ├── TimelineEditorService.ts # Timeline EDL/sequence integration
@@ -777,7 +776,6 @@ openrv-web/
 | WebSocket | `src/network/WebSocketClient.ts` | WebSocket connection |
 | API Facade | `src/api/OpenRVAPI.ts` | Public API entry point + plugin API |
 | RenderLoopService | `src/services/RenderLoopService.ts` | Render tick/start/stop |
-| AudioOrchestrator | `src/services/AudioOrchestrator.ts` | AudioMixer lifecycle |
 | FrameNavigationService | `src/services/FrameNavigationService.ts` | Playlist/annotation navigation |
 | SessionURLService | `src/services/SessionURLService.ts` | URL state management |
 | TimelineEditorService | `src/services/TimelineEditorService.ts` | Timeline EDL integration |

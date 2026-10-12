@@ -169,20 +169,28 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   }
 
   /**
-   * Load audio from a video file
+   * Load audio from a video file and make it the active audio.
    */
   async loadFromVideo(videoElement: HTMLVideoElement): Promise<boolean> {
     this.videoElement = videoElement;
-
-    // Try to extract audio using Web Audio API
     const videoSrc = videoElement.src || videoElement.currentSrc;
-    if (!videoSrc) {
-      // Fall back to using the video element directly
-      this.useVideoFallback = true;
-      this._duration = videoElement.duration;
-      this.setState('ready');
-      return true;
-    }
+    if (videoSrc) this.setState('loading');
+    const buffer = await this.decodeVideoAudio(videoElement);
+    this.attachVideo(videoElement, buffer);
+    return true;
+  }
+
+  /**
+   * Fetch and decode the audio track of a video without touching the
+   * active playback state, so several sources can be decoded side by side.
+   *
+   * Resolves to `null` when the audio can't be extracted (no URL, CORS,
+   * network or decode failure); the caller should then fall back to the
+   * video element's native audio.
+   */
+  async decodeVideoAudio(videoElement: HTMLVideoElement): Promise<AudioBuffer | null> {
+    const videoSrc = videoElement.src || videoElement.currentSrc;
+    if (!videoSrc) return null;
 
     // Detect blob/data URLs for fetch configuration
     const isBlobUrl = videoSrc.startsWith('blob:');
@@ -193,58 +201,51 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      this.setState('loading');
       await this.initContext();
+      if (!this.audioContext) return null;
 
-      if (!this.audioContext) {
-        clearTimeout(timeoutId);
-        this.useVideoFallback = true;
-        this._duration = videoElement.duration;
-        this.setState('ready');
-        return true;
+      const response = await fetch(videoSrc, {
+        signal: controller.signal,
+        mode: isBlobUrl || isDataUrl ? 'same-origin' : 'cors',
+        credentials: 'same-origin',
+        // Use force-cache for remote URLs to avoid re-downloading the same file
+        cache: isBlobUrl || isDataUrl ? undefined : 'force-cache',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      // Try to fetch and decode audio
-      try {
-        const response = await fetch(videoSrc, {
-          signal: controller.signal,
-          mode: isBlobUrl || isDataUrl ? 'same-origin' : 'cors',
-          credentials: 'same-origin',
-          // Use force-cache for remote URLs to avoid re-downloading the same file
-          cache: isBlobUrl || isDataUrl ? undefined : 'force-cache',
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const arrayBuffer = await response.arrayBuffer();
-        this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-        this._duration = this.audioBuffer.duration;
-        this.useVideoFallback = false;
-        this.setState('ready');
-        return true;
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-
-        // CORS error or network issue - fall back to video element
-        logger.warn('AudioPlaybackManager: Failed to extract audio, using video element fallback:', fetchError);
-        this.useVideoFallback = true;
-        this._duration = videoElement.duration;
-        this.setState('ready');
-        return true;
-      }
+      const arrayBuffer = await response.arrayBuffer();
+      if (!this.audioContext) return null;
+      return await this.audioContext.decodeAudioData(arrayBuffer);
     } catch (error) {
+      // CORS, network or decode error - fall back to video element
+      logger.warn('AudioPlaybackManager: Failed to extract audio, using video element fallback:', error);
+      return null;
+    } finally {
       clearTimeout(timeoutId);
-      // Decode error - fall back to video element
-      logger.warn('AudioPlaybackManager: Audio decode failed, using video element fallback:', error);
-      this.useVideoFallback = true;
-      this._duration = videoElement.duration;
-      this.setState('ready');
-      return true;
     }
+  }
+
+  /**
+   * Make `videoElement`'s audio the active audio, stopping whatever was
+   * playing before. `buffer` is the decoded track from `decodeVideoAudio`,
+   * or `null` to use the element's native audio. Passing a `null` element
+   * detaches all audio (e.g. the active source is a still or a sequence).
+   */
+  attachVideo(videoElement: HTMLVideoElement | null, buffer: AudioBuffer | null): void {
+    this.pause();
+    this.stopScrubSnippet();
+    this.stopSourceNode();
+
+    this.videoElement = videoElement;
+    this.audioBuffer = videoElement ? buffer : null;
+    this.useVideoFallback = videoElement !== null && buffer === null;
+    const duration = buffer ? buffer.duration : (videoElement?.duration ?? 0);
+    this._duration = Number.isFinite(duration) ? duration : 0;
+    this._currentTime = 0;
+    this.setState(videoElement ? 'ready' : 'idle');
   }
 
   /**
@@ -641,7 +642,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       return Math.max(0, timestamp - snippetDuration);
     } else {
       // Forward scrub: play audio starting from the target frame
-      return clamp(timestamp, 0, this.audioBuffer!.duration);
+      return clamp(timestamp, 0, this._duration);
     }
   }
 
