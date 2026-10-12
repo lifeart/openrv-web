@@ -447,7 +447,7 @@ export class ViewerGLRenderer {
       return;
     }
 
-    renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
+    renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace, image.metadata?.chromaticities);
   }
 
   /**

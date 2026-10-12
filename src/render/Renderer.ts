@@ -2664,8 +2664,9 @@ export class Renderer implements RendererBackend {
   setColorPrimaries(
     inputPrimaries: ColorPrimaries | undefined,
     outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+    inputChromaticities?: readonly number[],
   ): void {
-    this.stateManager.setColorPrimaries(inputPrimaries, outputColorSpace);
+    this.stateManager.setColorPrimaries(inputPrimaries, outputColorSpace, inputChromaticities);
   }
 
   setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void {

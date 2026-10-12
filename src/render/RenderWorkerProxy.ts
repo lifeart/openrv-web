@@ -496,6 +496,7 @@ export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSu
           channels: image.channels,
           transferFunction: transferFunctionCode,
           colorPrimaries: colorPrimariesCode,
+          ...(image.metadata.chromaticities ? { chromaticities: Array.from(image.metadata.chromaticities) } : {}),
         },
         [dataCopy],
       );
@@ -1010,8 +1011,13 @@ export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSu
   setColorPrimaries(
     inputPrimaries: ColorPrimaries | undefined,
     outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+    inputChromaticities?: readonly number[],
   ): void {
-    this.dirtyState.colorPrimaries = { input: inputPrimaries, output: outputColorSpace };
+    this.dirtyState.colorPrimaries = {
+      input: inputPrimaries,
+      output: outputColorSpace,
+      ...(inputChromaticities ? { chromaticities: Array.from(inputChromaticities) } : {}),
+    };
     this.hasDirtyState = true;
   }
 

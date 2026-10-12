@@ -135,6 +135,21 @@ describe('renderWorker', () => {
       expect(image.metadata.colorPrimaries).toBe('bt2020');
     });
 
+    it('RW-006b: reconstructs image with source chromaticities', () => {
+      const ap0 = [0.7347, 0.2653, 0, 1, 0.0001, -0.077, 0.32168, 0.33767];
+      const msg: RenderHDRMessage = {
+        type: 'renderHDR',
+        id: 6,
+        imageData: new Float32Array(4).buffer,
+        width: 1,
+        height: 1,
+        dataType: DATA_TYPE_CODES.float32,
+        channels: 4,
+        chromaticities: ap0,
+      };
+      expect(reconstructIPImage(msg).metadata.chromaticities).toEqual(ap0);
+    });
+
     it('RW-007: reconstructs image without optional metadata', () => {
       const data = new Float32Array(4).buffer;
       const msg: RenderHDRMessage = {

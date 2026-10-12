@@ -120,6 +120,8 @@ export interface RenderHDRMessage extends BaseWorkerMessage {
   channels: number;
   transferFunction?: number; // 0=srgb, 1=hlg, 2=pq, 3=smpte240m, 4=linear
   colorPrimaries?: number; // 0=bt709, 1=bt2020, 2=p3
+  /** [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy] for primaries without a named code. */
+  chromaticities?: number[];
 }
 
 /** Set color adjustments (fire-and-forget). */
@@ -315,7 +317,12 @@ export interface RendererSyncState {
   hdrHeadroom: number;
   /** Full pipeline state from applyRenderState(); applied before the individual fields above. */
   renderState: WireRenderState;
-  colorPrimaries: { input: ColorPrimaries | undefined; output: 'srgb' | 'display-p3' | 'rec2020' };
+  colorPrimaries: {
+    input: ColorPrimaries | undefined;
+    output: 'srgb' | 'display-p3' | 'rec2020';
+    /** Used when `input` is undefined: arbitrary source chromaticities. */
+    chromaticities?: number[];
+  };
   linearize: LinearizeState;
   outOfRange: number;
   channelSwizzle: ChannelSwizzle;

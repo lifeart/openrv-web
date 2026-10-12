@@ -24,6 +24,14 @@ export interface ImageMetadata {
   pixelAspectRatio?: number;
   transferFunction?: TransferFunction;
   colorPrimaries?: ColorPrimaries;
+  /**
+   * Source primaries as CIE xy chromaticities [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy],
+   * for primaries without a named `ColorPrimaries` value (ACES AP0/AP1,
+   * DCI-P3, arbitrary EXR/Radiance chromaticities). The renderer derives the
+   * conversion to BT.709/D65 from them (Bradford-adapted when the white
+   * differs). Ignored when `colorPrimaries` is set.
+   */
+  chromaticities?: readonly number[];
   attributes?: Record<string, unknown>;
 }
 
