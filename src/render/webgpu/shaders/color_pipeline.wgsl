@@ -3,7 +3,7 @@
 // Ports sections 6a-6f and 0e from viewer.frag.glsl.
 //
 // NOTE: This shader expects common.wgsl to be prepended, which provides:
-//   LUMA. The applyLUT3DStageLocal helper is defined here because it binds
+//   LUMA, hdrHslScale. The applyLUT3DStageLocal helper is defined here because it binds
 //   the stage-local `samp` sampler and the per-LUT texture directly —
 //   WGSL with `layout: 'auto'` pipelines cannot share resource-bound
 //   helpers across compilations from a generic prelude.
@@ -293,7 +293,11 @@ fn applyLUT3DStageLocal(lut: texture_3d<f32>, color: vec3f, lutSize: f32, intens
 
   // 6e. HSL Qualifier (secondary color correction)
   if (u.hslQualifierEnabled == 1) {
-    let hslQ = rgbToHsl(clamp(color.rgb, vec3f(0.0), vec3f(1.0)));
+    // Qualify and correct the colour normalised to its largest channel so
+    // HDR values (> 1.0) are not clipped; SDR values use a scale of 1.0.
+    let qIn = max(color.rgb, vec3f(0.0));
+    let qScale = hdrHslScale(qIn);
+    let hslQ = rgbToHsl(qIn / qScale);
     let qH = hslQ.x;
     let qS = hslQ.y * 100.0;
     let qL = hslQ.z * 100.0;
@@ -355,7 +359,7 @@ fn applyLUT3DStageLocal(lut: texture_3d<f32>, color: vec3f, lutSize: f32, intens
         (hslQ.z * (1.0 - matte)) + (hslQ.z * u.hslCorrLumScale * matte),
         0.0, 1.0
       );
-      color = vec4f(hslToRgb(newH, newS, newL), color.a);
+      color = vec4f(hslToRgb(newH, newS, newL) * qScale, color.a);
     }
   }
 

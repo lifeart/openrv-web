@@ -5,8 +5,19 @@ import {
   DIRTY_FLAG_TO_STAGES,
   SCENE_ANALYSIS_OFFSETS,
   SCENE_ANALYSIS_BYTE_SIZE,
+  SOURCE_GAMUT_CLAMP_OFFSETS,
+  PRIMARY_GRADE_OFFSETS,
+  SECONDARY_GRADE_OFFSETS,
+  SPATIAL_GAMUT_OFFSET,
+  DISPLAY_OUTPUT_OFFSETS,
+  DISPLAY_OUTPUT_BYTE_SIZE,
 } from './WebGPUStateUploader';
-import { TONE_MAPPING_OPERATOR_CODES } from '../ShaderConstants';
+import {
+  TONE_MAPPING_OPERATOR_CODES,
+  COLOR_PRIMARIES_MATRICES,
+  COLOR_PRIMARIES_INVERSE_MATRICES,
+} from '../ShaderConstants';
+import { OUTPUT_ENCODING_DISPLAY, OUTPUT_ENCODING_PQ } from '../../config/RenderConfig';
 import { GPUBufferUsage, GPUTextureUsage } from './WebGPUTypes';
 import { createDefaultInternalState } from '../ShaderStateTypes';
 import type { InternalShaderState } from '../ShaderStateTypes';
@@ -155,16 +166,24 @@ describe('WebGPUStateUploader', () => {
   // ─── DIRTY_FLAG_TO_STAGES export ─────────────────────────────────────
 
   describe('DIRTY_FLAG_TO_STAGES', () => {
-    it('WGPU-SU-020: maps color flag to primaryGrade and secondaryGrade', () => {
-      expect(DIRTY_FLAG_TO_STAGES['color']).toEqual(['primaryGrade', 'secondaryGrade']);
+    it('WGPU-SU-020: maps color flag to primaryGrade, secondaryGrade and displayOutput (creative gamma)', () => {
+      expect(DIRTY_FLAG_TO_STAGES['color']).toEqual(['primaryGrade', 'secondaryGrade', 'displayOutput']);
     });
 
     it('WGPU-SU-021: maps premult flag to inputDecode and compositing', () => {
       expect(DIRTY_FLAG_TO_STAGES['premult']).toEqual(['inputDecode', 'compositing']);
     });
 
-    it('WGPU-SU-022: maps colorPrimaries to linearize and displayOutput', () => {
-      expect(DIRTY_FLAG_TO_STAGES['colorPrimaries']).toEqual(['linearize', 'displayOutput']);
+    it('WGPU-SU-022: maps colorPrimaries to linearize, displayOutput and every source-gamut clamp stage', () => {
+      expect(DIRTY_FLAG_TO_STAGES['colorPrimaries']).toEqual([
+        'linearize',
+        'primaryGrade',
+        'secondaryGrade',
+        'spatialEffects',
+        'sceneAnalysis',
+        'spatialEffectsPost',
+        'displayOutput',
+      ]);
     });
 
     it('WGPU-SU-023: all mapped stages are valid StageId values', () => {
@@ -323,17 +342,29 @@ describe('WebGPUStateUploader', () => {
       expect(readI32(view2, 0)).toBe(1); // deinterlaceEnabled = true -> 1
     });
 
-    it('WGPU-SU-134: primaryGrade packs colorAdjustments fields as f32', () => {
+    it('WGPU-SU-134: primaryGrade packs per-channel vec4f fields at the WGSL struct offsets', () => {
       state.colorAdjustments.exposure = 2.0;
       state.colorAdjustments.gamma = 1.5;
       state.colorAdjustments.contrast = 0.8;
+      state.colorAdjustments.contrastRGB = [0.7, 0.8, 0.9];
+      state.colorAdjustments.brightness = 0.1;
+      state.colorAdjustments.saturation = 1.2;
+      state.curvesEnabled = true;
 
       uploader.uploadStageUniforms(device, 'primaryGrade', state);
 
       const view = getUploadedView(device);
-      expect(readFloat(view, 0)).toBeCloseTo(2.0); // exposure
-      expect(readFloat(view, 1)).toBeCloseTo(1.5); // gamma
-      expect(readFloat(view, 2)).toBeCloseTo(0.8); // contrast
+      const f32 = (offset: number): number => view.getFloat32(offset, true);
+      const o = PRIMARY_GRADE_OFFSETS;
+      expect(f32(o.exposureRGB)).toBeCloseTo(2.0);
+      expect(f32(o.exposureRGB + 8)).toBeCloseTo(2.0);
+      expect(f32(o.gammaRGB + 4)).toBeCloseTo(1.5);
+      expect(f32(o.contrastRGB)).toBeCloseTo(0.7);
+      expect(f32(o.contrastRGB + 8)).toBeCloseTo(0.9);
+      expect(f32(o.scaleRGB)).toBe(1);
+      expect(f32(o.brightness)).toBeCloseTo(0.1);
+      expect(f32(o.saturation)).toBeCloseTo(1.2);
+      expect(view.getInt32(o.curvesEnabled, true)).toBe(1);
     });
 
     it('WGPU-SU-135: diagnostics packs channelModeCode (i32) and falseColorEnabled (i32)', () => {
@@ -392,12 +423,12 @@ describe('WebGPUStateUploader', () => {
      * value and hdrHeadroom + _pad0 were skipped entirely.
      */
     it('WGPU-SU-138: SCENE_ANALYSIS_OFFSETS map is monotonically increasing 4-byte slots', () => {
-      const entries = Object.entries(SCENE_ANALYSIS_OFFSETS);
+      const entries = Object.entries(SCENE_ANALYSIS_OFFSETS).filter(([k]) => k !== 'gamut');
       for (let i = 0; i < entries.length; i++) {
         expect(entries[i]![1]).toBe(i * 4);
       }
-      // Trailing _pad3 lives at offset 76; struct total is 80 bytes.
-      expect(SCENE_ANALYSIS_BYTE_SIZE).toBe(76 + 4);
+      // Trailing gamut (SourceGamutClamp, 112 bytes) starts at 80.
+      expect(SCENE_ANALYSIS_BYTE_SIZE).toBe(80 + 112);
     });
 
     it('WGPU-SU-139: writes every field at the offset declared by SCENE_ANALYSIS_OFFSETS', () => {
@@ -443,7 +474,7 @@ describe('WebGPUStateUploader', () => {
       expect(i32(SCENE_ANALYSIS_OFFSETS.gamutSourceCode)).toBe(2);
       expect(i32(SCENE_ANALYSIS_OFFSETS.gamutTargetCode)).toBe(1);
       expect(i32(SCENE_ANALYSIS_OFFSETS.gamutHighlightEnabled)).toBe(1);
-      expect(i32(SCENE_ANALYSIS_OFFSETS._pad1)).toBe(0);
+      expect(i32(SCENE_ANALYSIS_OFFSETS.sourcePrimariesApplied)).toBe(0);
       expect(i32(SCENE_ANALYSIS_OFFSETS._pad2)).toBe(0);
       expect(i32(SCENE_ANALYSIS_OFFSETS._pad3)).toBe(0);
     });
@@ -467,6 +498,133 @@ describe('WebGPUStateUploader', () => {
       expect(uploader.getHDRHeadroom()).toBe(100);
       uploader.setHDRHeadroom(5);
       expect(uploader.getHDRHeadroom()).toBe(5);
+    });
+  });
+
+  // ─── H7: wide-gamut working space and output-encoding contract ───────
+
+  describe('source-gamut clamp and display output layout (H7)', () => {
+    const P3_TO_SRGB = COLOR_PRIMARIES_MATRICES.P3_TO_SRGB;
+    const SRGB_TO_P3_INV = COLOR_PRIMARIES_INVERSE_MATRICES.SRGB_TO_P3;
+
+    function readMat3(view: DataView, offset: number): number[] {
+      const out: number[] = [];
+      for (let col = 0; col < 3; col++) {
+        for (let row = 0; row < 3; row++) out.push(view.getFloat32(offset + col * 16 + row * 4, true));
+      }
+      return out;
+    }
+
+    const clampStages: Array<[StageId, number]> = [
+      ['primaryGrade', PRIMARY_GRADE_OFFSETS.gamut],
+      ['secondaryGrade', SECONDARY_GRADE_OFFSETS.gamut],
+      ['spatialEffects', SPATIAL_GAMUT_OFFSET],
+      ['sceneAnalysis', SCENE_ANALYSIS_OFFSETS.gamut],
+      ['spatialEffectsPost', SPATIAL_GAMUT_OFFSET],
+    ];
+
+    for (const [stage, offset] of clampStages) {
+      it(`WGPU-SU-700: ${stage} packs the source-gamut clamp for a P3 source`, () => {
+        state.inputPrimariesEnabled = true;
+        state.inputPrimariesMatrix = P3_TO_SRGB;
+        state.inputPrimariesInverse = SRGB_TO_P3_INV;
+        uploader.uploadStageUniforms(device, stage, state);
+        const view = getUploadedView(device);
+        expect(view.getInt32(offset + SOURCE_GAMUT_CLAMP_OFFSETS.enabled, true)).toBe(1);
+        readMat3(view, offset + SOURCE_GAMUT_CLAMP_OFFSETS.toWorking).forEach((v, i) =>
+          expect(v).toBeCloseTo(P3_TO_SRGB[i]!, 6),
+        );
+        readMat3(view, offset + SOURCE_GAMUT_CLAMP_OFFSETS.toSource).forEach((v, i) =>
+          expect(v).toBeCloseTo(SRGB_TO_P3_INV[i]!, 6),
+        );
+      });
+
+      it(`WGPU-SU-701: ${stage} disables the source-gamut clamp for BT.709 and File LUT inputs`, () => {
+        uploader.uploadStageUniforms(device, stage, state);
+        expect(getUploadedView(device, 0).getInt32(offset + SOURCE_GAMUT_CLAMP_OFFSETS.enabled, true)).toBe(0);
+        state.inputPrimariesEnabled = true;
+        state.inputPrimariesMatrix = P3_TO_SRGB;
+        state.inputPrimariesInverse = SRGB_TO_P3_INV;
+        state.fileLUT3DEnabled = true;
+        uploader.uploadStageUniforms(device, stage, state);
+        const view = getUploadedView(device, 1);
+        expect(view.getInt32(offset + SOURCE_GAMUT_CLAMP_OFFSETS.enabled, true)).toBe(0);
+        expect(readMat3(view, offset + SOURCE_GAMUT_CLAMP_OFFSETS.toWorking)).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+      });
+    }
+
+    it('WGPU-SU-702: sceneAnalysis flags sourcePrimariesApplied for tagged sources and File LUTs', () => {
+      state.inputPrimariesEnabled = true;
+      uploader.uploadStageUniforms(device, 'sceneAnalysis', state);
+      expect(getUploadedView(device, 0).getInt32(SCENE_ANALYSIS_OFFSETS.sourcePrimariesApplied, true)).toBe(1);
+      state.inputPrimariesEnabled = false;
+      state.fileLUT3DEnabled = true;
+      uploader.uploadStageUniforms(device, 'sceneAnalysis', state);
+      expect(getUploadedView(device, 1).getInt32(SCENE_ANALYSIS_OFFSETS.sourcePrimariesApplied, true)).toBe(1);
+    });
+
+    it('WGPU-SU-703: secondaryGrade packs H/S values only when enabled and the hue rotation matrix', () => {
+      state.highlightsValue = 0.5;
+      state.hsEnabled = false;
+      state.vibranceEnabled = true;
+      state.vibranceValue = 0.3;
+      state.colorAdjustments.hueRotation = 90;
+      uploader.uploadStageUniforms(device, 'secondaryGrade', state);
+      const view = getUploadedView(device);
+      const o = SECONDARY_GRADE_OFFSETS;
+      expect(view.getFloat32(o.highlights, true)).toBe(0);
+      expect(view.getFloat32(o.vibrance, true)).toBeCloseTo(0.3);
+      expect(view.getInt32(o.hueRotationEnabled, true)).toBe(1);
+      expect(readMat3(view, o.hueRotationMatrix)).not.toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    });
+
+    it('WGPU-SU-704: displayOutput writes every field at DISPLAY_OUTPUT_OFFSETS', () => {
+      state.outputPrimariesEnabled = true;
+      state.outputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.SRGB_TO_P3;
+      state.displayLUT3DEnabled = true;
+      state.displayTransferCode = 3;
+      state.colorInversionEnabled = true;
+      state.displayGammaOverride = 1.1;
+      state.displayBrightnessMultiplier = 0.9;
+      state.displayCustomGamma = 2.6;
+      state.displayLUT3DIntensity = 0.5;
+      state.displayLUT3DSize = 33;
+      state.displayLUT3DDomainMin = [0.1, 0.2, 0.3];
+      state.displayLUT3DDomainMax = [0.9, 0.8, 0.7];
+      state.colorAdjustments.gammaRGB = [1.2, 1.0, 0.8];
+      uploader.setOutputEncoding(OUTPUT_ENCODING_PQ);
+      uploader.uploadStageUniforms(device, 'displayOutput', state);
+
+      const view = getUploadedView(device);
+      const i32 = (offset: number): number => view.getInt32(offset, true);
+      const f32 = (offset: number): number => view.getFloat32(offset, true);
+      const o = DISPLAY_OUTPUT_OFFSETS;
+      expect(i32(o.outputPrimariesEnabled)).toBe(1);
+      expect(i32(o.displayLUT3DEnabled)).toBe(1);
+      expect(i32(o.displayTransferCode)).toBe(3);
+      expect(i32(o.colorInversionEnabled)).toBe(1);
+      expect(f32(o.displayGammaOverride)).toBeCloseTo(1.1);
+      expect(f32(o.displayBrightnessMultiplier)).toBeCloseTo(0.9);
+      expect(f32(o.displayCustomGamma)).toBeCloseTo(2.6);
+      expect(f32(o.displayLUT3DIntensity)).toBeCloseTo(0.5);
+      expect(f32(o.displayLUT3DSize)).toBe(33);
+      expect(i32(o.outputEncoding)).toBe(OUTPUT_ENCODING_PQ);
+      expect(f32(o.displayLUT3DDomainMin + 8)).toBeCloseTo(0.3);
+      expect(f32(o.displayLUT3DDomainMax)).toBeCloseTo(0.9);
+      readMat3(view, o.outputPrimariesMatrix).forEach((v, i) =>
+        expect(v).toBeCloseTo(COLOR_PRIMARIES_MATRICES.SRGB_TO_P3[i]!, 6),
+      );
+      expect(f32(o.gammaRGB)).toBeCloseTo(1.2);
+      expect(f32(o.gammaRGB + 8)).toBeCloseTo(0.8);
+      expect(DISPLAY_OUTPUT_BYTE_SIZE).toBe(o.gammaRGB + 16);
+    });
+
+    it('WGPU-SU-705: output encoding defaults to the SDR display transfer', () => {
+      expect(uploader.getOutputEncoding()).toBe(OUTPUT_ENCODING_DISPLAY);
+      uploader.uploadStageUniforms(device, 'displayOutput', state);
+      expect(getUploadedView(device).getInt32(DISPLAY_OUTPUT_OFFSETS.outputEncoding, true)).toBe(
+        OUTPUT_ENCODING_DISPLAY,
+      );
     });
   });
 
@@ -887,9 +1045,10 @@ describe('WebGPUStateUploader', () => {
       uploader.uploadStageUniforms(device, 'displayOutput', state);
 
       const view = getUploadedView(device);
-      expect(readI32(view, 1)).toBe(2); // displayTransferCode as i32
-      expect(readFloat(view, 2)).toBeCloseTo(2.4); // displayGammaOverride as f32
-      expect(readFloat(view, 3)).toBeCloseTo(1.5); // displayBrightnessMultiplier as f32
+      // Offsets per display_output.wgsl Uniforms (displayLUT3DEnabled sits at slot 1)
+      expect(readI32(view, 2)).toBe(2); // displayTransferCode as i32
+      expect(readFloat(view, 4)).toBeCloseTo(2.4); // displayGammaOverride as f32
+      expect(readFloat(view, 5)).toBeCloseTo(1.5); // displayBrightnessMultiplier as f32
     });
   });
 
@@ -906,11 +1065,11 @@ describe('WebGPUStateUploader', () => {
       uploader.uploadStageUniforms(device, 'secondaryGrade', state);
 
       const view = getUploadedView(device);
-      expect(readI32(view, 0)).toBe(1); // hsEnabled as i32
-      expect(readFloat(view, 1)).toBeCloseTo(0.3); // highlightsValue
-      expect(readFloat(view, 2)).toBeCloseTo(-0.2); // shadowsValue
-      expect(readFloat(view, 3)).toBeCloseTo(0.1); // whitesValue
-      expect(readFloat(view, 4)).toBeCloseTo(-0.1); // blacksValue
+      // Offsets per secondary_grade.wgsl Uniforms (no hsEnabled field in WGSL)
+      expect(readFloat(view, 0)).toBeCloseTo(0.3); // highlightsValue
+      expect(readFloat(view, 1)).toBeCloseTo(-0.2); // shadowsValue
+      expect(readFloat(view, 2)).toBeCloseTo(0.1); // whitesValue
+      expect(readFloat(view, 3)).toBeCloseTo(-0.1); // blacksValue
     });
 
     it('WGPU-SU-901: packs vibrance and hueRotation', () => {
@@ -922,10 +1081,11 @@ describe('WebGPUStateUploader', () => {
       uploader.uploadStageUniforms(device, 'secondaryGrade', state);
 
       const view = getUploadedView(device);
-      expect(readI32(view, 5)).toBe(1); // vibranceEnabled as i32
-      expect(readFloat(view, 6)).toBeCloseTo(0.5); // vibranceValue
-      expect(readI32(view, 7)).toBe(0); // vibranceSkinProtection = false as i32
-      expect(readFloat(view, 8)).toBeCloseTo(45); // hueRotation
+      expect(readFloat(view, 4)).toBeCloseTo(0.5); // vibranceValue
+      expect(readI32(view, 5)).toBe(0); // vibranceSkinProtection = false as i32
+      expect(readI32(view, 6)).toBe(1); // hueRotationEnabled (45 degrees)
+      // hueRotationMatrix (mat3x3f) at byte 32: not the identity
+      expect(readFloat(view, 8)).not.toBeCloseTo(1, 3);
     });
   });
 });

@@ -576,7 +576,7 @@ describe('Color Primaries Matrices (XE-MATRIX)', () => {
 // Documented mappings (mirrored across viewer.frag.glsl, common.wgsl,
 // scene_analysis.wgsl, effectProcessing.shared.ts and ShaderConstants.ts):
 //   REC2020_TO_SRGB:  Rec.2020 (D65) → BT.709/sRGB (D65)
-//   REC2020_TO_P3:    Rec.2020 (D65) → Display-P3 (D65)
+//   REC2020_TO_P3:    Rec.2020 (D65) → Display-P3 (D65) (CPU path only since H7)
 //   P3_TO_SRGB:       Display-P3 (D65) → BT.709/sRGB (D65)
 //   ACES Hill input:  BT.709 linear  → AP1 (Hill ODT-tuned, not pure primaries)
 //   ACES Hill output: AP1            → BT.709 linear (Hill ODT-tuned inverse)

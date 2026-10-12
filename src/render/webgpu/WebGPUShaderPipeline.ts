@@ -25,6 +25,8 @@ import type {
 } from './WebGPUTypes';
 import { GPUBufferUsage } from './WebGPUTypes';
 import { WebGPUPingPong } from './WebGPUPingPong';
+import { WebGPUStateUploader } from './WebGPUStateUploader';
+import type { OutputEncodingCode } from '../../config/RenderConfig';
 import type { PingPongFormat } from './WebGPUPingPong';
 import commonSrc from './shaders/common.wgsl?raw';
 import viewerVertSrc from './shaders/_viewer_vert.wgsl?raw';
@@ -163,6 +165,12 @@ export class WebGPUShaderPipeline {
   private _hdrHeadroom = 1.0;
   private _outputMode = 0;
 
+  /**
+   * Per-stage uniform packer. Carries the surface properties that are not in
+   * InternalShaderState (HDR headroom, output encoding) for the stage UBOs.
+   */
+  readonly stateUploader = new WebGPUStateUploader();
+
   // ─── Public API ──────────────────────────────────────────────────────
 
   /**
@@ -227,11 +235,24 @@ export class WebGPUShaderPipeline {
    * robust regardless of caller hygiene.
    */
   setGlobalHDRHeadroom(headroom: number): void {
+    this.stateUploader.setHDRHeadroom(headroom);
     if (!Number.isFinite(headroom)) {
       this._hdrHeadroom = 1.0;
       return;
     }
     this._hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
+  }
+
+  /**
+   * Set the displayOutput stage's output encoding (OUTPUT_ENCODING_* in
+   * RenderConfig) — the same contract as the GLSL `u_outputEncoding`.
+   */
+  setOutputEncoding(encoding: OutputEncodingCode): void {
+    this.stateUploader.setOutputEncoding(encoding);
+  }
+
+  getOutputEncoding(): OutputEncodingCode {
+    return this.stateUploader.getOutputEncoding();
   }
 
   /** Set the outputMode value for the global UBO. */
@@ -365,6 +386,7 @@ export class WebGPUShaderPipeline {
   /** Release all GPU resources. */
   dispose(): void {
     this.pingPong.dispose();
+    this.stateUploader.dispose();
 
     // Destroy uniform buffers
     for (const buf of this.uniformBuffers.values()) {

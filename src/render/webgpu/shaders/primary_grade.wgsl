@@ -1,9 +1,11 @@
-// Stage 3: Primary Grade — exposure, scale/offset, gamma, contrast,
+// Stage 3: Primary Grade — exposure, scale/offset, contrast,
 // temperature/tint, brightness, saturation, inline 1D LUT, curves LUT.
 // Ports sections 1-5 (color grading primaries) from viewer.frag.glsl.
+// Creative per-channel gamma is GLSL step 8b (after the output encoding)
+// and lives in display_output.wgsl.
 //
 // NOTE: This shader expects common.wgsl to be prepended, which provides:
-//   LUMA, applyTemperature
+//   LUMA, applyTemperature, SourceGamutClamp, clampToSourceGamut
 
 struct Uniforms {
   // Exposure per-channel (in stops, applied as exp2)
@@ -13,7 +15,7 @@ struct Uniforms {
   scaleRGB: vec4f,          // .xyz = per-channel, .w = unused
   offsetRGB: vec4f,         // .xyz = per-channel, .w = unused
 
-  // Gamma per-channel
+  // Gamma per-channel (unused here; applied in displayOutput, GLSL step 8b)
   gammaRGB: vec4f,          // .xyz = per-channel, .w = unused
 
   // Contrast per-channel (pivot at 0.5)
@@ -36,6 +38,9 @@ struct Uniforms {
 
   // Curves LUT control
   curvesEnabled: i32,       // 0=off, 1=on
+
+  // Negative clamps run in the source primaries (wide-gamut working space)
+  gamut: SourceGamutClamp,
 }
 
 // VSOut is provided by the prepended vertex shader source
@@ -101,14 +106,15 @@ fn applyInlineLUT(color: vec3f) -> vec3f {
   }
 
   // 2. Temperature and tint
-  color = vec4f(applyTemperature(color.rgb, u.temperature, u.tint), color.a);
+  color = vec4f(clampToSourceGamut(applyTemperature(color.rgb, u.temperature, u.tint), u.gamut), color.a);
 
   // 3. Brightness (simple offset)
   color = vec4f(color.rgb + u.brightness, color.a);
 
   // 3a. Clamp after brightness: negative values are physically meaningless
   // and would be amplified by contrast multiplication, producing artifacts.
-  color = vec4f(max(color.rgb, vec3f(0.0)), color.a);
+  // Clamped in the source primaries so wide-gamut colours survive.
+  color = vec4f(clampToSourceGamut(color.rgb, u.gamut), color.a);
 
   // 4. Contrast (pivot at 0.5, per-channel)
   color = vec4f((color.rgb - 0.5) * u.contrastRGB.xyz + 0.5, color.a);
@@ -134,12 +140,6 @@ fn applyInlineLUT(color: vec3f) -> vec3f {
 
     color = vec4f(cc + excess, color.a);
   }
-
-  // Per-channel gamma (always applied; identity when gammaRGB == 1.0)
-  color = vec4f(
-    pow(max(color.rgb, vec3f(0.0)), 1.0 / u.gammaRGB.xyz),
-    color.a
-  );
 
   return color;
 }

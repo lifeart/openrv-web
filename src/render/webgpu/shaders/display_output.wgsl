@@ -1,6 +1,11 @@
-// Stage 9: Display Output — output primaries, display LUT 3D, display transfer,
-// gamma override, brightness, and color inversion.
-// Ports the display pipeline from viewer.frag.glsl (steps 7c, 7d, 8a-8d, 9).
+// Stage 9: Display Output — output primaries, display LUT 3D, output encoding,
+// creative gamma, gamma override, brightness, and color inversion.
+// Ports the display pipeline from viewer.frag.glsl (steps 7c, 7d, 8a-8d, 9),
+// including the u_outputEncoding contract (OUTPUT_ENCODING_* in RenderConfig):
+//   0 = display transfer (SDR, displayTransferCode), 1 = linear,
+//   2 = extended sRGB, 3 = PQ, 4 = HLG.
+//
+// Layout MUST match WebGPUStateUploader.packDisplayOutput (DISPLAY_OUTPUT_OFFSETS).
 //
 // NOTE: This shader expects common.wgsl to be prepended. The applyDisplayLUT3D
 // helper is stage-local because it binds the per-stage `displayLUT3D` texture
@@ -17,7 +22,7 @@ struct Uniforms {
   displayCustomGamma: f32,            // custom gamma value (only when displayTransferCode == 5)
   displayLUT3DIntensity: f32,         // 0.0 to 1.0
   displayLUT3DSize: f32,              // LUT dimension (e.g. 33)
-  _pad0: f32,
+  outputEncoding: i32,                // OUTPUT_ENCODING_* (0..4)
   _pad1: f32,
   _pad2: f32,
   displayLUT3DDomainMin: vec3f,       // domain minimum
@@ -25,6 +30,7 @@ struct Uniforms {
   displayLUT3DDomainMax: vec3f,       // domain maximum
   _pad4: f32,
   outputPrimariesMatrix: mat3x3f,     // 3x3 color primaries conversion matrix
+  gammaRGB: vec4f,                    // creative per-channel gamma (.xyz), step 8b
 }
 
 // VSOut is provided by the prepended vertex shader source
@@ -95,6 +101,8 @@ fn applyDisplayLUT3D(color: vec3f, lutSize: f32, intensity: f32,
   var color = textureSample(tex, samp, in.uv);
 
   // 7c. Output primaries conversion (BT.709 working space -> display gamut)
+  // Colours outside the output gamut become negative here and are clipped
+  // below, after the conversion.
   if (u.outputPrimariesEnabled != 0) {
     color = vec4f(u.outputPrimariesMatrix * color.rgb, color.a);
   }
@@ -108,10 +116,25 @@ fn applyDisplayLUT3D(color: vec3f, lutSize: f32, intensity: f32,
     );
   }
 
-  // 8a. Display transfer function (linear to display-encoded, per-channel)
-  if (u.displayTransferCode > 0) {
-    color = vec4f(applyDisplayTransfer(color.rgb, u.displayTransferCode), color.a);
+  // 8a. Display transfer function (linear to display-encoded, per-channel).
+  // HDR surfaces replace it with the encoding the surface expects; the
+  // user's SDR display transfer would otherwise double-encode the signal.
+  if (u.outputEncoding == 0) {
+    if (u.displayTransferCode > 0) {
+      color = vec4f(applyDisplayTransfer(color.rgb, u.displayTransferCode), color.a);
+    }
+  } else if (u.outputEncoding == 2) {
+    color = vec4f(linearToExtendedSRGB(color.rgb), color.a);
+  } else if (u.outputEncoding == 3) {
+    color = vec4f(linearToPQ(color.rgb), color.a);
+  } else if (u.outputEncoding == 4) {
+    color = vec4f(linearToHLG(color.rgb), color.a);
   }
+  // outputEncoding == 1 (linear): pass through
+
+  // 8b. Creative per-channel gamma (always applied independently of the
+  // display transfer; identity when gammaRGB == 1.0).
+  color = vec4f(pow(max(color.rgb, vec3f(0.0)), 1.0 / u.gammaRGB.xyz), color.a);
 
   // 8c. Display gamma override
   if (u.displayGammaOverride != 1.0) {

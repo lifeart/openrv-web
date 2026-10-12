@@ -166,6 +166,23 @@ fn linearToPQ(color: vec3f) -> vec3f {
   );
 }
 
+// Extended-range sRGB encode (sign-preserving, no clamp above 1.0), for
+// float16 'srgb' / 'display-p3' canvases in extended tone-mapping mode.
+fn extendedSRGBEncode(c: f32) -> f32 {
+  let a = abs(c);
+  var e: f32;
+  if (a <= 0.0031308) {
+    e = a * 12.92;
+  } else {
+    e = 1.055 * pow(a, 1.0 / 2.4) - 0.055;
+  }
+  return sign(c) * e;
+}
+
+fn linearToExtendedSRGB(color: vec3f) -> vec3f {
+  return vec3f(extendedSRGBEncode(color.r), extendedSRGBEncode(color.g), extendedSRGBEncode(color.b));
+}
+
 // ---------------------------------------------------------------------------
 // Rec.709 luminance calculation
 // ---------------------------------------------------------------------------
@@ -178,6 +195,8 @@ fn rec709Luminance(color: vec3f) -> f32 {
 // Color temperature shift (Kelvin to RGB multiplier)
 // ---------------------------------------------------------------------------
 
+// Callers clamp the result with clampToSourceGamut() (see below), matching
+// the GLSL applyTemperature which clamps negatives in the source gamut.
 fn applyTemperature(color: vec3f, temp: f32, tint: f32) -> vec3f {
   // Temperature shifts blue-orange
   // Tint shifts green-magenta
@@ -191,10 +210,42 @@ fn applyTemperature(color: vec3f, temp: f32, tint: f32) -> vec3f {
   result.r = result.r - g * 0.05;
   result.b = result.b - g * 0.05;
 
-  // Clamp negative values: negative color is physically meaningless and
-  // corrupts downstream stages (HSL conversion, contrast amplification).
-  // Values > 1.0 are preserved for HDR headroom.
-  return max(result, vec3f(0.0));
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Source-gamut clamp (wide-gamut working space, mirrors GLSL clampToSourceGamut)
+// ---------------------------------------------------------------------------
+//
+// The working space is linear BT.709. A wide-gamut source (P3, BT.2020) has
+// legitimately negative BT.709 components there, so max(c, 0) in BT.709 would
+// clip it to the 709 gamut long before the output-primaries conversion.
+// Stages that clamp negatives do it in the source primaries instead; whatever
+// is outside the output gamut is clipped after displayOutput's primaries step.
+// For BT.709 sources (enabled == 0) this is exactly max(c, 0).
+//
+// Each stage that clamps appends this struct to its Uniforms
+// (WebGPUStateUploader.packSourceGamutClamp writes it).
+struct SourceGamutClamp {
+  toWorking: mat3x3f,  // source primaries -> BT.709 (inputPrimariesMatrix)
+  toSource: mat3x3f,   // BT.709 -> source primaries (inputPrimariesInverse)
+  enabled: i32,        // 1 when the input-primaries conversion ran (no File LUT)
+  _pad0: i32,
+  _pad1: i32,
+  _pad2: i32,
+}
+
+fn clampToSourceGamut(c: vec3f, g: SourceGamutClamp) -> vec3f {
+  if (g.enabled != 0) {
+    return g.toWorking * max(g.toSource * c, vec3f(0.0));
+  }
+  return max(c, vec3f(0.0));
+}
+
+// HSL is defined on [0,1]. HDR-safe HSL helpers scale a colour down by its
+// largest channel (never below 1.0, so SDR values are untouched) and back up.
+fn hdrHslScale(c: vec3f) -> f32 {
+  return max(max(max(c.r, c.g), c.b), 1.0);
 }
 
 // ---------------------------------------------------------------------------
