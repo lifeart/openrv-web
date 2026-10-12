@@ -47,6 +47,8 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
+    "@cornerstonejs/codec-openjpeg": "^1.3.6",
+    "@cornerstonejs/codec-openjph": "^2.4.11",
     "@jsquash/jxl": "^1.3.0",
     "gl-matrix": "^3.4.3",
     "gto-js": "1.0.0",
@@ -112,7 +114,7 @@
   },
   "lint-staged": {
     "*.ts": [
-      "eslint --fix --max-warnings=0",
+      "eslint --fix --max-warnings=0 --no-warn-ignored",
       "prettier --write"
     ]
   },

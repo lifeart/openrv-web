@@ -148,12 +148,16 @@ describe('PlaylistManager – issue #405: transition changes recalculate globalS
   it('should correctly map frames after transition change', () => {
     tm.setTransition(0, { type: 'crossfade', durationFrames: 10 });
 
-    // Clip B starts at frame 41, but frames 41-50 overlap with clip A.
-    // getClipAtFrame scans sequentially, so frame 41 maps to clip A (index 0).
-    // Frame 51 is the first non-overlapping frame of clip B.
+    // Clip B starts at frame 41, and frames 41-50 overlap with clip A.
+    // Inside the overlap the incoming clip (B) owns the frame so playback
+    // advances into B; clip A is only the blend's second input.
+    const mappingBeforeOverlap = pm.getClipAtFrame(40);
+    expect(mappingBeforeOverlap!.clipIndex).toBe(0);
+
     const mappingOverlap = pm.getClipAtFrame(41);
     expect(mappingOverlap).not.toBeNull();
-    expect(mappingOverlap!.clipIndex).toBe(0); // still in clip A's range
+    expect(mappingOverlap!.clipIndex).toBe(1); // incoming clip owns the overlap
+    expect(mappingOverlap!.localFrame).toBe(1);
 
     const mappingB = pm.getClipAtFrame(51);
     expect(mappingB).not.toBeNull();

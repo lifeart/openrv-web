@@ -130,12 +130,23 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
    *
    * After overlap adjustment:
    * - transitionStart = clips[i+1].globalStartFrame
-   * - transitionEnd = clips[i+1].globalStartFrame + durationFrames - 1
-   * - progress = (globalFrame - transitionStart) / (durationFrames - 1)
+   * - transitionEnd = min(transitionStart + durationFrames - 1, last frame of clips[i])
+   * - progress = (globalFrame - transitionStart) / (effectiveDuration - 1)
+   *
+   * The end is clamped to the outgoing clip's last frame so that an empty gap
+   * between the two clips (see `gapsBefore`) shrinks the blend region instead
+   * of blending against frames the outgoing clip does not have.
+   *
+   * @param gapsBefore - Optional per-clip count of empty frames preceding each
+   *   clip (e.g. OTIO gaps). Missing entries count as 0.
    */
-  getTransitionAtFrame(globalFrame: number, clips: PlaylistClip[]): TransitionFrameInfo | null {
+  getTransitionAtFrame(
+    globalFrame: number,
+    clips: PlaylistClip[],
+    gapsBefore?: readonly number[],
+  ): TransitionFrameInfo | null {
     // Calculate overlap-adjusted clips
-    const adjustedClips = this.calculateOverlapAdjustedFrames(clips);
+    const adjustedClips = this.calculateOverlapAdjustedFrames(clips, gapsBefore);
 
     for (let i = 0; i < this.transitions.length; i++) {
       const transition = this.transitions[i];
@@ -149,11 +160,14 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
       if (durationFrames <= 0) continue;
 
       const transitionStart = incomingClip.globalStartFrame;
-      const transitionEnd = transitionStart + durationFrames - 1;
+      const outgoingEnd = outgoingClip.globalStartFrame + outgoingClip.duration - 1;
+      const transitionEnd = Math.min(transitionStart + durationFrames - 1, outgoingEnd);
+      if (transitionEnd < transitionStart) continue;
+      const effectiveDuration = transitionEnd - transitionStart + 1;
 
       if (globalFrame >= transitionStart && globalFrame <= transitionEnd) {
         // Calculate progress
-        const progress = durationFrames === 1 ? 1.0 : (globalFrame - transitionStart) / (durationFrames - 1);
+        const progress = effectiveDuration === 1 ? 1.0 : (globalFrame - transitionStart) / (effectiveDuration - 1);
 
         // Calculate local frames
         // Outgoing clip: the transition covers the LAST durationFrames of the outgoing clip
@@ -203,27 +217,34 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
    *                              [ClipB: 40f]
    *                          ^ 12 frame overlap ^
    *
-   * - globalStartFrame of clip[0] = 1
-   * - globalStartFrame of clip[i+1] = clip[i].globalStartFrame + clip[i].duration - transitionDuration
+   * - globalStartFrame of clip[0] = 1 + gapsBefore[0]
+   * - globalStartFrame of clip[i+1] = clip[i].globalStartFrame + clip[i].duration
+   *                                   - transitionDuration + gapsBefore[i+1]
+   *
+   * @param gapsBefore - Optional per-clip count of empty frames preceding each
+   *   clip (e.g. OTIO gaps). Missing entries count as 0.
    */
-  calculateOverlapAdjustedFrames(clips: PlaylistClip[]): PlaylistClip[] {
-    if (clips.length === 0) return [];
+  calculateOverlapAdjustedFrames(clips: PlaylistClip[], gapsBefore?: readonly number[]): PlaylistClip[] {
+    const gapAt = (index: number): number => Math.max(0, gapsBefore?.[index] ?? 0);
 
-    const adjusted: PlaylistClip[] = clips.map((clip) => ({ ...clip }));
+    let previous: PlaylistClip | null = null;
+    return clips.map((clip, i) => {
+      const globalStartFrame: number = previous
+        ? previous.globalStartFrame + previous.duration - this.getOverlapAt(i - 1) + gapAt(i)
+        : 1 + gapAt(0);
+      const adjusted: PlaylistClip = { ...clip, globalStartFrame };
+      previous = adjusted;
+      return adjusted;
+    });
+  }
 
-    adjusted[0]!.globalStartFrame = 1;
-
-    for (let i = 0; i < adjusted.length - 1; i++) {
-      const current = adjusted[i]!;
-      const next = adjusted[i + 1]!;
-
-      const transition = this.transitions[i];
-      const overlap = transition && transition.type !== 'cut' ? transition.durationFrames : 0;
-
-      next.globalStartFrame = current.globalStartFrame + current.duration - overlap;
-    }
-
-    return adjusted;
+  /**
+   * Overlap (in frames) contributed by the transition at a gap index:
+   * its duration for a blending transition, 0 for a cut or no transition.
+   */
+  getOverlapAt(gapIndex: number): number {
+    const transition = this.transitions[gapIndex];
+    return transition && transition.type !== 'cut' ? Math.max(0, transition.durationFrames) : 0;
   }
 
   /**

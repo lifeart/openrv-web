@@ -803,11 +803,12 @@ describe('EXRDecoder', () => {
 
     /**
      * Create a valid PXR24-compressed EXR file for testing.
-     * PXR24 encoding:
-     * 1. For FLOAT: truncate to 24 bits, separate into 3 byte planes (MSB, mid, low)
-     *    For HALF: separate into 2 byte planes (MSB, LSB)
-     * 2. Delta-encode the byte stream
-     * 3. zlib deflate
+     * PXR24 encoding (OpenEXR Pxr24Compressor):
+     * 1. Per line and channel, delta-encode the sample words (FLOAT truncated
+     *    to its upper 24 bits), restarting at zero for each channel line
+     * 2. Split the deltas into byte planes, most significant first
+     *    (3 planes for FLOAT, 2 for HALF)
+     * 3. zlib deflate; blocks that do not shrink are stored raw
      */
     async function createPXR24EXR(
       options: {
@@ -952,63 +953,62 @@ describe('EXRDecoder', () => {
         const blockLines = Math.min(linesPerBlock, height - blockStartY);
         blockYs.push(blockStartY);
 
-        // Build byte planes for this block
+        // Build byte planes for this block (plus the raw scanline bytes, which
+        // OpenEXR stores instead when compression does not reduce the size)
         const bytePlaneChunks: number[] = [];
+        const rawBytes: number[] = [];
 
         for (let line = 0; line < blockLines; line++) {
           const y = blockStartY + line;
           for (let ci = 0; ci < sortedChannels.length; ci++) {
             const channelValues = pixelValues[y]![ci]!;
             if (pixelType === EXRPixelType.FLOAT) {
-              // FLOAT: truncate to 24 bits, then create 3 byte planes
+              // FLOAT: truncate to 24 bits, then store deltas of the 24-bit words
+              // as 3 byte planes (MSB first). The running value restarts per
+              // channel per line (OpenEXR Pxr24Compressor).
               const floatBuf = new Float32Array(width);
               for (let x = 0; x < width; x++) {
                 floatBuf[x] = channelValues[x]!;
               }
               const intView = new Uint32Array(floatBuf.buffer);
-
-              // Truncate lowest 8 bits (zero out LSB)
+              const plane0: number[] = [];
+              const plane1: number[] = [];
+              const plane2: number[] = [];
+              let prev = 0;
               for (let x = 0; x < width; x++) {
-                intView[x] = intView[x]! & 0xffffff00;
-              }
-
-              const byteView = new Uint8Array(floatBuf.buffer);
-
-              // 3 byte planes: MSB (byte3), mid (byte2), low (byte1)
-              // byte0 (LSB) is discarded (always 0 after truncation)
-              const plane0: number[] = []; // MSB
-              const plane1: number[] = []; // mid
-              const plane2: number[] = []; // low
-              for (let x = 0; x < width; x++) {
-                plane0.push(byteView[x * 4 + 3]!); // MSB
-                plane1.push(byteView[x * 4 + 2]!); // mid
-                plane2.push(byteView[x * 4 + 1]!); // low
+                const word = intView[x]! >>> 8;
+                const rawWord = (word << 8) >>> 0;
+                rawBytes.push(rawWord & 0xff, (rawWord >>> 8) & 0xff, (rawWord >>> 16) & 0xff, rawWord >>> 24);
+                const diff = (word - prev) & 0xffffff;
+                prev = word;
+                plane0.push((diff >>> 16) & 0xff);
+                plane1.push((diff >>> 8) & 0xff);
+                plane2.push(diff & 0xff);
               }
               bytePlaneChunks.push(...plane0, ...plane1, ...plane2);
             } else {
-              // HALF: 2 byte planes
-              const plane0: number[] = []; // MSB
-              const plane1: number[] = []; // LSB
+              // HALF: deltas of the 16-bit words as 2 byte planes (MSB first)
+              const plane0: number[] = [];
+              const plane1: number[] = [];
+              let prev = 0;
               for (let x = 0; x < width; x++) {
                 const h = floatToHalf(channelValues[x]!);
-                plane0.push((h >> 8) & 0xff); // MSB
-                plane1.push(h & 0xff); // LSB
+                rawBytes.push(h & 0xff, (h >> 8) & 0xff);
+                const diff = (h - prev) & 0xffff;
+                prev = h;
+                plane0.push((diff >> 8) & 0xff);
+                plane1.push(diff & 0xff);
               }
               bytePlaneChunks.push(...plane0, ...plane1);
             }
           }
         }
 
-        // Delta encode
-        const deltaEncoded = new Uint8Array(bytePlaneChunks.length);
-        deltaEncoded[0] = bytePlaneChunks[0]!;
-        for (let i = 1; i < bytePlaneChunks.length; i++) {
-          deltaEncoded[i] = (bytePlaneChunks[i]! - bytePlaneChunks[i - 1]!) & 0xff;
-        }
+        const deltaEncoded = new Uint8Array(bytePlaneChunks);
 
         // zlib deflate
         const compressed = await deflateCompress(deltaEncoded);
-        compressedBlocks.push(compressed);
+        compressedBlocks.push(compressed.length < rawBytes.length ? compressed : new Uint8Array(rawBytes));
       }
 
       // Calculate offset table
@@ -1495,14 +1495,14 @@ describe('EXRDecoder', () => {
  */
 function createMalformedEXRWithDimensions(xMin: number, yMin: number, xMax: number, yMax: number): ArrayBuffer {
   const parts: Uint8Array[] = [];
-  let offset = 0;
+  let _offset = 0;
 
   function writeUint32(value: number): void {
     const buf = new Uint8Array(4);
     const view = new DataView(buf.buffer);
     view.setUint32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   function writeInt32(value: number): void {
@@ -1510,12 +1510,12 @@ function createMalformedEXRWithDimensions(xMin: number, yMin: number, xMax: numb
     const view = new DataView(buf.buffer);
     view.setInt32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   function writeUint8(value: number): void {
     parts.push(new Uint8Array([value]));
-    offset += 1;
+    _offset += 1;
   }
 
   function writeString(str: string): void {
@@ -1523,7 +1523,7 @@ function createMalformedEXRWithDimensions(xMin: number, yMin: number, xMax: numb
     const bytes = encoder.encode(str);
     parts.push(bytes);
     parts.push(new Uint8Array([0]));
-    offset += bytes.length + 1;
+    _offset += bytes.length + 1;
   }
 
   function writeFloat32(value: number): void {
@@ -1531,7 +1531,7 @@ function createMalformedEXRWithDimensions(xMin: number, yMin: number, xMax: numb
     const view = new DataView(buf.buffer);
     view.setFloat32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   // Magic number
@@ -1546,8 +1546,9 @@ function createMalformedEXRWithDimensions(xMin: number, yMin: number, xMax: numb
   writeString('R');
   writeInt32(EXRPixelType.HALF);
   writeUint8(0);
-  parts.push(new Uint8Array([0, 0, 0]));
-  offset += 3;
+  writeUint8(0);
+  writeUint8(0);
+  writeUint8(0);
   writeInt32(1);
   writeInt32(1);
   writeUint8(0);
@@ -1606,14 +1607,14 @@ function createMalformedEXRWithDimensions(xMin: number, yMin: number, xMax: numb
  */
 function createEXRWithoutAttribute(skipAttribute: string): ArrayBuffer {
   const parts: Uint8Array[] = [];
-  let offset = 0;
+  let _offset = 0;
 
   function writeUint32(value: number): void {
     const buf = new Uint8Array(4);
     const view = new DataView(buf.buffer);
     view.setUint32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   function writeInt32(value: number): void {
@@ -1621,12 +1622,12 @@ function createEXRWithoutAttribute(skipAttribute: string): ArrayBuffer {
     const view = new DataView(buf.buffer);
     view.setInt32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   function writeUint8(value: number): void {
     parts.push(new Uint8Array([value]));
-    offset += 1;
+    _offset += 1;
   }
 
   function writeString(str: string): void {
@@ -1634,7 +1635,7 @@ function createEXRWithoutAttribute(skipAttribute: string): ArrayBuffer {
     const bytes = encoder.encode(str);
     parts.push(bytes);
     parts.push(new Uint8Array([0]));
-    offset += bytes.length + 1;
+    _offset += bytes.length + 1;
   }
 
   function writeFloat32(value: number): void {
@@ -1642,7 +1643,7 @@ function createEXRWithoutAttribute(skipAttribute: string): ArrayBuffer {
     const view = new DataView(buf.buffer);
     view.setFloat32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   // Magic number
@@ -1658,8 +1659,9 @@ function createEXRWithoutAttribute(skipAttribute: string): ArrayBuffer {
     writeString('R');
     writeInt32(EXRPixelType.HALF);
     writeUint8(0);
-    parts.push(new Uint8Array([0, 0, 0]));
-    offset += 3;
+    writeUint8(0);
+    writeUint8(0);
+    writeUint8(0);
     writeInt32(1);
     writeInt32(1);
     writeUint8(0);
@@ -1723,14 +1725,14 @@ function createEXRWithoutAttribute(skipAttribute: string): ArrayBuffer {
  */
 function createTestEXRWithUINT(): ArrayBuffer {
   const parts: Uint8Array[] = [];
-  let offset = 0;
+  let _offset = 0;
 
   function writeUint32(value: number): void {
     const buf = new Uint8Array(4);
     const view = new DataView(buf.buffer);
     view.setUint32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   function writeInt32(value: number): void {
@@ -1738,12 +1740,12 @@ function createTestEXRWithUINT(): ArrayBuffer {
     const view = new DataView(buf.buffer);
     view.setInt32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   function writeUint8(value: number): void {
     parts.push(new Uint8Array([value]));
-    offset += 1;
+    _offset += 1;
   }
 
   function writeString(str: string): void {
@@ -1751,7 +1753,7 @@ function createTestEXRWithUINT(): ArrayBuffer {
     const bytes = encoder.encode(str);
     parts.push(bytes);
     parts.push(new Uint8Array([0]));
-    offset += bytes.length + 1;
+    _offset += bytes.length + 1;
   }
 
   function writeFloat32(value: number): void {
@@ -1759,7 +1761,7 @@ function createTestEXRWithUINT(): ArrayBuffer {
     const view = new DataView(buf.buffer);
     view.setFloat32(0, value, true);
     parts.push(buf);
-    offset += 4;
+    _offset += 4;
   }
 
   // Magic number
@@ -1774,8 +1776,9 @@ function createTestEXRWithUINT(): ArrayBuffer {
   writeString('R');
   writeInt32(EXRPixelType.UINT); // UINT type (0) - not supported
   writeUint8(0);
-  parts.push(new Uint8Array([0, 0, 0]));
-  offset += 3;
+  writeUint8(0);
+  writeUint8(0);
+  writeUint8(0);
   writeInt32(1);
   writeInt32(1);
   writeUint8(0);
@@ -5563,35 +5566,35 @@ describe('EXR Tiled Image Support', () => {
     it('EXR-DEEP010: should reject deeptile type', async () => {
       // Create a buffer that looks like a deeptile EXR
       const parts: Uint8Array[] = [];
-      let offset = 0;
+      let _offset = 0;
 
       function writeUint32(value: number): void {
         const buf = new Uint8Array(4);
         new DataView(buf.buffer).setUint32(0, value, true);
         parts.push(buf);
-        offset += 4;
+        _offset += 4;
       }
       function writeInt32(value: number): void {
         const buf = new Uint8Array(4);
         new DataView(buf.buffer).setInt32(0, value, true);
         parts.push(buf);
-        offset += 4;
+        _offset += 4;
       }
       function writeUint8(value: number): void {
         parts.push(new Uint8Array([value]));
-        offset += 1;
+        _offset += 1;
       }
       function writeString(str: string): void {
         const bytes = new TextEncoder().encode(str);
         parts.push(bytes);
         parts.push(new Uint8Array([0]));
-        offset += bytes.length + 1;
+        _offset += bytes.length + 1;
       }
       function writeFloat32(value: number): void {
         const buf = new Uint8Array(4);
         new DataView(buf.buffer).setFloat32(0, value, true);
         parts.push(buf);
-        offset += 4;
+        _offset += 4;
       }
 
       writeUint32(EXR_MAGIC);
@@ -5604,7 +5607,7 @@ describe('EXR Tiled Image Support', () => {
       writeInt32(typeStr.length + 1);
       parts.push(new TextEncoder().encode(typeStr));
       parts.push(new Uint8Array([0]));
-      offset += typeStr.length + 1;
+      _offset += typeStr.length + 1;
 
       // tiles attribute
       writeString('tiles');
@@ -5622,8 +5625,9 @@ describe('EXR Tiled Image Support', () => {
       writeString('R');
       writeInt32(EXRPixelType.HALF);
       writeUint8(0);
-      parts.push(new Uint8Array([0, 0, 0]));
-      offset += 3;
+      writeUint8(0);
+      writeUint8(0);
+      writeUint8(0);
       writeInt32(1);
       writeInt32(1);
       writeUint8(0);

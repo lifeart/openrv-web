@@ -102,6 +102,7 @@ import {
   drawBackgroundPattern,
 } from './BackgroundPatternControl';
 import { FrameInterpolator } from '../../utils/media/FrameInterpolator';
+import { PlaylistTransitionEngine, type PlaylistTransitionProvider } from './ViewerPlaylistTransition';
 import { isViewerContentElement as isViewerContentElementUtil, getPixelCoordinates } from './ViewerInteraction';
 import {
   drawWithTransform as drawWithTransformUtil,
@@ -338,6 +339,10 @@ export class Viewer implements ViewerAccessor {
   // Stack/composite state
   private stackLayers: StackLayer[] = [];
   private stackEnabled = false;
+
+  // Playlist transition blending (outgoing clip under the incoming one)
+  private playlistTransitionProvider: PlaylistTransitionProvider | null = null;
+  private playlistTransitionEngine: PlaylistTransitionEngine | null = null;
 
   // Channel isolation state
   private channelMode: ChannelMode = 'rgb';
@@ -1157,6 +1162,14 @@ export class Viewer implements ViewerAccessor {
   }
 
   /**
+   * Set a callback invoked when an `.otio` file is dropped onto the viewer.
+   * Wired by AppPlaybackWiring to route to the playlist OTIO import.
+   */
+  setOnOTIOFileDrop(cb: ((file: File) => void) | null): void {
+    this.inputHandler.onOTIOFileDrop = cb;
+  }
+
+  /**
    * Set a callback invoked before media files are loaded via drag-and-drop.
    * Used to create auto-checkpoints before destructive media load operations.
    */
@@ -1599,7 +1612,12 @@ export class Viewer implements ViewerAccessor {
               }
             })
             .catch((err) => log.warn('Failed to load hold frame:', err));
-          element = this.session.getSequenceFrameSync(currentFrame) ?? source.element;
+          // Never fall back to source.element: it is frame 0's bitmap, which is
+          // closed once released from the cache window.
+          element =
+            this.session.getSequenceFrameSync(currentFrame) ??
+            this.session.getNearestLoadedSequenceFrameSync?.(currentFrame) ??
+            undefined;
         }
       } else {
         const frameImage = this.session.getSequenceFrameSync();
@@ -1615,8 +1633,10 @@ export class Viewer implements ViewerAccessor {
               }
             })
             .catch((err) => log.warn('Failed to load sequence frame:', err));
-          // Use first frame as fallback if available
-          element = source.element;
+          // Fall back to the nearest still-loaded frame (or nothing). Not
+          // source.element: that is frame 0's bitmap, which is closed once
+          // released from the cache window and must not be drawn.
+          element = this.session.getNearestLoadedSequenceFrameSync?.(currentFrame) ?? undefined;
         }
       }
     } else if (source?.type === 'video' && this.session.isUsingMediabunny()) {
@@ -1888,6 +1908,18 @@ export class Viewer implements ViewerAccessor {
       }
     }
 
+    // Playlist transition overlap: blend the outgoing clip's frame with the
+    // current (incoming) frame. The blended canvas replaces the frame element
+    // so it flows through both the SDR WebGL path and the 2D canvas path.
+    let playlistTransitionActive = false;
+    if (element && !isCurrentHDR && this.playlistTransitionProvider) {
+      const blended = this.composePlaylistTransition(element, source.width, source.height);
+      if (blended) {
+        element = blended;
+        playlistTransitionActive = true;
+      }
+    }
+
     // SDR WebGL rendering path: route SDR sources through GPU shader pipeline
     // when GPU-supported effects are active and no CPU-only effects need the 2D path.
     // Conditions: element is available, not HDR, GPU effects active, no CPU-only effects,
@@ -1977,7 +2009,13 @@ export class Viewer implements ViewerAccessor {
     }
 
     // Try prerendered cache first during playback for smooth performance with effects
-    if (this.session.isPlaying && this.prerenderBuffer && !isNoiseReductionActive(this.noiseReductionParams)) {
+    // (The prerender cache holds unblended frames, so skip it during a transition.)
+    if (
+      this.session.isPlaying &&
+      this.prerenderBuffer &&
+      !playlistTransitionActive &&
+      !isNoiseReductionActive(this.noiseReductionParams)
+    ) {
       const currentFrame = this.session.currentFrame;
       // Note: preloadAround() is already called from the frameChanged handler,
       // so we don't duplicate it here. Only queuePriorityFrame() is called on cache miss.
@@ -2769,10 +2807,10 @@ export class Viewer implements ViewerAccessor {
       gpuChain.setDisplayLUTIntensity(state.displayLUT.intensity);
     }
 
-    if (gpuChain && hasPreCache3D && preCache!.intensity > 0) {
+    if (gpuChain && preCache && hasPreCache3D && preCache.intensity > 0) {
       this.pipelineSingleLUTActive = true;
-      this.colorPipeline.setLUT(preCache!.lutData);
-      this.colorPipeline.setLUTIntensity(preCache!.intensity);
+      this.colorPipeline.setLUT(preCache.lutData);
+      this.colorPipeline.setLUTIntensity(preCache.intensity);
       if (this.lutIndicator) {
         this.lutIndicator.style.display = 'block';
         this.lutIndicator.textContent = preCache?.lutName ? `LUT: ${preCache.lutName}` : 'LUT';
@@ -3695,6 +3733,35 @@ export class Viewer implements ViewerAccessor {
   }
 
   /**
+   * Install (or clear with null) the provider describing the playlist
+   * transition blend for the frame being rendered.
+   */
+  setPlaylistTransitionProvider(provider: PlaylistTransitionProvider | null): void {
+    this.playlistTransitionProvider = provider;
+    if (!provider) {
+      this.playlistTransitionEngine?.dispose();
+      this.playlistTransitionEngine = null;
+    }
+  }
+
+  /**
+   * Blend the current frame with the outgoing playlist clip when the playhead
+   * is inside a transition overlap. Returns null when no blend applies.
+   */
+  private composePlaylistTransition(
+    incoming: CanvasImageSource,
+    width: number,
+    height: number,
+  ): HTMLCanvasElement | null {
+    const transition = this.playlistTransitionProvider?.() ?? null;
+    if (!transition) return null;
+    this.playlistTransitionEngine ??= new PlaylistTransitionEngine();
+    return this.playlistTransitionEngine.compose(this.session, transition, incoming, width, height, () =>
+      this.refresh(),
+    );
+  }
+
+  /**
    * Render a specific frame to a canvas (for sequence export)
    * Seeks to the frame, renders, and returns the canvas
    */
@@ -3929,6 +3996,9 @@ export class Viewer implements ViewerAccessor {
 
     // Cleanup WebGL/HDR rendering manager (renderer, worker proxy, GL canvas)
     this.glRendererManager.dispose();
+
+    // Cleanup playlist transition blending
+    this.setPlaylistTransitionProvider(null);
 
     // Cleanup video frame fetch tracker
     this.frameFetchTracker.dispose();

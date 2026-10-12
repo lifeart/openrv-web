@@ -986,7 +986,9 @@ export class Timeline {
     if (this.playlistManager?.isEnabled() && this.transitionManager) {
       const clips = this.playlistManager.getClips();
       const transitions = this.transitionManager.getTransitions();
-      const adjustedClips = this.transitionManager.calculateOverlapAdjustedFrames(clips);
+      // PlaylistManager clips already carry the overlap- and gap-adjusted layout;
+      // re-deriving it here would drop OTIO gaps.
+      const adjustedClips = clips;
       const totalDuration = this.playlistManager.getTotalDuration();
 
       if (totalDuration > 1) {
@@ -996,11 +998,16 @@ export class Timeline {
           const transition = transitions[i];
           if (!transition || transition.type === 'cut') continue;
 
+          const outgoingClip = adjustedClips[i];
           const incomingClip = adjustedClips[i + 1];
-          if (!incomingClip) continue;
+          if (!outgoingClip || !incomingClip) continue;
 
           const transStart = incomingClip.globalStartFrame;
-          const transEnd = transStart + transition.durationFrames - 1;
+          const transEnd = Math.min(
+            transStart + transition.durationFrames - 1,
+            outgoingClip.globalStartFrame + outgoingClip.duration - 1,
+          );
+          if (transEnd < transStart) continue;
           const x1 = transFrameToX(transStart);
           const x2 = transFrameToX(transEnd);
 

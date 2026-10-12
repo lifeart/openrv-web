@@ -4,6 +4,10 @@
  * Supports:
  * - Half-float (16-bit) and float (32-bit) pixel data
  * - RGBA, RGB, and Y (grayscale) channels
+ * - Luminance/chroma (Y, RY, BY) images, converted to RGB
+ * - Subsampled channels (xSampling/ySampling > 1, scanline images), upsampled
+ *   with nearest-neighbour replication
+ * - INCREASING_Y and DECREASING_Y line order (chunks are placed by their own y)
  * - Scanline and ONE_LEVEL tiled images
  * - Deep scanline images (deepscanline) with front-to-back Over compositing
  * - Uncompressed (NONE), RLE, ZIP, ZIPS, PIZ, PXR24, DWAA, and DWAB compression
@@ -14,6 +18,9 @@
  * - MIPMAP and RIPMAP tiled images
  * - Deep tiled images (deeptile)
  * - B44, B44A compression
+ * - DWAA/DWAB: the DWA codec does not implement the full OpenEXR DWA format
+ *   (channel rules, CSC, non-linear quantisation tables), so lossy DWA blocks
+ *   from real files fail to decode. Blocks stored uncompressed still work.
  *
  * Based on the OpenEXR file format specification.
  */
@@ -782,66 +789,148 @@ function getLinesPerBlock(compression: EXRCompression): number {
   }
 }
 
-/**
- * Decompress data based on compression type
- */
-async function decompressData(
-  compressedData: Uint8Array,
-  compression: EXRCompression,
-  uncompressedSize: number,
-  pizContext?: { width: number; numChannels: number; numLines: number; channelSizes: number[] },
-): Promise<Uint8Array> {
-  switch (compression) {
-    case EXRCompression.NONE:
-      return compressedData;
+/** Floor division (OpenEXR `divp`). */
+function divp(a: number, b: number): number {
+  return Math.floor(a / b);
+}
 
+/** Modulo with the sign of the divisor (OpenEXR `modp`). */
+function modp(a: number, b: number): number {
+  return ((a % b) + b) % b;
+}
+
+/** Number of samples of a channel with sampling `s` in the inclusive range [a, b] (OpenEXR `numSamples`). */
+function numSamples(s: number, a: number, b: number): number {
+  const a1 = divp(a, s);
+  const b1 = divp(b, s);
+  return b1 - a1 + (a1 * s < a ? 0 : 1);
+}
+
+function pixelTypeSize(pixelType: EXRPixelType): number {
+  return pixelType === EXRPixelType.HALF ? 2 : 4;
+}
+
+/** Per-channel layout of one decoded block (scanline block or tile). */
+interface BlockChannel {
+  pixelType: EXRPixelType;
+  /** Bytes per sample */
+  size: number;
+  xSampling: number;
+  ySampling: number;
+  /** Samples per line inside the block */
+  nx: number;
+}
+
+/** Geometry of one block, used by all codecs to size and lay out decompressed data. */
+interface BlockContext {
+  /** Absolute x of the first pixel column */
+  xMin: number;
+  /** Pixel width of the block */
+  width: number;
+  /** Absolute y of the first line */
+  y0: number;
+  /** Number of lines in the block */
+  numLines: number;
+  channels: BlockChannel[];
+}
+
+function makeBlockContext(
+  channels: EXRChannel[],
+  xMin: number,
+  width: number,
+  y0: number,
+  numLines: number,
+  ignoreSampling = false,
+): BlockContext {
+  return {
+    xMin,
+    width,
+    y0,
+    numLines,
+    channels: channels.map((ch) => {
+      const xSampling = ignoreSampling ? 1 : ch.xSampling;
+      const ySampling = ignoreSampling ? 1 : ch.ySampling;
+      return {
+        pixelType: ch.pixelType,
+        size: pixelTypeSize(ch.pixelType),
+        xSampling,
+        ySampling,
+        nx: numSamples(xSampling, xMin, xMin + width - 1),
+      };
+    }),
+  };
+}
+
+/** Uncompressed byte size of a block in standard EXR scanline layout. */
+function blockByteSize(ctx: BlockContext): number {
+  let total = 0;
+  for (let line = 0; line < ctx.numLines; line++) {
+    const y = ctx.y0 + line;
+    for (const ch of ctx.channels) {
+      if (modp(y, ch.ySampling) === 0) total += ch.nx * ch.size;
+    }
+  }
+  return total;
+}
+
+function isSubsampled(ctx: BlockContext): boolean {
+  return ctx.channels.some((ch) => ch.xSampling !== 1 || ch.ySampling !== 1);
+}
+
+/**
+ * Decompress one block (scanline block or tile) into standard EXR scanline layout:
+ * for each line, for each channel present on that line, `nx` little-endian samples.
+ *
+ * Per OpenEXR, a chunk whose packed size is not smaller than its unpacked
+ * size is stored uncompressed regardless of the compression attribute.
+ */
+async function decompressBlock(
+  packedData: Uint8Array,
+  compression: EXRCompression,
+  ctx: BlockContext,
+): Promise<Uint8Array> {
+  const uncompressedSize = blockByteSize(ctx);
+  if (compression === EXRCompression.NONE || packedData.length >= uncompressedSize) {
+    return packedData;
+  }
+
+  switch (compression) {
     case EXRCompression.ZIPS:
     case EXRCompression.ZIP:
-      return await decompressZlib(compressedData, uncompressedSize);
-
-    case EXRCompression.PIZ: {
-      if (!pizContext) {
-        throw new DecoderError('EXR', 'PIZ decompression requires channel context information');
-      }
-      return decompressPIZ(
-        compressedData,
-        uncompressedSize,
-        pizContext.width,
-        pizContext.numChannels,
-        pizContext.numLines,
-        pizContext.channelSizes,
-      );
-    }
+      return await decompressZlib(packedData, uncompressedSize);
 
     case EXRCompression.RLE:
-      return decompressRLE(compressedData, uncompressedSize);
+      return decompressRLE(packedData, uncompressedSize);
 
-    case EXRCompression.PXR24: {
-      if (!pizContext) {
-        throw new DecoderError('EXR', 'PXR24 decompression requires channel context information');
-      }
-      return await decompressPXR24(
-        compressedData,
+    case EXRCompression.PIZ:
+      return decompressPIZ(
+        packedData,
         uncompressedSize,
-        pizContext.width,
-        pizContext.numLines,
-        pizContext.channelSizes,
+        ctx.channels.map((ch) => ({
+          size: ch.size,
+          nx: ch.nx,
+          ny: numSamples(ch.ySampling, ctx.y0, ctx.y0 + ctx.numLines - 1),
+          ySampling: ch.ySampling,
+        })),
+        ctx.y0,
+        ctx.numLines,
       );
-    }
+
+    case EXRCompression.PXR24:
+      return await decompressPXR24(packedData, uncompressedSize, ctx);
 
     case EXRCompression.DWAA:
-    case EXRCompression.DWAB: {
-      if (!pizContext) {
-        throw new DecoderError('EXR', 'DWA decompression requires channel context information');
+    case EXRCompression.DWAB:
+      if (isSubsampled(ctx)) {
+        throw new DecoderError('EXR', 'DWA compression with subsampled channels is not supported');
       }
       return decompressDWA(
-        compressedData,
+        packedData,
         uncompressedSize,
-        pizContext.width,
-        pizContext.numLines,
-        pizContext.channelSizes,
+        ctx.width,
+        ctx.numLines,
+        ctx.channels.map((ch) => ch.size),
       );
-    }
 
     default:
       throw new DecoderError('EXR', `Unsupported EXR compression: ${compression}`);
@@ -858,7 +947,8 @@ async function decompressData(
  */
 async function inflateRaw(compressedData: Uint8Array): Promise<Uint8Array> {
   // Prefer Node.js synchronous inflate to avoid DecompressionStream Z_BUF_ERROR
-  if (typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process.versions?.node) {
+  const nodeProcess = (globalThis as { process?: { versions?: { node?: string } } }).process;
+  if (nodeProcess?.versions?.node) {
     try {
       // Dynamic import to keep browser bundle clean
       const zlib = await (Function('return import("node:zlib")')() as Promise<{
@@ -906,117 +996,115 @@ async function inflateRaw(compressedData: Uint8Array): Promise<Uint8Array> {
 }
 
 /**
- * Decompress zlib/deflate data using DecompressionStream + EXR predictor
+ * Decompress ZIP/ZIPS data: inflate, then undo the EXR byte predictor and interleave.
  */
-async function decompressZlib(compressedData: Uint8Array, _uncompressedSize: number): Promise<Uint8Array> {
+async function decompressZlib(compressedData: Uint8Array, uncompressedSize: number): Promise<Uint8Array> {
   const result = await inflateRaw(compressedData);
+  if (result.length !== uncompressedSize) {
+    throw new DecoderError('EXR', `ZIP: inflated ${result.length} bytes, expected ${uncompressedSize}`);
+  }
   return reconstructPredictor(result);
 }
 
 /**
- * Reconstruct data after zip decompression (predictor/delta decoding)
+ * Undo the byte predictor and byte-interleaving applied by OpenEXR's ZIP and
+ * RLE compressors (ImfZip.cpp `reconstruct` + `interleave`):
+ *
+ * 1. Predictor: `t[i] = t[i-1] + t[i] - 128` (mod 256).
+ * 2. Interleave: the first ceil(n/2) bytes hold the even output bytes and the
+ *    remaining bytes the odd ones.
  */
 function reconstructPredictor(data: Uint8Array): Uint8Array {
-  // EXR uses a predictor to improve compression
-  // After decompression, we need to undo the prediction
-  const result = new Uint8Array(data.length);
-
-  for (let i = 0; i < data.length; i++) {
-    if (i === 0) {
-      result[i] = data[i]!;
-    } else {
-      result[i] = (data[i]! + result[i - 1]!) & 0xff;
-    }
+  const n = data.length;
+  const t = new Uint8Array(data);
+  for (let i = 1; i < n; i++) {
+    t[i] = ((t[i - 1] ?? 0) + (t[i] ?? 0) - 128) & 0xff;
   }
 
-  // Interleave reconstruction
-  const half = Math.floor(result.length / 2);
-  const final = new Uint8Array(result.length);
-
-  for (let i = 0; i < half; i++) {
-    final[i * 2] = result[i]!;
-    final[i * 2 + 1] = result[half + i]!;
+  const out = new Uint8Array(n);
+  const half = (n + 1) >> 1;
+  let s1 = 0;
+  let s2 = half;
+  let o = 0;
+  while (o < n) {
+    out[o++] = t[s1++] ?? 0;
+    if (o < n) out[o++] = t[s2++] ?? 0;
   }
-
-  if (result.length % 2 === 1) {
-    final[final.length - 1] = result[result.length - 1]!;
-  }
-
-  return final;
+  return out;
 }
 
 /**
- * Decompress PXR24 data
+ * Decompress PXR24 data (ImfPxr24Compressor.cpp).
  *
- * PXR24 is a lossy compression for FLOAT channels (lossless for HALF):
- * 1. Inflate with zlib deflate
- * 2. Undo delta encoding (cumulative sum per byte plane)
- * 3. Deinterleave byte planes back into pixel values
- *    - FLOAT channels: 3 stored bytes become 4 (LSB is zero, lossy truncation)
- *    - HALF channels: 2 stored bytes are reconstructed as-is
+ * After zlib inflation, each line stores, for every channel present on that
+ * line, its samples split into byte planes (most significant first). Each
+ * plane set holds deltas of the (possibly truncated) sample bit patterns:
+ *   - HALF:  2 planes (16-bit words)
+ *   - FLOAT: 3 planes (upper 24 bits; low 8 bits are lost)
+ *   - UINT:  4 planes
+ * The running sum restarts at zero for every channel on every line.
  */
 async function decompressPXR24(
   compressedData: Uint8Array,
   uncompressedSize: number,
-  width: number,
-  numLines: number,
-  channelSizes: number[],
+  ctx: BlockContext,
 ): Promise<Uint8Array> {
-  // Step 1: Inflate compressed data — reuse the shared decompressZlib helper
-  // (skip the EXR predictor reconstruction since PXR24 has its own byte rearrangement)
   const inflated = await inflateRaw(compressedData);
-
-  // Step 2: Undo delta encoding (cumulative sum)
-  // PXR24 applies delta encoding across the entire inflated buffer
-  // as a single byte stream (not split per channel)
-  for (let i = 1; i < inflated.length; i++) {
-    inflated[i] = (inflated[i]! + inflated[i - 1]!) & 0xff;
-  }
-
-  // Step 3: Deinterleave byte planes into pixel data
-  // The inflated data is organized per-scanline, per-channel, with byte planes
-  // For each scanline and channel:
-  //   FLOAT (4 bytes/pixel): stored as 3 byte planes of width bytes each (MSB, mid, low; LSB=0)
-  //   HALF (2 bytes/pixel): stored as 2 byte planes of width bytes each
   const result = new Uint8Array(uncompressedSize);
-  let srcOffset = 0;
-  let dstOffset = 0;
+  const out = new DataView(result.buffer);
 
-  for (let line = 0; line < numLines; line++) {
-    for (const channelSize of channelSizes) {
-      if (channelSize === 4) {
-        // FLOAT channel: 3 byte planes stored, reconstruct 4 bytes per pixel
-        const plane0 = srcOffset; // byte 0 (MSB) of each pixel
-        const plane1 = srcOffset + width; // byte 1 of each pixel
-        const plane2 = srcOffset + width * 2; // byte 2 of each pixel
-        // byte 3 (LSB) is always 0 (truncated)
-
-        for (let x = 0; x < width; x++) {
-          // EXR is little-endian: byte 0 is least significant
-          // PXR24 stores: byte2 (MSB), byte1, byte0 in planes
-          // Reconstruct as little-endian float32: byte0, byte1, byte2, byte3=0
-          // The planes are ordered from most significant to least significant stored byte
-          result[dstOffset + x * 4 + 0] = 0; // LSB (truncated, always 0)
-          result[dstOffset + x * 4 + 1] = inflated[plane2 + x]!; // low stored byte
-          result[dstOffset + x * 4 + 2] = inflated[plane1 + x]!; // mid byte
-          result[dstOffset + x * 4 + 3] = inflated[plane0 + x]!; // MSB (sign+exponent+mantissa high)
+  let src = 0;
+  let dst = 0;
+  for (let line = 0; line < ctx.numLines; line++) {
+    const y = ctx.y0 + line;
+    for (const ch of ctx.channels) {
+      if (modp(y, ch.ySampling) !== 0) continue;
+      const n = ch.nx;
+      if (ch.pixelType === EXRPixelType.HALF) {
+        if (src + n * 2 > inflated.length) throw new DecoderError('EXR', 'PXR24: truncated data');
+        const p0 = src;
+        const p1 = src + n;
+        src += n * 2;
+        let pixel = 0;
+        for (let j = 0; j < n; j++) {
+          const diff = ((inflated[p0 + j] ?? 0) << 8) | (inflated[p1 + j] ?? 0);
+          pixel = (pixel + diff) & 0xffff;
+          out.setUint16(dst, pixel, true);
+          dst += 2;
         }
-
-        srcOffset += width * 3; // 3 byte planes consumed
-        dstOffset += width * 4; // 4 bytes per pixel produced
+      } else if (ch.pixelType === EXRPixelType.FLOAT) {
+        if (src + n * 3 > inflated.length) throw new DecoderError('EXR', 'PXR24: truncated data');
+        const p0 = src;
+        const p1 = src + n;
+        const p2 = src + n * 2;
+        src += n * 3;
+        let pixel = 0;
+        for (let j = 0; j < n; j++) {
+          const diff =
+            (((inflated[p0 + j] ?? 0) << 24) | ((inflated[p1 + j] ?? 0) << 16) | ((inflated[p2 + j] ?? 0) << 8)) >>> 0;
+          pixel = (pixel + diff) >>> 0;
+          out.setUint32(dst, pixel, true);
+          dst += 4;
+        }
       } else {
-        // HALF channel: 2 byte planes stored, reconstruct 2 bytes per pixel
-        const plane0 = srcOffset; // byte 0 (MSB) of each pixel
-        const plane1 = srcOffset + width; // byte 1 (LSB) of each pixel
-
-        for (let x = 0; x < width; x++) {
-          // Little-endian: byte 0 is LSB, byte 1 is MSB
-          result[dstOffset + x * 2 + 0] = inflated[plane1 + x]!; // LSB
-          result[dstOffset + x * 2 + 1] = inflated[plane0 + x]!; // MSB
+        if (src + n * 4 > inflated.length) throw new DecoderError('EXR', 'PXR24: truncated data');
+        const p0 = src;
+        const p1 = src + n;
+        const p2 = src + n * 2;
+        const p3 = src + n * 3;
+        src += n * 4;
+        let pixel = 0;
+        for (let j = 0; j < n; j++) {
+          const diff =
+            (((inflated[p0 + j] ?? 0) << 24) |
+              ((inflated[p1 + j] ?? 0) << 16) |
+              ((inflated[p2 + j] ?? 0) << 8) |
+              (inflated[p3 + j] ?? 0)) >>>
+            0;
+          pixel = (pixel + diff) >>> 0;
+          out.setUint32(dst, pixel, true);
+          dst += 4;
         }
-
-        srcOffset += width * 2; // 2 byte planes consumed
-        dstOffset += width * 2; // 2 bytes per pixel produced
       }
     }
   }
@@ -1025,41 +1113,249 @@ async function decompressPXR24(
 }
 
 /**
- * Decompress RLE data
+ * Decompress RLE data (ImfRle.cpp `rleUncompress`), then undo the byte
+ * predictor/interleave like ZIP. A negative (signed) count byte introduces
+ * `-count` literal bytes; a non-negative count repeats the next byte
+ * `count + 1` times.
  */
 function decompressRLE(compressedData: Uint8Array, uncompressedSize: number): Uint8Array {
-  const result = new Uint8Array(uncompressedSize);
+  const raw = new Uint8Array(uncompressedSize);
   let srcPos = 0;
   let dstPos = 0;
 
-  while (srcPos < compressedData.length && dstPos < uncompressedSize) {
-    const count = compressedData[srcPos]!;
-    srcPos++;
-
-    if (count > 127) {
-      // Run of same value
-      const runLength = count - 127;
-      if (srcPos >= compressedData.length) {
-        // Corrupted RLE data - missing value byte
-        break;
+  while (srcPos < compressedData.length) {
+    const count = ((compressedData[srcPos++] ?? 0) << 24) >> 24; // signed byte
+    if (count < 0) {
+      const n = -count;
+      if (dstPos + n > uncompressedSize || srcPos + n > compressedData.length) {
+        throw new DecoderError('EXR', 'RLE: literal run overflows block');
       }
-      const value = compressedData[srcPos]!;
-      srcPos++;
-
-      for (let i = 0; i < runLength && dstPos < uncompressedSize; i++) {
-        result[dstPos++] = value;
-      }
+      raw.set(compressedData.subarray(srcPos, srcPos + n), dstPos);
+      srcPos += n;
+      dstPos += n;
     } else {
-      // Literal run
-      const runLength = count + 1;
-
-      for (let i = 0; i < runLength && dstPos < uncompressedSize && srcPos < compressedData.length; i++) {
-        result[dstPos++] = compressedData[srcPos++]!;
+      const n = count + 1;
+      if (dstPos + n > uncompressedSize || srcPos >= compressedData.length) {
+        throw new DecoderError('EXR', 'RLE: repeat run overflows block');
       }
+      raw.fill(compressedData[srcPos++] ?? 0, dstPos, dstPos + n);
+      dstPos += n;
+    }
+  }
+
+  if (dstPos !== uncompressedSize) {
+    throw new DecoderError('EXR', `RLE: decoded ${dstPos} bytes, expected ${uncompressedSize}`);
+  }
+  return reconstructPredictor(raw);
+}
+
+/** Destination for one source channel: `buf[pixelIndex * stride + offset]`. */
+interface ChannelTarget {
+  buf: Float32Array;
+  stride: number;
+  offset: number;
+}
+
+/** Output buffers and channel routing shared by the scanline decoders. */
+interface ScanlineOutput {
+  width: number;
+  height: number;
+  output: Float32Array;
+  targets: Map<string, ChannelTarget[]>;
+  /** Present when the image is luminance/chroma (Y, RY, BY) and is converted to RGB. */
+  chroma?: Float32Array;
+  lumaWeights?: [number, number, number];
+}
+
+const OUTPUT_CHANNEL_INDEX: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
+
+/**
+ * Luminance weights (the Y row of the RGB->XYZ matrix) for the given
+ * chromaticities, as OpenEXR's `computeYw`. Defaults to Rec.709 primaries.
+ */
+export function computeLuminanceWeights(chromaticities?: Float32Array): [number, number, number] {
+  const c = chromaticities && chromaticities.length >= 8 ? chromaticities : REC709_CHROMATICITIES;
+  const rx = c[0] ?? 0;
+  const ry = c[1] ?? 0;
+  const gx = c[2] ?? 0;
+  const gy = c[3] ?? 0;
+  const bx = c[4] ?? 0;
+  const by = c[5] ?? 0;
+  const wx = c[6] ?? 0;
+  const wy = c[7] ?? 0;
+  const fallback: [number, number, number] = [0.2126, 0.7152, 0.0722];
+  if (!ry || !gy || !by || !wy) return fallback;
+  // Columns: XYZ of each primary scaled to Y = 1; solve M * s = W (white XYZ, Y = 1)
+  type V3 = [number, number, number];
+  const col: [V3, V3, V3] = [
+    [rx / ry, 1, (1 - rx - ry) / ry],
+    [gx / gy, 1, (1 - gx - gy) / gy],
+    [bx / by, 1, (1 - bx - by) / by],
+  ];
+  const w: V3 = [wx / wy, 1, (1 - wx - wy) / wy];
+  const det = (a: V3, b: V3, d: V3): number =>
+    a[0] * (b[1] * d[2] - b[2] * d[1]) - b[0] * (a[1] * d[2] - a[2] * d[1]) + d[0] * (a[1] * b[2] - a[2] * b[1]);
+  const D = det(col[0], col[1], col[2]);
+  if (!D) return fallback;
+  const s0 = det(w, col[1], col[2]) / D;
+  const s1 = det(col[0], w, col[2]) / D;
+  const s2 = det(col[0], col[1], w) / D;
+  // Y of each primary is s_i (Y row of the matrix is all ones times s)
+  const sum = s0 + s1 + s2;
+  if (!sum) return fallback;
+  return [s0 / sum, s1 / sum, s2 / sum];
+}
+
+const REC709_CHROMATICITIES = new Float32Array([0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]);
+
+function createScanlineOutput(header: EXRHeader, outputMapping: Map<string, string>): ScanlineOutput {
+  const dataWindow = header.dataWindow;
+  const width = dataWindow.xMax - dataWindow.xMin + 1;
+  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  const output = new Float32Array(width * height * 4);
+
+  if (!outputMapping.has('A')) {
+    for (let i = 3; i < output.length; i += 4) output[i] = 1.0;
+  }
+
+  const targets = new Map<string, ChannelTarget[]>();
+  const addTarget = (name: string, t: ChannelTarget): void => {
+    const list = targets.get(name) ?? [];
+    list.push(t);
+    targets.set(name, list);
+  };
+  for (const [outputCh, sourceCh] of outputMapping.entries()) {
+    const idx = OUTPUT_CHANNEL_INDEX[outputCh];
+    if (idx !== undefined) addTarget(sourceCh, { buf: output, stride: 4, offset: idx });
+  }
+
+  const result: ScanlineOutput = { width, height, output, targets };
+
+  // Luminance/chroma: R, G and B all come from the same "<prefix>Y" channel and
+  // "<prefix>RY"/"<prefix>BY" exist -> decode chroma too and convert to RGB.
+  const rSrc = outputMapping.get('R');
+  if (rSrc && rSrc === outputMapping.get('G') && rSrc === outputMapping.get('B') && /(^|\.)Y$/.test(rSrc)) {
+    const prefix = rSrc.slice(0, -1);
+    const names = new Set(header.channels.filter((ch) => ch.pixelType !== EXRPixelType.UINT).map((ch) => ch.name));
+    if (names.has(prefix + 'RY') && names.has(prefix + 'BY')) {
+      const chroma = new Float32Array(width * height * 2);
+      addTarget(prefix + 'RY', { buf: chroma, stride: 2, offset: 0 });
+      addTarget(prefix + 'BY', { buf: chroma, stride: 2, offset: 1 });
+      result.chroma = chroma;
+      result.lumaWeights = computeLuminanceWeights(header.chromaticities);
     }
   }
 
   return result;
+}
+
+/** Convert decoded Y/RY/BY to RGB in place (OpenEXR RgbaYca::YCAtoRGBA). */
+function finishScanlineOutput(out: ScanlineOutput): Float32Array {
+  const { output, chroma, lumaWeights } = out;
+  if (chroma && lumaWeights) {
+    const [yr, yg, yb] = lumaWeights;
+    const n = out.width * out.height;
+    for (let i = 0; i < n; i++) {
+      const Y = output[i * 4] ?? 0;
+      const ry = chroma[i * 2] ?? 0;
+      const by = chroma[i * 2 + 1] ?? 0;
+      if (ry === 0 && by === 0) {
+        output[i * 4] = Y;
+        output[i * 4 + 1] = Y;
+        output[i * 4 + 2] = Y;
+        continue;
+      }
+      const r = (ry + 1) * Y;
+      const b = (by + 1) * Y;
+      const g = (Y - r * yr - b * yb) / yg;
+      output[i * 4] = r;
+      output[i * 4 + 1] = g;
+      output[i * 4 + 2] = b;
+    }
+  }
+  return output;
+}
+
+/**
+ * Write one decompressed scanline block into the output buffers.
+ * Subsampled channels are upsampled with nearest-neighbour replication.
+ */
+function writeScanlineBlock(unpacked: Uint8Array, header: EXRHeader, ctx: BlockContext, out: ScanlineOutput): void {
+  const { xMin, yMin, xMax, yMax } = header.dataWindow;
+  const width = out.width;
+  const view = new DataView(unpacked.buffer, unpacked.byteOffset, unpacked.byteLength);
+  let pos = 0;
+
+  for (let line = 0; line < ctx.numLines; line++) {
+    const y = ctx.y0 + line;
+    for (let c = 0; c < ctx.channels.length; c++) {
+      const ch = ctx.channels[c];
+      const name = header.channels[c]?.name;
+      if (!ch || modp(y, ch.ySampling) !== 0) continue;
+      const lineBytes = ch.nx * ch.size;
+      const targets = name !== undefined ? out.targets.get(name) : undefined;
+
+      if (
+        targets &&
+        ch.pixelType !== EXRPixelType.UINT &&
+        pos + lineBytes <= unpacked.length &&
+        y >= yMin &&
+        y <= yMax
+      ) {
+        // Rows covered by this sample line
+        const firstSampleY = divp(yMin + ch.ySampling - 1, ch.ySampling) * ch.ySampling;
+        const rowStart = y === firstSampleY ? yMin : y;
+        const rowEnd = Math.min(y + ch.ySampling - 1, yMax);
+        const firstSampleX = divp(xMin + ch.xSampling - 1, ch.xSampling) * ch.xSampling;
+
+        for (let i = 0; i < ch.nx; i++) {
+          const off = pos + i * ch.size;
+          const value = ch.size === 2 ? halfToFloat(view.getUint16(off, true)) : view.getFloat32(off, true);
+          const sx = firstSampleX + i * ch.xSampling;
+          const colStart = i === 0 ? xMin : sx;
+          const colEnd = Math.min(sx + ch.xSampling - 1, xMax);
+          for (let oy = rowStart; oy <= rowEnd; oy++) {
+            const rowBase = (oy - yMin) * width;
+            for (let ox = colStart; ox <= colEnd; ox++) {
+              const pixel = rowBase + (ox - xMin);
+              for (const t of targets) t.buf[pixel * t.stride + t.offset] = value;
+            }
+          }
+        }
+      }
+      pos += lineBytes;
+    }
+  }
+}
+
+/**
+ * Decode one scanline chunk (y + packed data) into the output.
+ */
+async function decodeScanlineChunk(
+  header: EXRHeader,
+  y: number,
+  packedData: Uint8Array,
+  out: ScanlineOutput,
+): Promise<void> {
+  const { xMin, xMax, yMin, yMax } = header.dataWindow;
+  const linesPerBlock = getLinesPerBlock(header.compression);
+  // The chunk's own y coordinate identifies its lines; never assume file order
+  // (DECREASING_Y files store the last block first).
+  if (y < yMin || y > yMax) {
+    throw new DecoderError('EXR', `Scanline chunk y=${y} outside data window [${yMin}, ${yMax}]`);
+  }
+  const numLines = Math.min(linesPerBlock, yMax - y + 1);
+  const ctx = makeBlockContext(header.channels, xMin, xMax - xMin + 1, y, numLines);
+  const unpacked = await decompressBlock(packedData, header.compression, ctx);
+  writeScanlineBlock(unpacked, header, ctx, out);
+}
+
+/**
+ * Check that every offset-table entry points inside the file (past `minOffset`).
+ * Incomplete files may contain zero entries; callers fall back to sequential reads.
+ */
+function isOffsetTableUsable(offsets: bigint[], minOffset: number, byteLength: number): boolean {
+  return offsets.every((o) => o >= BigInt(minOffset) && o + 8n <= BigInt(byteLength));
 }
 
 /**
@@ -1070,156 +1366,49 @@ async function decodeScanlineImage(
   header: EXRHeader,
   channelMapping?: Map<string, string>,
 ): Promise<Float32Array> {
-  const dataWindow = header.dataWindow;
-  const width = dataWindow.xMax - dataWindow.xMin + 1;
-  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  const outputMapping = resolveOutputMapping(header, channelMapping);
+  const out = createScanlineOutput(header, outputMapping);
 
-  // Build channel lookup, excluding UINT channels (not decodable)
-  const channelLookup = new Map<string, EXRChannel>();
-  for (const ch of header.channels) {
-    if (ch.pixelType === EXRPixelType.UINT) continue;
-    channelLookup.set(ch.name, ch);
-  }
-
-  // Determine output channel mapping
-  // If channelMapping provided, use it; otherwise use default RGBA
-  let outputMapping: Map<string, string>;
-  if (channelMapping && channelMapping.size > 0) {
-    outputMapping = channelMapping;
-  } else {
-    // Default mapping: R -> R, G -> G, B -> B, A -> A, or Y -> grayscale
-    outputMapping = new Map();
-    if (channelLookup.has('R')) outputMapping.set('R', 'R');
-    if (channelLookup.has('G')) outputMapping.set('G', 'G');
-    if (channelLookup.has('B')) outputMapping.set('B', 'B');
-    if (channelLookup.has('A')) outputMapping.set('A', 'A');
-    if (channelLookup.has('Y') && !channelLookup.has('R')) {
-      // Grayscale
-      outputMapping.set('R', 'Y');
-      outputMapping.set('G', 'Y');
-      outputMapping.set('B', 'Y');
-    }
-  }
-
-  if (outputMapping.size === 0) {
-    throw new DecoderError('EXR', 'No supported channels found in EXR file');
-  }
-
-  // Always output 4 channels (RGBA)
-  const numOutputChannels = 4;
-  const output = new Float32Array(width * height * numOutputChannels);
-
-  // Initialize alpha to 1 if not mapped
-  if (!outputMapping.has('A')) {
-    for (let i = 3; i < output.length; i += 4) {
-      output[i] = 1.0;
-    }
-  }
-
-  // Create mapping from source channel name to output channel indices
-  // One source channel can map to multiple output channels (e.g., grayscale)
-  const sourceToOutputIndices = new Map<string, number[]>();
-  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
-
-  for (const [outputCh, sourceCh] of outputMapping.entries()) {
-    const outputIdx = outputChannelIndices[outputCh];
-    if (outputIdx !== undefined) {
-      const existing = sourceToOutputIndices.get(sourceCh) || [];
-      existing.push(outputIdx);
-      sourceToOutputIndices.set(sourceCh, existing);
-    }
-  }
-
-  // Calculate scanline size in bytes
-  const scanlineBytes = header.channels.reduce((sum, ch) => {
-    const bytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
-    return sum + bytes * width;
-  }, 0);
-
-  // Lines per block depends on compression
   const linesPerBlock = getLinesPerBlock(header.compression);
-
-  // Read offset table (for scanline images)
-  const numBlocks = Math.ceil(height / linesPerBlock);
+  const numBlocks = Math.ceil(out.height / linesPerBlock);
   const offsets: bigint[] = [];
-
   for (let i = 0; i < numBlocks; i++) {
     offsets.push(reader.readUint64());
   }
 
-  // Read each scanline block
+  const useOffsets = isOffsetTableUsable(offsets, reader.position, reader.byteLength);
   for (let blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
-    const y = reader.readInt32(); // Y coordinate of first scanline in block
-    const packedSize = reader.readInt32(); // Size of packed data
-
-    const blockLines = Math.min(linesPerBlock, height - blockIdx * linesPerBlock);
-    const uncompressedSize = blockLines * scanlineBytes;
-
+    if (useOffsets) reader.position = Number(offsets[blockIdx] ?? 0n);
+    const y = reader.readInt32();
+    const packedSize = reader.readInt32();
     const packedData = reader.readBytes(packedSize);
-
-    let unpackedData: Uint8Array;
-    if (header.compression === EXRCompression.NONE) {
-      unpackedData = packedData;
-    } else {
-      const needsChannelCtx =
-        header.compression === EXRCompression.PIZ ||
-        header.compression === EXRCompression.PXR24 ||
-        header.compression === EXRCompression.DWAA ||
-        header.compression === EXRCompression.DWAB;
-      const channelCtx = needsChannelCtx
-        ? {
-            width,
-            numChannels: header.channels.length,
-            numLines: blockLines,
-            channelSizes: header.channels.map((ch) => (ch.pixelType === EXRPixelType.HALF ? 2 : 4)),
-          }
-        : undefined;
-      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
-    }
-
-    // Parse channel data from unpacked scanlines
-    const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
-
-    for (let line = 0; line < blockLines; line++) {
-      const outputY = y - dataWindow.yMin + line;
-      if (outputY < 0 || outputY >= height) continue;
-
-      // Each scanline stores all channels sequentially
-      let channelOffset = 0;
-
-      for (const ch of header.channels) {
-        const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
-        const lineDataOffset = line * scanlineBytes + channelOffset;
-
-        // Check if this source channel maps to any output channels
-        const outputIndices = sourceToOutputIndices.get(ch.name);
-
-        if (outputIndices && outputIndices.length > 0) {
-          for (let x = 0; x < width; x++) {
-            const srcOffset = lineDataOffset + x * channelBytes;
-
-            let value: number;
-            if (ch.pixelType === EXRPixelType.HALF) {
-              const half = dataView.getUint16(srcOffset, true);
-              value = halfToFloat(half);
-            } else {
-              value = dataView.getFloat32(srcOffset, true);
-            }
-
-            // Write to all mapped output channels
-            for (const outputIdx of outputIndices) {
-              const dstIdx = (outputY * width + x) * numOutputChannels + outputIdx;
-              output[dstIdx] = value;
-            }
-          }
-        }
-
-        channelOffset += width * channelBytes;
-      }
-    }
+    await decodeScanlineChunk(header, y, packedData, out);
   }
 
-  return output;
+  return finishScanlineOutput(out);
+}
+
+/**
+ * Resolve the output RGBA -> source channel mapping (default RGBA / Y grayscale).
+ */
+function resolveOutputMapping(header: EXRHeader, channelMapping?: Map<string, string>): Map<string, string> {
+  if (channelMapping && channelMapping.size > 0) return channelMapping;
+
+  const names = new Set(header.channels.filter((ch) => ch.pixelType !== EXRPixelType.UINT).map((ch) => ch.name));
+  const outputMapping = new Map<string, string>();
+  if (names.has('R')) outputMapping.set('R', 'R');
+  if (names.has('G')) outputMapping.set('G', 'G');
+  if (names.has('B')) outputMapping.set('B', 'B');
+  if (names.has('A')) outputMapping.set('A', 'A');
+  if (names.has('Y') && !names.has('R')) {
+    outputMapping.set('R', 'Y');
+    outputMapping.set('G', 'Y');
+    outputMapping.set('B', 'Y');
+  }
+  if (outputMapping.size === 0) {
+    throw new DecoderError('EXR', 'No supported channels found in EXR file');
+  }
+  return outputMapping;
 }
 
 /**
@@ -1334,7 +1523,10 @@ async function decodeTiledImage(
   const dataWindow = header.dataWindow;
   const width = dataWindow.xMax - dataWindow.xMin + 1;
   const height = dataWindow.yMax - dataWindow.yMin + 1;
-  const tileDesc = header.tileDesc!;
+  const tileDesc = header.tileDesc;
+  if (!tileDesc) {
+    throw new DecoderError('EXR', 'Tiled EXR file missing tiles attribute');
+  }
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
@@ -1428,33 +1620,16 @@ async function decodeTiledImage(
     }
 
     // Calculate tile scanline size for decompression
-    const tileScanlineBytes = header.channels.reduce((sum, ch) => {
-      const bytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
-      return sum + bytes * actualTileWidth;
-    }, 0);
-    const uncompressedSize = actualTileHeight * tileScanlineBytes;
+    const tileScanlineBytes = header.channels.reduce(
+      (sum, ch) => sum + pixelTypeSize(ch.pixelType) * actualTileWidth,
+      0,
+    );
 
     const packedData = reader.readBytes(packedSize);
 
-    let unpackedData: Uint8Array;
-    if (header.compression === EXRCompression.NONE) {
-      unpackedData = packedData;
-    } else {
-      const needsChannelCtx =
-        header.compression === EXRCompression.PIZ ||
-        header.compression === EXRCompression.PXR24 ||
-        header.compression === EXRCompression.DWAA ||
-        header.compression === EXRCompression.DWAB;
-      const channelCtx = needsChannelCtx
-        ? {
-            width: actualTileWidth,
-            numChannels: header.channels.length,
-            numLines: actualTileHeight,
-            channelSizes: header.channels.map((ch) => (ch.pixelType === EXRPixelType.HALF ? 2 : 4)),
-          }
-        : undefined;
-      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
-    }
+    // Tiles never use channel subsampling; tile lines are relative to the tile.
+    const tileCtx = makeBlockContext(header.channels, 0, actualTileWidth, 0, actualTileHeight, true);
+    const unpackedData = await decompressBlock(packedData, header.compression, tileCtx);
 
     // Parse channel data from unpacked tile data
     const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
@@ -1514,7 +1689,10 @@ async function decodeMultiPartTiledImage(
   const dataWindow = header.dataWindow;
   const width = dataWindow.xMax - dataWindow.xMin + 1;
   const height = dataWindow.yMax - dataWindow.yMin + 1;
-  const tileDesc = header.tileDesc!;
+  const tileDesc = header.tileDesc;
+  if (!tileDesc) {
+    throw new DecoderError('EXR', 'Tiled EXR file missing tiles attribute');
+  }
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
@@ -1616,33 +1794,16 @@ async function decodeMultiPartTiledImage(
       continue;
     }
 
-    const tileScanlineBytes = header.channels.reduce((sum, ch) => {
-      const bytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
-      return sum + bytes * actualTileWidth;
-    }, 0);
-    const uncompressedSize = actualTileHeight * tileScanlineBytes;
+    const tileScanlineBytes = header.channels.reduce(
+      (sum, ch) => sum + pixelTypeSize(ch.pixelType) * actualTileWidth,
+      0,
+    );
 
     const packedData = reader.readBytes(packedSize);
 
-    let unpackedData: Uint8Array;
-    if (header.compression === EXRCompression.NONE) {
-      unpackedData = packedData;
-    } else {
-      const needsChannelCtx =
-        header.compression === EXRCompression.PIZ ||
-        header.compression === EXRCompression.PXR24 ||
-        header.compression === EXRCompression.DWAA ||
-        header.compression === EXRCompression.DWAB;
-      const channelCtx = needsChannelCtx
-        ? {
-            width: actualTileWidth,
-            numChannels: header.channels.length,
-            numLines: actualTileHeight,
-            channelSizes: header.channels.map((ch) => (ch.pixelType === EXRPixelType.HALF ? 2 : 4)),
-          }
-        : undefined;
-      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
-    }
+    // Tiles never use channel subsampling; tile lines are relative to the tile.
+    const tileCtx = makeBlockContext(header.channels, 0, actualTileWidth, 0, actualTileHeight, true);
+    const unpackedData = await decompressBlock(packedData, header.compression, tileCtx);
 
     const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
 
@@ -1690,162 +1851,63 @@ async function decodeMultiPartTiledImage(
 
 /**
  * Decode scanline image data from a multi-part EXR file.
- * Multi-part chunks have an extra part number field before each scanline block.
+ * Multi-part chunks carry a part number before the y coordinate. When the
+ * part's offset table is usable, each chunk is read via its offset (so line
+ * order does not matter); otherwise chunks are scanned sequentially.
  */
 async function decodeMultiPartScanlineImage(
   reader: EXRDataReader,
   header: EXRHeader,
   targetPartIndex: number,
   channelMapping?: Map<string, string>,
+  partOffsets?: bigint[],
 ): Promise<Float32Array> {
-  const dataWindow = header.dataWindow;
-  const width = dataWindow.xMax - dataWindow.xMin + 1;
-  const height = dataWindow.yMax - dataWindow.yMin + 1;
-
-  // Build channel lookup, excluding UINT channels (not decodable)
-  const channelLookup = new Map<string, EXRChannel>();
-  for (const ch of header.channels) {
-    if (ch.pixelType === EXRPixelType.UINT) continue;
-    channelLookup.set(ch.name, ch);
-  }
-
-  // Determine output channel mapping
-  let outputMapping: Map<string, string>;
-  if (channelMapping && channelMapping.size > 0) {
-    outputMapping = channelMapping;
-  } else {
-    outputMapping = new Map();
-    if (channelLookup.has('R')) outputMapping.set('R', 'R');
-    if (channelLookup.has('G')) outputMapping.set('G', 'G');
-    if (channelLookup.has('B')) outputMapping.set('B', 'B');
-    if (channelLookup.has('A')) outputMapping.set('A', 'A');
-    if (channelLookup.has('Y') && !channelLookup.has('R')) {
-      outputMapping.set('R', 'Y');
-      outputMapping.set('G', 'Y');
-      outputMapping.set('B', 'Y');
-    }
-  }
-
-  if (outputMapping.size === 0) {
-    throw new DecoderError('EXR', 'No supported channels found in EXR file');
-  }
-
-  const numOutputChannels = 4;
-  const output = new Float32Array(width * height * numOutputChannels);
-
-  if (!outputMapping.has('A')) {
-    for (let i = 3; i < output.length; i += 4) {
-      output[i] = 1.0;
-    }
-  }
-
-  const sourceToOutputIndices = new Map<string, number[]>();
-  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
-
-  for (const [outputCh, sourceCh] of outputMapping.entries()) {
-    const outputIdx = outputChannelIndices[outputCh];
-    if (outputIdx !== undefined) {
-      const existing = sourceToOutputIndices.get(sourceCh) || [];
-      existing.push(outputIdx);
-      sourceToOutputIndices.set(sourceCh, existing);
-    }
-  }
-
-  const scanlineBytes = header.channels.reduce((sum, ch) => {
-    const bytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
-    return sum + bytes * width;
-  }, 0);
+  const outputMapping = resolveOutputMapping(header, channelMapping);
+  const out = createScanlineOutput(header, outputMapping);
 
   const linesPerBlock = getLinesPerBlock(header.compression);
+  const numBlocks = Math.ceil(out.height / linesPerBlock);
+  const startPosition = reader.position;
 
-  const numBlocks = Math.ceil(height / linesPerBlock);
+  const useOffsets =
+    partOffsets !== undefined &&
+    partOffsets.length === numBlocks &&
+    isOffsetTableUsable(partOffsets, 0, reader.byteLength) &&
+    partOffsets.every((o) => {
+      reader.position = Number(o);
+      return reader.readInt32() === targetPartIndex;
+    });
 
-  // Read each scanline block (multi-part has part_number prefix on each chunk)
+  if (useOffsets && partOffsets) {
+    for (const offset of partOffsets) {
+      reader.position = Number(offset) + 4; // skip part number
+      const y = reader.readInt32();
+      const packedSize = reader.readInt32();
+      await decodeScanlineChunk(header, y, reader.readBytes(packedSize), out);
+    }
+    return finishScanlineOutput(out);
+  }
+
+  reader.position = startPosition;
   const MAX_CHUNKS = numBlocks * 1024 * 2; // generous upper bound for interleaved parts
   let totalChunksRead = 0;
-  for (let blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
+  let decoded = 0;
+  while (decoded < numBlocks) {
     if (++totalChunksRead > MAX_CHUNKS) {
       throw new DecoderError('EXR', 'Too many chunks read while seeking target part, file may be corrupt');
     }
-    const partNumber = reader.readInt32(); // Part number (multi-part specific)
-    if (partNumber !== targetPartIndex) {
-      // Skip this block - it belongs to a different part
-      // We still need to read past it
-      reader.readInt32(); // y coordinate
-      const packedSize = reader.readInt32();
-      reader.skip(packedSize);
-      // Re-decrement blockIdx since we didn't process a block for our part
-      blockIdx--;
-      continue;
-    }
-
+    const partNumber = reader.readInt32();
     const y = reader.readInt32();
     const packedSize = reader.readInt32();
-
-    const blockLines = Math.min(linesPerBlock, height - blockIdx * linesPerBlock);
-    const uncompressedSize = blockLines * scanlineBytes;
-
-    const packedData = reader.readBytes(packedSize);
-
-    let unpackedData: Uint8Array;
-    if (header.compression === EXRCompression.NONE) {
-      unpackedData = packedData;
-    } else {
-      const needsChannelCtx =
-        header.compression === EXRCompression.PIZ ||
-        header.compression === EXRCompression.PXR24 ||
-        header.compression === EXRCompression.DWAA ||
-        header.compression === EXRCompression.DWAB;
-      const channelCtx = needsChannelCtx
-        ? {
-            width,
-            numChannels: header.channels.length,
-            numLines: blockLines,
-            channelSizes: header.channels.map((ch) => (ch.pixelType === EXRPixelType.HALF ? 2 : 4)),
-          }
-        : undefined;
-      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
+    if (partNumber !== targetPartIndex) {
+      reader.skip(packedSize);
+      continue;
     }
-
-    const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
-
-    for (let line = 0; line < blockLines; line++) {
-      const outputY = y - dataWindow.yMin + line;
-      if (outputY < 0 || outputY >= height) continue;
-
-      let channelOffset = 0;
-
-      for (const ch of header.channels) {
-        const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
-        const lineDataOffset = line * scanlineBytes + channelOffset;
-
-        const outputIndices = sourceToOutputIndices.get(ch.name);
-
-        if (outputIndices && outputIndices.length > 0) {
-          for (let x = 0; x < width; x++) {
-            const srcOffset = lineDataOffset + x * channelBytes;
-
-            let value: number;
-            if (ch.pixelType === EXRPixelType.HALF) {
-              const half = dataView.getUint16(srcOffset, true);
-              value = halfToFloat(half);
-            } else {
-              value = dataView.getFloat32(srcOffset, true);
-            }
-
-            for (const outputIdx of outputIndices) {
-              const dstIdx = (outputY * width + x) * numOutputChannels + outputIdx;
-              output[dstIdx] = value;
-            }
-          }
-        }
-
-        channelOffset += width * channelBytes;
-      }
-    }
+    await decodeScanlineChunk(header, y, reader.readBytes(packedSize), out);
+    decoded++;
   }
 
-  return output;
+  return finishScanlineOutput(out);
 }
 
 /**
@@ -1939,9 +2001,9 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
     gIdx = -1,
     bIdx = -1,
     aIdx = -1;
-  for (let i = 0; i < sortedChannels.length; i++) {
-    if (sortedChannels[i]!.pixelType === EXRPixelType.UINT) continue;
-    const name = sortedChannels[i]!.name;
+  for (const [i, ch] of sortedChannels.entries()) {
+    if (ch.pixelType === EXRPixelType.UINT) continue;
+    const name = ch.name;
     if (name === 'R') rIdx = i;
     else if (name === 'G') gIdx = i;
     else if (name === 'B') bIdx = i;
@@ -1951,9 +2013,9 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
   // Support Y (grayscale) channel
   let yIdx = -1;
   if (rIdx === -1) {
-    for (let i = 0; i < sortedChannels.length; i++) {
-      if (sortedChannels[i]!.pixelType === EXRPixelType.UINT) continue;
-      if (sortedChannels[i]!.name === 'Y') {
+    for (const [i, ch] of sortedChannels.entries()) {
+      if (ch.pixelType === EXRPixelType.UINT) continue;
+      if (ch.name === 'Y') {
         yIdx = i;
         break;
       }
@@ -1992,7 +2054,8 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
     const packedDataSize = Number(reader.readUint64()); // packed size of sample data
     const unpackedDataSize = Number(reader.readUint64()); // unpacked size of sample data
 
-    const blockLines = Math.min(linesPerBlock, height - blockIdx * linesPerBlock);
+    // Lines are identified by the chunk's own y (DECREASING_Y stores the last block first)
+    const blockLines = Math.max(0, Math.min(linesPerBlock, dataWindow.yMax - y + 1));
     const pixelsInBlock = blockLines * width;
 
     // Read packed sample count table
@@ -2004,7 +2067,7 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
     // Decompress sample count table (always 4 bytes per pixel - int32)
     const uncompressedCountSize = pixelsInBlock * 4;
     let sampleCountBytes: Uint8Array;
-    if (header.compression === EXRCompression.NONE) {
+    if (header.compression === EXRCompression.NONE || packedSampleCounts.length >= uncompressedCountSize) {
       sampleCountBytes = packedSampleCounts;
     } else if (header.compression === EXRCompression.ZIPS || header.compression === EXRCompression.ZIP) {
       sampleCountBytes = await decompressZlib(packedSampleCounts, uncompressedCountSize);
@@ -2022,7 +2085,7 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
     }
 
     // Total number of samples in this block
-    const totalSamples = pixelsInBlock > 0 ? cumulativeCounts[pixelsInBlock - 1]! : 0;
+    const totalSamples = pixelsInBlock > 0 ? (cumulativeCounts[pixelsInBlock - 1] ?? 0) : 0;
 
     if (totalSamples === 0) {
       // No samples in this block - output stays at zero (transparent)
@@ -2031,7 +2094,7 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
 
     // Decompress sample data
     let sampleData: Uint8Array;
-    if (header.compression === EXRCompression.NONE) {
+    if (header.compression === EXRCompression.NONE || packedSampleData.length >= unpackedDataSize) {
       sampleData = packedSampleData;
     } else if (header.compression === EXRCompression.ZIPS || header.compression === EXRCompression.ZIP) {
       sampleData = await decompressZlib(packedSampleData, unpackedDataSize);
@@ -2052,8 +2115,8 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
         const pixelIndexInBlock = line * width + x;
 
         // Get sample range for this pixel
-        const sampleEnd = cumulativeCounts[pixelIndexInBlock]!;
-        const sampleStart = pixelIndexInBlock > 0 ? cumulativeCounts[pixelIndexInBlock - 1]! : 0;
+        const sampleEnd = cumulativeCounts[pixelIndexInBlock] ?? 0;
+        const sampleStart = pixelIndexInBlock > 0 ? (cumulativeCounts[pixelIndexInBlock - 1] ?? 0) : 0;
         const numSamples = sampleEnd - sampleStart;
 
         if (numSamples === 0) continue;
@@ -2076,7 +2139,7 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
 
           for (let ci = 0; ci < sortedChannels.length; ci++) {
             let value: number;
-            if (sortedChannels[ci]!.pixelType === EXRPixelType.HALF) {
+            if (sortedChannels[ci]?.pixelType === EXRPixelType.HALF) {
               if (channelByteOffset + 2 <= sampleData.length) {
                 const h = sampleView.getUint16(channelByteOffset, true);
                 value = halfToFloat(h);
@@ -2317,8 +2380,8 @@ async function decodeMultiPart(
   // try to find the first non-deeptile part to decode instead.
   if (
     !explicitPartIndex &&
-    partHeaders[partIndex]!.type &&
-    UNSUPPORTED_DEEP_DATA_TYPES.includes(partHeaders[partIndex]!.type!)
+    partHeaders[partIndex]?.type &&
+    UNSUPPORTED_DEEP_DATA_TYPES.includes(partHeaders[partIndex]?.type ?? '')
   ) {
     const fallbackIndex = partHeaders.findIndex((ph) => !ph.type || !UNSUPPORTED_DEEP_DATA_TYPES.includes(ph.type));
     if (fallbackIndex >= 0) {
@@ -2326,7 +2389,10 @@ async function decodeMultiPart(
     }
   }
 
-  const selectedHeader = partHeaders[partIndex]!;
+  const selectedHeader = partHeaders[partIndex];
+  if (!selectedHeader) {
+    throw new DecoderError('EXR', `Invalid part index ${partIndex}`);
+  }
   const partLabel = selectedHeader.name || `part ${partIndex}`;
 
   // Check for unsupported deep data types
@@ -2383,8 +2449,7 @@ async function decodeMultiPart(
 
   // Read offset tables for all parts
   const partOffsetTables: bigint[][] = [];
-  for (let p = 0; p < partHeaders.length; p++) {
-    const ph = partHeaders[p]!;
+  for (const ph of partHeaders) {
     const dw = ph.dataWindow;
     const partHeight = dw.yMax - dw.yMin + 1;
 
@@ -2408,8 +2473,9 @@ async function decodeMultiPart(
   // Position reader to the start of the selected part's data using offset table.
   // In multi-part EXR, each chunk starts with: partNumber (int32) + y (int32) + packedSize (int32) + data
   // The offset table entries point to the start of each chunk (at the partNumber field).
-  if (partOffsetTables[partIndex]!.length > 0) {
-    reader.position = Number(partOffsetTables[partIndex]![0]!);
+  const selectedOffsets = partOffsetTables[partIndex] ?? [];
+  if (selectedOffsets.length > 0) {
+    reader.position = Number(selectedOffsets[0] ?? 0n);
   }
 
   // Decode data for the selected part
@@ -2425,7 +2491,13 @@ async function decodeMultiPart(
   } else if (isTiledPart) {
     rawData = await decodeMultiPartTiledImage(reader, selectedHeader, partIndex, channelMapping);
   } else {
-    rawData = await decodeMultiPartScanlineImage(reader, selectedHeader, partIndex, channelMapping);
+    rawData = await decodeMultiPartScanlineImage(
+      reader,
+      selectedHeader,
+      partIndex,
+      channelMapping,
+      partOffsetTables[partIndex],
+    );
   }
 
   // Apply uncrop: expand data window to display window if they differ
@@ -2505,7 +2577,7 @@ export function detectColorPrimariesFromChromaticities(
   for (const known of KNOWN_CHROMATICITIES) {
     let match = true;
     for (let i = 0; i < 8; i++) {
-      if (Math.abs(chromaticities[i]! - known.values[i]!) > tolerance) {
+      if (Math.abs((chromaticities[i] ?? 0) - (known.values[i] ?? 0)) > tolerance) {
         match = false;
         break;
       }
@@ -2540,7 +2612,7 @@ export function exrToIPImage(result: EXRDecodeResult, sourcePath?: string): IPIm
   };
 
   if (result.header.chromaticities) {
-    metadata.attributes!.chromaticities = Array.from(result.header.chromaticities);
+    if (metadata.attributes) metadata.attributes.chromaticities = Array.from(result.header.chromaticities);
     const detected = detectColorPrimariesFromChromaticities(result.header.chromaticities);
     if (detected && detected !== 'bt709') {
       metadata.colorPrimaries = detected;
@@ -2597,7 +2669,8 @@ export function getEXRInfo(buffer: ArrayBuffer): {
 
     if (isMultiPart) {
       const { partHeaders } = parseMultiPartHeaders(reader);
-      const firstHeader = partHeaders[0]!;
+      const firstHeader = partHeaders[0];
+      if (!firstHeader) return null;
       const dataWindow = firstHeader.dataWindow;
       const layers = extractLayerInfo(firstHeader.channels);
 
@@ -2761,8 +2834,9 @@ export function resolveChannelMapping(header: EXRHeader, options?: EXRDecodeOpti
     }
 
     // If layer has only one channel, treat it as grayscale
-    if (layerChannels.length === 1 && mapping.size === 0) {
-      const ch = layerChannels[0]!;
+    const onlyChannel = layerChannels.length === 1 ? layerChannels[0] : undefined;
+    if (onlyChannel && mapping.size === 0) {
+      const ch = onlyChannel;
       mapping.set('R', ch.name);
       mapping.set('G', ch.name);
       mapping.set('B', ch.name);

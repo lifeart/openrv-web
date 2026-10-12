@@ -164,11 +164,12 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
       const clips = pm.getClips();
       expect(clips).toHaveLength(2);
       expect(clips[0]!.sourceName).toBe('shot_01');
-      expect(clips[0]!.inPoint).toBe(0);
-      expect(clips[0]!.outPoint).toBe(47);
+      // OTIO media time 0 is local (1-based) frame 1
+      expect(clips[0]!.inPoint).toBe(1);
+      expect(clips[0]!.outPoint).toBe(48);
       expect(clips[1]!.sourceName).toBe('shot_02');
-      expect(clips[1]!.inPoint).toBe(10);
-      expect(clips[1]!.outPoint).toBe(81);
+      expect(clips[1]!.inPoint).toBe(11);
+      expect(clips[1]!.outPoint).toBe(82);
     });
 
     it('OTIO-470-002: returns 0 for invalid JSON', () => {

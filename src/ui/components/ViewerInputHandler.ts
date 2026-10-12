@@ -13,7 +13,8 @@ import { type PaintEngine, type PaintTool } from '../../paint/PaintEngine';
 import { type PaintRenderer } from '../../paint/PaintRenderer';
 import { type StrokePoint, ShapeType, type Point } from '../../paint/types';
 import { type Session } from '../../core/session/Session';
-import { filterImageFiles, getBestSequence, inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
+import { filterImageFiles, inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
+import { partitionSequences } from '../../utils/media/SequencePartition';
 import { showAlert } from './shared/Modal';
 import { Z_INDEX } from './shared/theme';
 import {
@@ -405,9 +406,9 @@ export class ViewerInputHandler {
           container.style.cursor = 'ew-resize';
           // Spherical (360) drag mode: route to SphericalProjection when enabled
         } else if (this.ctx.getSphericalProjection()?.enabled) {
-          const sp = this.ctx.getSphericalProjection()!;
+          const sp = this.ctx.getSphericalProjection();
           this.isSphericalDragging = true;
-          sp.beginDrag(e.clientX, e.clientY);
+          sp?.beginDrag(e.clientX, e.clientY);
           container.style.cursor = 'grabbing';
         } else {
           // Pan mode
@@ -454,10 +455,9 @@ export class ViewerInputHandler {
       cropManager.updateCropCursor(handle);
     }
 
-    if (!this.activePointers.has(e.pointerId)) return;
-
     // Update pointer position
-    const pointer = this.activePointers.get(e.pointerId)!;
+    const pointer = this.activePointers.get(e.pointerId);
+    if (!pointer) return;
     pointer.x = e.clientX;
     pointer.y = e.clientY;
 
@@ -862,31 +862,22 @@ export class ViewerInputHandler {
     // Create auto-checkpoint before loading new media (when sources exist)
     await this.onBeforeMediaLoad?.();
 
-    // Check for sequence
+    // Detect every image sequence among the dropped files; each one becomes
+    // its own source, and the remaining files are loaded individually.
     const imageFiles = filterImageFiles(fileArray);
-    if (imageFiles.length > 1) {
-      const bestSequence = getBestSequence(imageFiles);
-      if (bestSequence && bestSequence.length > 1) {
-        try {
-          await session.loadSequence(bestSequence);
-          return;
-        } catch (err) {
-          logger.error('Failed to load sequence:', err);
-          showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
-          return;
-        }
-      }
-    }
+    const { sequences, others } = partitionSequences(fileArray);
+    let remaining = others;
 
     // Single image file - try to infer a sequence from available files
-    if (imageFiles.length === 1) {
-      const singleFile = imageFiles[0]!;
+    const singleFile = imageFiles.length === 1 ? imageFiles[0] : undefined;
+    if (sequences.length === 0 && singleFile) {
       try {
         const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);
         if (sequenceInfo) {
           const sequenceFiles = sequenceInfo.frames.map((f) => f.file);
-          await session.loadSequence(sequenceFiles);
-          return;
+          sequences.push(sequenceFiles);
+          const inferred = new Set(sequenceFiles);
+          remaining = others.filter((f) => !inferred.has(f));
         }
       } catch (err) {
         logger.error('Failed to infer sequence:', err);
@@ -894,8 +885,19 @@ export class ViewerInputHandler {
       }
     }
 
-    // Single file or mixed non-session files
-    for (const file of fileArray) {
+    for (const sequence of sequences) {
+      try {
+        await session.loadSequence(sequence);
+      } catch (err) {
+        logger.error('Failed to load sequence:', err);
+        showAlert(`Failed to load sequence ${sequence[0]?.name ?? ''}: ${err}`, {
+          type: 'error',
+          title: 'Load Error',
+        });
+      }
+    }
+
+    for (const file of remaining) {
       try {
         await session.loadFile(file);
       } catch (err) {
@@ -1242,7 +1244,7 @@ export class ViewerInputHandler {
 
     const data = new Float32Array(w * h * 4);
     for (let i = 0; i < src.length; i++) {
-      data[i] = src[i]! / 255;
+      data[i] = (src[i] ?? 0) / 255;
     }
     return { data, width: w, height: h, channels: 4 };
   }
@@ -1295,7 +1297,7 @@ export class ViewerInputHandler {
     const imageData = imageCtx.createImageData(width, height);
     const dst = imageData.data;
     for (let i = 0; i < data.length; i++) {
-      dst[i] = Math.round(Math.min(1, Math.max(0, data[i]!)) * 255);
+      dst[i] = Math.round(Math.min(1, Math.max(0, data[i] ?? 0)) * 255);
     }
 
     imageCtx.putImageData(imageData, 0, 0, 0, 0, imageCanvas.width, imageCanvas.height);

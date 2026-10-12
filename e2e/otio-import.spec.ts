@@ -220,9 +220,9 @@ test.describe('OTIO Import', () => {
       }, otioJson);
 
       expect(result).not.toBeNull();
-      // inFrame = 10, outFrame = 10 + 48 - 1 = 57
-      expect(result!.inPoint).toBe(10);
-      expect(result!.outPoint).toBe(57);
+      // OTIO media time 10 (no available_range) is local 1-based frame 11
+      expect(result!.inPoint).toBe(11);
+      expect(result!.outPoint).toBe(58);
       expect(result!.duration).toBe(48);
     });
 
@@ -539,8 +539,9 @@ test.describe('OTIO Import', () => {
       }, otioJson);
 
       expect(result).not.toBeNull();
-      expect(result!.inPoint).toBe(5);
-      expect(result!.outPoint).toBe(5); // in + 1 - 1
+      // media time 5 is local 1-based frame 6
+      expect(result!.inPoint).toBe(6);
+      expect(result!.outPoint).toBe(6);
       expect(result!.duration).toBe(1);
     });
 

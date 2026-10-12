@@ -20,7 +20,12 @@ export interface SequenceFrame {
   index: number; // 0-based frame index
   frameNumber: number; // Original frame number from filename
   file: File;
-  url?: string; // Object URL when loaded
+  /**
+   * Either the remote URL of a URL-backed frame (pattern loading; `file` is an
+   * empty placeholder) or an object URL created for a File-backed frame.
+   * Remote URLs are the frame's only source and must never be cleared on release.
+   */
+  url?: string;
   image?: ImageBitmap;
   decodedData?: DecodedFrameData; // HDR decoded data (preserved full precision)
 }
@@ -178,6 +183,53 @@ export function isFrameLoaded(frame: SequenceFrame): boolean {
 }
 
 /**
+ * Whether a frame is backed by a remote URL (pattern-loaded sequences) rather
+ * than a local File. Such frames carry an empty placeholder File and their
+ * `url` is the only way to fetch the image again.
+ */
+export function isURLBackedFrame(frame: SequenceFrame): boolean {
+  return !!frame.url && frame.file.size === 0 && !frame.url.startsWith('blob:');
+}
+
+/**
+ * Release the decoded resources of a frame so it can be reloaded later.
+ * Object URLs created for File-backed frames are revoked; the remote URL of
+ * a URL-backed frame is kept because it is required to fetch the frame again.
+ */
+export function releaseFrame(frame: SequenceFrame): void {
+  if (frame.image) {
+    frame.image.close();
+    frame.image = undefined;
+  }
+  if (frame.decodedData) {
+    frame.decodedData = undefined;
+  }
+  if (frame.url && !isURLBackedFrame(frame)) {
+    URL.revokeObjectURL(frame.url);
+    frame.url = undefined;
+  }
+}
+
+/**
+ * Find the loaded frame closest to `index` (searching outward, preferring the
+ * earlier frame on ties). Released frames have no image, so the result never
+ * refers to a closed ImageBitmap. Returns null when nothing is loaded.
+ */
+export function findNearestLoadedFrame(frames: SequenceFrame[], index: number): SequenceFrame | null {
+  const n = frames.length;
+  if (n === 0) return null;
+  const center = Math.min(Math.max(0, Math.round(index)), n - 1);
+  for (let d = 0; d < n; d++) {
+    const before = frames[center - d];
+    if (before?.image) return before;
+    const after = frames[center + d];
+    if (after?.image) return after;
+    if (center - d < 0 && center + d >= n) break;
+  }
+  return null;
+}
+
+/**
  * Load a single frame image using background decoders.
  *
  * For decoder-backed formats (EXR, DPX, Cineon, HDR, TIFF, etc.), the full-precision
@@ -198,6 +250,12 @@ export async function loadFrameImage(frame: SequenceFrame, signal?: AbortSignal)
 
   if (frame.image) {
     return frame.image;
+  }
+
+  // URL-backed frames (pattern loading) have an empty placeholder File;
+  // fetch them from their remote URL instead.
+  if (isURLBackedFrame(frame)) {
+    return loadFrameImageFromURL(frame, signal);
   }
 
   const ext = getExtension(frame.file.name);
@@ -260,7 +318,8 @@ export async function loadFrameImage(frame: SequenceFrame, signal?: AbortSignal)
 }
 
 /**
- * Preload a range of frames around the current frame
+ * Preload a range of frames around the current frame.
+ * Works for both File-backed and URL-backed frames (see `loadFrameImage`).
  * @param frames - Array of sequence frames
  * @param currentIndex - The current frame index to center preloading around
  * @param windowSize - Number of frames on each side to preload (default: 5)
@@ -300,17 +359,7 @@ export function releaseDistantFrames(frames: SequenceFrame[], currentIndex: numb
     if (distance > keepWindow) {
       const frame = frames[i];
       if (frame) {
-        if (frame.image) {
-          frame.image.close();
-          frame.image = undefined;
-        }
-        if (frame.decodedData) {
-          frame.decodedData = undefined;
-        }
-        if (frame.url) {
-          URL.revokeObjectURL(frame.url);
-          frame.url = undefined;
-        }
+        releaseFrame(frame);
       }
     }
   }
@@ -930,6 +979,11 @@ export async function loadFrameImageFromURL(frame: SequenceFrame, signal?: Abort
   }
 
   const bitmap = await loadImageBitmapFromURL(frame.url, signal);
+  if (frame.image) {
+    // A concurrent load finished first; keep that one.
+    bitmap.close();
+    return frame.image;
+  }
   frame.image = bitmap;
   return bitmap;
 }

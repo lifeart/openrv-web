@@ -16,6 +16,7 @@ import type { FullscreenManager } from './utils/ui/FullscreenManager';
 import type { Session } from './core/session/Session';
 import type { LoopMode } from './core/types/session';
 import type { PlaylistClip } from './core/session/PlaylistManager';
+import type { PlaylistTransitionFrame } from './core/types/transition';
 import { exportSequence } from './utils/export/SequenceExporter';
 import {
   VideoExporter,
@@ -281,14 +282,61 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
 
+  // Editorial import: report clips that could not be matched to loaded media.
+  subs.add(
+    controls.playlistPanel.on('imported', (result) => {
+      void reportPlaylistImport(result);
+    }),
+  );
+
+  // Route .otio files from the header file picker / viewer drop to the playlist import,
+  // and the Export menu's EDL/OTIO items to the playlist exporters.
+  headerBar.onOTIOFileOpen = (file) => controls.playlistPanel.importOTIOFile(file);
+  viewer.setOnOTIOFileDrop((file) => controls.playlistPanel.importOTIOFile(file));
+  subs.add(exportControl.on('edlExportRequested', () => controls.playlistPanel.triggerEDLExport()));
+  subs.add(exportControl.on('otioExportRequested', () => controls.playlistPanel.triggerOTIOExport()));
+
   // Set initial fps and keep playlist panel in sync with session fps
   controls.playlistPanel.setFps(session.fps || 24);
   subs.add(session.on('fpsChanged', (fps) => controls.playlistPanel.setFps(fps)));
 
   // Playlist runtime integration (playback/loop/source switching while enabled)
-  wirePlaylistRuntime(session, controls, subs);
+  wirePlaylistRuntime(session, controls, subs, viewer);
 
   return { subscriptions: subs };
+}
+
+/** Maximum number of unresolved clip names listed in the import report. */
+const MAX_UNRESOLVED_LISTED = 15;
+
+/**
+ * Tell the user which imported clips could not be matched to loaded media.
+ * Exported for tests.
+ */
+export async function reportPlaylistImport(result: {
+  format: string;
+  importedCount: number;
+  unresolvedCount: number;
+  unresolvedNames?: string[];
+}): Promise<void> {
+  if (result.unresolvedCount <= 0 && result.importedCount > 0) return;
+  const format = result.format.toUpperCase();
+  if (result.unresolvedCount <= 0) {
+    await showAlert(`No clips were imported from the ${format} file.`, {
+      type: 'warning',
+      title: 'Playlist Import',
+    });
+    return;
+  }
+  const names = result.unresolvedNames ?? [];
+  const listed = names.slice(0, MAX_UNRESOLVED_LISTED).map((n) => `\u2022 ${n}`);
+  if (names.length > MAX_UNRESOLVED_LISTED) listed.push(`\u2026 and ${names.length - MAX_UNRESOLVED_LISTED} more`);
+  const message =
+    `Imported ${result.importedCount} clip(s) from the ${format} file. ` +
+    `${result.unresolvedCount} clip(s) could not be matched to loaded media` +
+    (listed.length > 0 ? `:\n${listed.join('\n')}` : '.') +
+    `\n\nLoad the missing media and import again, or re-link the clips in the Conform panel.`;
+  await showAlert(message, { type: 'warning', title: 'Unresolved Clips' });
 }
 
 /**
@@ -806,6 +854,7 @@ function wirePlaylistRuntime(
   session: Session,
   controls: import('./AppControlRegistry').AppControlRegistry,
   subs: DisposableSubscriptionManager,
+  viewer: Pick<import('./ui/components/Viewer').Viewer, 'setPlaylistTransitionProvider'>,
 ): void {
   const runtime: PlaylistRuntimeState = {
     syncing: false,
@@ -814,6 +863,11 @@ function wirePlaylistRuntime(
     lastSourceIndex: session.currentSourceIndex,
     previousLoopMode: null,
   };
+
+  // Let the viewer blend the outgoing clip under the incoming one while the
+  // playhead is inside a transition overlap.
+  viewer.setPlaylistTransitionProvider(() => resolvePlaylistTransitionFrame(session, controls, runtime));
+  subs.add(() => viewer.setPlaylistTransitionProvider(null));
 
   subs.add(
     controls.playlistManager.on('enabledChanged', ({ enabled }) => {
@@ -923,6 +977,25 @@ function wirePlaylistRuntime(
 
       // Normal in-clip frame advance
       const globalFrame = active.clip.globalStartFrame + (frame - active.clip.inPoint);
+
+      // Entering a transition overlap: the incoming clip owns the overlap, so
+      // hand playback over to it here (before the outgoing clip reaches its
+      // out point). The outgoing clip keeps contributing through the viewer's
+      // transition blend.
+      // In 'single' loop mode the active clip keeps playback (no hand-over).
+      const owner =
+        controls.playlistManager.getLoopMode() === 'single'
+          ? null
+          : controls.playlistManager.getClipAtFrame(globalFrame);
+      if (owner && owner.clip.id !== active.clip.id) {
+        runtime.syncing = true;
+        syncSessionToPlaylistFrame(session, controls, globalFrame, runtime);
+        runtime.syncing = false;
+        runtime.lastFrame = session.currentFrame;
+        runtime.lastSourceIndex = session.currentSourceIndex;
+        return;
+      }
+
       controls.playlistManager.setCurrentFrame(globalFrame);
 
       runtime.lastFrame = frame;
@@ -943,17 +1016,10 @@ function handlePlaylistBoundaryWrap(
 
   controls.playlistManager.setCurrentFrame(edgeGlobal);
 
-  // Check if we're within a transition region. If so, don't trigger
-  // the source switch — let the transition renderer handle blending.
-  // The source switch should only happen at the END of the transition (progress = 1.0).
-  const transitionInfo = controls.playlistManager.getTransitionAtFrame(edgeGlobal);
-  if (transitionInfo && transitionInfo.isInTransition && transitionInfo.progress < 1.0) {
-    // Still within transition: advance the global frame without switching sources
-    const nextGlobal = direction > 0 ? edgeGlobal + 1 : edgeGlobal - 1;
-    controls.playlistManager.setCurrentFrame(nextGlobal);
-    return;
-  }
-
+  // Transition overlaps need no special casing here: forward playback hands
+  // over to the incoming clip when it enters the overlap (see the
+  // frameChanged handler), and backward playback out of the incoming clip's
+  // first frame lands in the outgoing clip via getPreviousFrame().
   const loopMode = controls.playlistManager.getLoopMode();
   const atPlaylistEdge =
     direction > 0 ? active.index === controls.playlistManager.getClipCount() - 1 : active.index === 0;
@@ -973,9 +1039,15 @@ function handlePlaylistBoundaryWrap(
     return;
   }
 
+  // 'single' loops the active clip in both directions. Resolve it from the
+  // clip itself rather than getNextFrame(): with a transition the clip's last
+  // frame is owned by the incoming clip, so a global lookup would leave it.
   const next =
-    direction < 0 && loopMode === 'single'
-      ? { frame: clip.globalStartFrame + clip.duration - 1, clipChanged: false }
+    loopMode === 'single'
+      ? {
+          frame: direction > 0 ? clip.globalStartFrame : clip.globalStartFrame + clip.duration - 1,
+          clipChanged: false,
+        }
       : direction > 0
         ? controls.playlistManager.getNextFrame(edgeGlobal)
         : controls.playlistManager.getPreviousFrame(edgeGlobal);
@@ -1029,6 +1101,40 @@ function resolveActiveClip(
   controls.playlistManager.setCurrentFrame(globalFrame);
   runtime.activeClipId = resolved.clip.id;
   return resolved;
+}
+
+/**
+ * Describe the transition blend for the frame the session is showing, or
+ * null when no blend is needed. Only blends while the session is on the
+ * incoming clip of a transition overlap (the clip that owns playback there).
+ */
+export function resolvePlaylistTransitionFrame(
+  session: Pick<Session, 'currentSourceIndex' | 'currentFrame'>,
+  controls: Pick<import('./AppControlRegistry').AppControlRegistry, 'playlistManager'>,
+  runtime: Pick<PlaylistRuntimeState, 'activeClipId'>,
+): PlaylistTransitionFrame | null {
+  const pm = controls.playlistManager;
+  if (!pm.isEnabled() || pm.getLoopMode() === 'single' || !runtime.activeClipId) return null;
+
+  const active = pm.getClip(runtime.activeClipId);
+  if (!active || active.sourceIndex !== session.currentSourceIndex) return null;
+  const localFrame = session.currentFrame;
+  if (localFrame < active.inPoint || localFrame > active.outPoint) return null;
+
+  const globalFrame = active.globalStartFrame + (localFrame - active.inPoint);
+  const info = pm.getTransitionAtFrame(globalFrame);
+  if (!info || !info.isInTransition || info.transitionType === 'cut') return null;
+
+  const incoming = pm.getClipByIndex(info.incomingClipIndex);
+  const outgoing = pm.getClipByIndex(info.outgoingClipIndex);
+  if (!incoming || !outgoing || incoming.id !== active.id) return null;
+
+  return {
+    transitionType: info.transitionType,
+    progress: info.progress,
+    outgoingSourceIndex: outgoing.sourceIndex,
+    outgoingFrame: info.outgoingLocalFrame,
+  };
 }
 
 function findClipForSourceFrame(

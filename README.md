@@ -25,7 +25,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - **Radiance HDR** (.hdr/.pic) -- RGBE encoding with adaptive RLE decompression
 - **Float TIFF** -- 16/32/64-bit floating-point TIFF images
 - **JPEG XL** (.jxl) -- modern HDR-capable format via WASM decoder and browser-native HDR path
-- **JPEG 2000 / HTJ2K** (.jp2/.j2k/.j2c/.jph/.jhc) -- via openjph-based WASM module
+- **JPEG 2000 / HTJ2K** (.jp2/.j2k/.j2c/.jph/.jhc) -- via lazy-loaded OpenJPEG (classic) and OpenJPH (HTJ2K) WASM decoders
 - **JPEG Gainmap HDR** -- MPF parsing, XMP headroom extraction, sRGB-to-linear + gain reconstruction
 - **HEIC Gainmap HDR** -- Apple gainmap format and ISO 21496-1 standard; ISOBMFF parsing with WASM fallback for non-Safari browsers
 - **AVIF Gainmap HDR** -- auxiliary gain map items per ISO 21496-1

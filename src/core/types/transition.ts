@@ -34,6 +34,23 @@ export interface TransitionFrameInfo {
   incomingLocalFrame: number;
 }
 
+/**
+ * What the viewer needs to blend a playlist transition frame.
+ *
+ * During a transition overlap the session is showing the incoming clip (it
+ * owns playback); the outgoing clip's frame is the blend's second input.
+ */
+export interface PlaylistTransitionFrame {
+  /** The type of transition effect (never 'cut') */
+  transitionType: TransitionType;
+  /** Progress through the transition: 0.0 = fully outgoing, 1.0 = fully incoming */
+  progress: number;
+  /** Session source index of the outgoing clip */
+  outgoingSourceIndex: number;
+  /** Source-local frame of the outgoing clip to blend with the current frame */
+  outgoingFrame: number;
+}
+
 /** Map transition type to GLSL uniform int */
 export const TRANSITION_TYPE_CODES: Record<TransitionType, number> = {
   cut: -1,

@@ -264,10 +264,17 @@ describe('EDLWriter E2E', () => {
     });
 
     it('E2E-EDL-021: EDL is importable back into PlaylistManager', () => {
-      manager.addClip(0, 'clip_A', 0, 47); // duration=48
-      manager.addClip(1, 'clip_B', 0, 23); // duration=24
+      manager.addClip(0, 'clip_A', 1, 48); // duration=48
+      manager.addClip(1, 'clip_B', 1, 24); // duration=24
 
-      const edlClips = playlistClipsToEDLClips(manager);
+      // PlaylistPanel.exportEDL writes 0-based timecode (local frame 1 = 00:00:00:00)
+      const edlClips = playlistClipsToEDLClips(manager).map((c) => ({
+        ...c,
+        sourceIn: c.sourceIn - 1,
+        sourceOut: c.sourceOut - 1,
+        recordIn: c.recordIn - 1,
+        recordOut: c.recordOut - 1,
+      }));
       const edlText = generateEDL(edlClips, { title: 'Test', fps: 24 });
 
       // Create a new manager and import
@@ -285,11 +292,11 @@ describe('EDLWriter E2E', () => {
       expect(importedClips).toHaveLength(2);
 
       // The imported in/out points should match the original
-      // EDL source out is exclusive, fromEDL subtracts 1
-      expect(importedClips[0]!.inPoint).toBe(0);
-      expect(importedClips[0]!.outPoint).toBe(47);
-      expect(importedClips[1]!.inPoint).toBe(0);
-      expect(importedClips[1]!.outPoint).toBe(23);
+      // EDL source out is exclusive; 0-based TC maps back to 1-based local frames
+      expect(importedClips[0]!.inPoint).toBe(1);
+      expect(importedClips[0]!.outPoint).toBe(48);
+      expect(importedClips[1]!.inPoint).toBe(1);
+      expect(importedClips[1]!.outPoint).toBe(24);
 
       importManager.dispose();
     });

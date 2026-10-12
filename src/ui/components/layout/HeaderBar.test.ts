@@ -2532,6 +2532,32 @@ describe('HeaderBar', () => {
       });
       expect(loadFileSpy).not.toHaveBeenCalled();
     });
+
+    it('HDR-U056: selecting two image sequences loads each one as a source', async () => {
+      headerBar.render();
+      const loadSequenceSpy = vi.spyOn(session, 'loadSequence').mockResolvedValue();
+      const loadFileSpy = vi.spyOn(session, 'loadFile').mockResolvedValue();
+
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.otio'),
+      ) as HTMLInputElement;
+
+      const a = [1, 2].map((n) => new File(['a'], `a.${n}.exr`));
+      const b = [1, 2, 3].map((n) => new File(['b'], `b_00${n}.png`));
+      const movie = new File(['m'], 'ref.mp4');
+      Object.defineProperty(mediaInput, 'files', { value: [...a, movie, ...b], writable: false });
+
+      mediaInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(loadFileSpy).toHaveBeenCalledTimes(1);
+      });
+      expect(loadSequenceSpy).toHaveBeenCalledTimes(2);
+      expect(loadSequenceSpy.mock.calls[0]![0]).toEqual(a);
+      expect(loadSequenceSpy.mock.calls[1]![0]).toEqual(b);
+      expect(loadFileSpy).toHaveBeenCalledWith(movie);
+    });
   });
 
   describe('experimental features (U16)', () => {

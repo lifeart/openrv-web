@@ -16,8 +16,10 @@ import type {
   OTIOStack,
   OTIOTimeline,
   OTIOMediaReference,
+  OTIOMarker,
   TransitionType,
 } from './OTIOParser';
+import { OTIO_MARKER_COLOR_MAP } from './OTIOParser';
 
 // ---------------------------------------------------------------------------
 // Minimal interfaces — avoid hard dependency on full Session/PlaylistManager.
@@ -31,6 +33,26 @@ export interface OTIOExportClip {
   globalStartFrame: number;
   duration: number; // outPoint - inPoint + 1
   fps: number; // clip-level FPS (may differ per source)
+  /**
+   * Media-time frame of the source's first frame (written as the media
+   * reference's available_range start). Defaults to 0; image sequences
+   * typically use their first frame number (e.g. 1001).
+   */
+  sourceStartFrame?: number;
+  /** Total frames in the source; when > 0 an available_range is written. */
+  sourceFrameCount?: number;
+}
+
+/** Timeline marker to export (1-based playlist frames). */
+export interface OTIOExportMarker {
+  /** 1-based global frame where the marker starts */
+  frame: number;
+  /** 1-based inclusive end frame for duration markers */
+  endFrame?: number;
+  name: string;
+  /** Hex color (e.g. '#ff4444') or OTIO color name */
+  color?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** Transition to insert between two clips */
@@ -62,6 +84,8 @@ export interface OTIOExportTrack {
 export interface OTIOExportOptions {
   name?: string;
   fps?: number;
+  /** Timeline markers, written on the top-level stack */
+  markers?: OTIOExportMarker[];
 }
 
 export interface OTIOMultiTrackExportOptions extends OTIOExportOptions {
@@ -87,17 +111,55 @@ function timeRange(startValue: number, duration: number, rate: number): OTIOTime
 
 function buildClipNode(clip: OTIOExportClip): OTIOClip {
   const rate = clip.fps;
+  const mediaStart = clip.sourceStartFrame ?? 0;
   const mediaRef: OTIOMediaReference = {
     OTIO_SCHEMA: 'ExternalReference.1',
     target_url: clip.sourceUrl,
   };
+  if (clip.sourceFrameCount && clip.sourceFrameCount > 0) {
+    mediaRef.available_range = timeRange(mediaStart, clip.sourceFrameCount, rate);
+  }
 
+  // source_range is in media time: local (1-based) frame 1 is media time `mediaStart`.
   return {
     OTIO_SCHEMA: 'Clip.1',
     name: clip.sourceName,
-    source_range: timeRange(clip.inPoint, clip.duration, rate),
+    source_range: timeRange(mediaStart + clip.inPoint - 1, clip.duration, rate),
     media_reference: mediaRef,
   };
+}
+
+/** Reverse lookup of OTIO marker color names from hex values. */
+function markerColorName(color: string | undefined): string {
+  if (!color) return 'RED';
+  const upper = color.toUpperCase();
+  if (OTIO_MARKER_COLOR_MAP[upper]) return upper;
+  const lower = color.toLowerCase();
+  for (const [name, hex] of Object.entries(OTIO_MARKER_COLOR_MAP)) {
+    if (hex === lower) return name;
+  }
+  return 'RED';
+}
+
+function buildMarkerNodes(markers: OTIOExportMarker[] | undefined, rate: number): OTIOMarker[] | undefined {
+  if (!markers || markers.length === 0) return undefined;
+  return markers.map((m) => {
+    const duration = m.endFrame !== undefined && m.endFrame >= m.frame ? m.endFrame - m.frame + 1 : 0;
+    const colorName = markerColorName(m.color);
+    const node: OTIOMarker = {
+      OTIO_SCHEMA: 'Marker.2',
+      name: m.name,
+      color: colorName,
+      // Timeline (stack) time is 0-based.
+      marked_range: timeRange(m.frame - 1, duration, rate),
+    };
+    const metadata: Record<string, unknown> = { ...(m.metadata ?? {}) };
+    if (m.color && OTIO_MARKER_COLOR_MAP[colorName]?.toLowerCase() !== m.color.toLowerCase()) {
+      metadata.openrv = { color: m.color };
+    }
+    if (Object.keys(metadata).length > 0) node.metadata = metadata;
+    return node;
+  });
 }
 
 function buildGapNode(duration: number, rate: number): OTIOGap {
@@ -134,7 +196,8 @@ function buildTrackChildren(
   let timelinePosition = 1; // 1-based global frame tracker
 
   for (let i = 0; i < clips.length; i++) {
-    const clip = clips[i]!;
+    const clip = clips[i];
+    if (!clip) continue;
     const rate = clip.fps || defaultFps;
 
     // Insert gap if there's space before this clip
@@ -147,8 +210,8 @@ function buildTrackChildren(
     timelinePosition = clip.globalStartFrame + clip.duration;
 
     // Insert transition after this clip if one is defined
-    if (transitions?.has(i)) {
-      const trans = transitions.get(i)!;
+    const trans = transitions?.get(i);
+    if (trans) {
       children.push(buildTransitionNode(trans));
     }
   }
@@ -197,6 +260,8 @@ export function exportOTIO(clips: OTIOExportClip[], options?: OTIOExportOptions)
     OTIO_SCHEMA: 'Stack.1',
     children: [track],
   };
+  const markers = buildMarkerNodes(options?.markers, defaultFps);
+  if (markers) stack.markers = markers;
 
   const timeline: OTIOTimeline = {
     OTIO_SCHEMA: 'Timeline.1',
@@ -221,7 +286,8 @@ export function exportOTIOMultiTrack(options: OTIOMultiTrackExportOptions): stri
   const otioTracks: OTIOTrack[] = [];
 
   for (let trackIdx = 0; trackIdx < options.tracks.length; trackIdx++) {
-    const exportTrack = options.tracks[trackIdx]!;
+    const exportTrack = options.tracks[trackIdx];
+    if (!exportTrack) continue;
     const trackName = exportTrack.name ?? `Video Track ${trackIdx + 1}`;
 
     const children = buildTrackChildren(exportTrack.clips, exportTrack.transitions, defaultFps);
@@ -238,6 +304,8 @@ export function exportOTIOMultiTrack(options: OTIOMultiTrackExportOptions): stri
     OTIO_SCHEMA: 'Stack.1',
     children: otioTracks,
   };
+  const markers = buildMarkerNodes(options.markers, defaultFps);
+  if (markers) stack.markers = markers;
 
   const timeline: OTIOTimeline = {
     OTIO_SCHEMA: 'Timeline.1',
@@ -256,6 +324,10 @@ export function exportOTIOMultiTrack(options: OTIOMultiTrackExportOptions): stri
 export interface OTIOSourceInfo {
   url: string;
   fps: number;
+  /** Media-time frame of the first frame (see OTIOExportClip.sourceStartFrame) */
+  startFrame?: number;
+  /** Total frames in the source */
+  frameCount?: number;
 }
 
 /**
@@ -287,6 +359,8 @@ export function buildExportClips(
       globalStartFrame: clip.globalStartFrame,
       duration: clip.duration,
       fps: source?.fps ?? fps,
+      sourceStartFrame: source?.startFrame,
+      sourceFrameCount: source?.frameCount,
     });
   }
 

@@ -1293,6 +1293,7 @@ describe('TIFFFloatDecoder', () => {
       uncompressedSize: number;
       stripCompressedSizes?: number[];
       stripCompressedData?: Uint8Array[];
+      bitsPerSample?: number;
     },
   ): ArrayBuffer {
     const {
@@ -1306,6 +1307,7 @@ describe('TIFFFloatDecoder', () => {
       uncompressedSize: _uncompressedSize,
       stripCompressedSizes,
       stripCompressedData,
+      bitsPerSample = 32,
     } = options;
 
     const le = !bigEndian;
@@ -1377,7 +1379,7 @@ describe('TIFFFloatDecoder', () => {
     if (needsBPSArray) {
       writeTag(258, 3, channels, bpsArrayOffset);
     } else {
-      writeTag(258, 3, 1, 32);
+      writeTag(258, 3, 1, bitsPerSample);
     }
     writeTag(259, 3, 1, compression); // Compression
     writeTag(262, 3, 1, 2); // PhotometricInterpretation=RGB
@@ -1404,7 +1406,7 @@ describe('TIFFFloatDecoder', () => {
     // BitsPerSample array
     if (needsBPSArray) {
       for (let i = 0; i < channels; i++) {
-        view.setUint16(bpsArrayOffset + i * 2, 32, le);
+        view.setUint16(bpsArrayOffset + i * 2, bitsPerSample, le);
       }
     }
 
@@ -1426,8 +1428,10 @@ describe('TIFFFloatDecoder', () => {
   }
 
   /**
-   * Apply horizontal differencing predictor to float pixel data (for test data generation).
-   * This is the ENCODING direction -- stores differences.
+   * Apply horizontal differencing predictor (for test data generation).
+   * This is the ENCODING direction: each sample word (in file byte order)
+   * stores the difference from the same channel of the previous pixel,
+   * modulo 2^bits — matching libtiff's horDiff16/32/64.
    */
   function applyHorizontalPredictorEncode(
     data: Uint8Array,
@@ -1435,25 +1439,34 @@ describe('TIFFFloatDecoder', () => {
     samplesPerPixel: number,
     bytesPerSample: number,
     rowCount: number,
+    le = true,
   ): Uint8Array {
-    const result = new Uint8Array(data.length);
+    const result = new Uint8Array(data);
+    const src = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const dst = new DataView(result.buffer);
     const rowBytes = width * samplesPerPixel * bytesPerSample;
     const stride = samplesPerPixel * bytesPerSample;
 
     for (let row = 0; row < rowCount; row++) {
       const rowStart = row * rowBytes;
-      for (let i = 0; i < stride; i++) {
-        result[rowStart + i] = data[rowStart + i]!;
-      }
-      for (let i = rowBytes - 1; i >= stride; i--) {
-        result[rowStart + i] = (data[rowStart + i]! - data[rowStart + i - stride]!) & 0xff;
+      for (let i = rowStart + stride; i < rowStart + rowBytes; i += bytesPerSample) {
+        const prev = i - stride;
+        if (bytesPerSample === 2) {
+          dst.setUint16(i, (src.getUint16(i, le) - src.getUint16(prev, le)) & 0xffff, le);
+        } else if (bytesPerSample === 4) {
+          dst.setUint32(i, (src.getUint32(i, le) - src.getUint32(prev, le)) >>> 0, le);
+        } else {
+          dst.setBigUint64(i, BigInt.asUintN(64, src.getBigUint64(i, le) - src.getBigUint64(prev, le)), le);
+        }
       }
     }
     return result;
   }
 
   /**
-   * Apply floating-point predictor encoding to float pixel data (for test data generation).
+   * Apply floating-point predictor encoding (for test data generation).
+   * Mirrors libtiff fpDiff: byte plane 0 always holds the most significant
+   * byte of each sample, regardless of file byte order.
    */
   function applyFloatingPointPredictorEncode(
     data: Uint8Array,
@@ -1461,6 +1474,7 @@ describe('TIFFFloatDecoder', () => {
     samplesPerPixel: number,
     bytesPerSample: number,
     rowCount: number,
+    le = true,
   ): Uint8Array {
     const result = new Uint8Array(data.length);
     const rowBytes = width * samplesPerPixel * bytesPerSample;
@@ -1468,11 +1482,12 @@ describe('TIFFFloatDecoder', () => {
 
     for (let row = 0; row < rowCount; row++) {
       const rowStart = row * rowBytes;
-      // Step 1: rearrange from interleaved to planar byte order
+      // Step 1: rearrange from interleaved to MSB-first byte planes
       const temp = new Uint8Array(rowBytes);
       for (let i = 0; i < pixelCount; i++) {
         for (let b = 0; b < bytesPerSample; b++) {
-          temp[b * pixelCount + i] = data[rowStart + i * bytesPerSample + b]!;
+          const srcByte = le ? bytesPerSample - 1 - b : b;
+          temp[b * pixelCount + i] = data[rowStart + i * bytesPerSample + srcByte]!;
         }
       }
       // Step 2: apply byte-level delta (stride 1)
@@ -2742,9 +2757,9 @@ describe('TIFFFloatDecoder', () => {
       for (const tileBuf of tileDataBuffers) {
         let data = tileBuf;
         if (predictor === 2) {
-          data = applyHorizontalPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+          data = applyHorizontalPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight, le);
         } else if (predictor === 3) {
-          data = applyFloatingPointPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+          data = applyFloatingPointPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight, le);
         }
         compressedTiles.push(lzwCompress(data));
       }
@@ -2768,9 +2783,9 @@ describe('TIFFFloatDecoder', () => {
         for (const tileBuf of tileDataBuffers) {
           let data = tileBuf;
           if (predictor === 2) {
-            data = applyHorizontalPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+            data = applyHorizontalPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight, le);
           } else if (predictor === 3) {
-            data = applyFloatingPointPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+            data = applyFloatingPointPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight, le);
           }
           compressedTiles.push(await deflateCompress(data));
         }
@@ -2928,6 +2943,112 @@ describe('TIFFFloatDecoder', () => {
 
     return buffer;
   }
+
+  describe('Predictors with 16/64-bit samples and byte order', () => {
+    function samplesToBytes(values: number[], bitsPerSample: number, le: boolean): Uint8Array {
+      const bps = bitsPerSample / 8;
+      const out = new Uint8Array(values.length * bps);
+      const v = new DataView(out.buffer);
+      values.forEach((val, i) => {
+        if (bps === 2) v.setUint16(i * 2, float32ToFloat16(val), le);
+        else if (bps === 4) v.setFloat32(i * 4, val, le);
+        else v.setFloat64(i * 8, val, le);
+      });
+      return out;
+    }
+
+    it('TIFF-PRED001: FP predictor on little-endian data uses MSB-first byte planes (libtiff layout)', async () => {
+      // 1x1, single channel float32 1.0 = 0x3F800000.
+      // MSB-first planes: [3F, 80, 00, 00]; byte delta: [3F, 41, 80, 00].
+      const encoded = new Uint8Array([0x3f, 0x41, 0x80, 0x00]);
+      const buf = createCompressedTIFF(lzwCompress(encoded), {
+        width: 1,
+        height: 1,
+        channels: 1,
+        compression: 5,
+        predictor: 3,
+        uncompressedSize: 4,
+      });
+      const result = await decodeTIFFFloat(buf);
+      expect(result.data[0]).toBe(1.0);
+    });
+
+    const values = [0.1, 0.2, 0.3, 1.5, -2.25, 0.75, 8.0, 0.001, 0.5, 3.0, 0.0, 0.25];
+
+    for (const bitsPerSample of [16, 64]) {
+      for (const bigEndian of [false, true]) {
+        for (const predictor of [1, 2, 3]) {
+          it(`TIFF-PRED-${bitsPerSample}-${bigEndian ? 'BE' : 'LE'}-P${predictor}: decodes deflate strip`, async () => {
+            const width = 2,
+              height = 2,
+              channels = 3;
+            const le = !bigEndian;
+            const raw = samplesToBytes(values, bitsPerSample, le);
+            const bps = bitsPerSample / 8;
+            let encoded = raw;
+            if (predictor === 2) encoded = applyHorizontalPredictorEncode(raw, width, channels, bps, height, le);
+            if (predictor === 3) encoded = applyFloatingPointPredictorEncode(raw, width, channels, bps, height, le);
+            const compressed = await deflateCompress(encoded);
+            const buf = createCompressedTIFF(compressed, {
+              width,
+              height,
+              channels,
+              bigEndian,
+              compression: 8,
+              predictor,
+              bitsPerSample,
+              uncompressedSize: raw.length,
+            });
+            const result = await decodeTIFFFloat(buf);
+            const precision = bitsPerSample === 16 ? 2 : 6;
+            for (let p = 0; p < width * height; p++) {
+              for (let c = 0; c < channels; c++) {
+                expect(result.data[p * 4 + c]).toBeCloseTo(values[p * channels + c]!, precision);
+              }
+              expect(result.data[p * 4 + 3]).toBe(1.0);
+            }
+          });
+        }
+      }
+    }
+
+    it('TIFF-PRED002: horizontal predictor accumulates whole words (carries across bytes)', async () => {
+      // 0x00FF -> 0x0100 requires a carry from the low byte into the high byte.
+      const le = true;
+      const raw = new Uint8Array(4);
+      const rv = new DataView(raw.buffer);
+      rv.setUint16(0, 0x00ff, le);
+      rv.setUint16(2, 0x3c00, le); // half 1.0
+      const encoded = applyHorizontalPredictorEncode(raw, 2, 1, 2, 1, le);
+      const buf = createCompressedTIFF(lzwCompress(encoded), {
+        width: 2,
+        height: 1,
+        channels: 1,
+        compression: 5,
+        predictor: 2,
+        bitsPerSample: 16,
+        uncompressedSize: 4,
+      });
+      const result = await decodeTIFFFloat(buf);
+      expect(result.data[4]).toBe(1.0);
+    });
+
+    it('TIFF-PRED003: uncompressed strip with predictor 3 is reconstructed', async () => {
+      const raw = samplesToBytes([0.5, 2.0], 32, true);
+      const encoded = applyFloatingPointPredictorEncode(raw, 2, 1, 4, 1, true);
+      const buf = createCompressedTIFF(encoded, {
+        width: 2,
+        height: 1,
+        channels: 1,
+        compression: 1,
+        predictor: 3,
+        uncompressedSize: raw.length,
+      });
+      const result = await decodeTIFFFloat(buf);
+      expect(result.data[0]).toBe(0.5);
+      expect(result.data[4]).toBe(2.0);
+    });
+  });
 
   describe('Tiled TIFF layout', () => {
     it('TIFF-TILE001: should decode uncompressed tiled RGB float TIFF (exact tiles)', async () => {

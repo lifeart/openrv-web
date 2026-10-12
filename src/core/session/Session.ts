@@ -26,7 +26,7 @@ import { SessionMedia } from './SessionMedia';
 import { SessionPlayback } from './SessionPlayback';
 import { SessionManager } from './SessionManager';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
-import { isDecoderBackedExtension } from '../../utils/media/SupportedMediaFormats';
+import { isDecoderBackedExtension, isVideoExtension } from '../../utils/media/SupportedMediaFormats';
 import { fetchUrlAsFile } from '../../utils/media/fetchUrlAsFile';
 import { isSequencePattern } from '../../utils/media/SequenceLoader';
 // Logger removed — playback logging now lives in SessionPlayback.
@@ -293,9 +293,7 @@ export class Session extends EventEmitter<SessionEvents> {
       'frameDecodeTimeout',
       'playbackStarved',
     ] as const;
-    for (const event of playbackEvents) {
-      this._playback.on(event as any, (data: any) => this.emit(event as any, data));
-    }
+    this.forwardEvents(this._playback, playbackEvents);
 
     // Forward SessionAnnotation events to Session events
     const annotationEvents = [
@@ -309,9 +307,7 @@ export class Session extends EventEmitter<SessionEvents> {
       'statusChanged',
       'statusesChanged',
     ] as const;
-    for (const event of annotationEvents) {
-      this._annotations.on(event as any, (data: any) => this.emit(event as any, data));
-    }
+    this.forwardEvents(this._annotations, annotationEvents);
 
     // Wire active-version changes to source switching
     this._annotations.on('activeVersionChanged', ({ entry }) => {
@@ -359,9 +355,7 @@ export class Session extends EventEmitter<SessionEvents> {
       'skippedNodes',
       'degradedModes',
     ] as const;
-    for (const event of graphEvents) {
-      this._sessionGraph.on(event as any, (data: any) => this.emit(event as any, data));
-    }
+    this.forwardEvents(this._sessionGraph, graphEvents);
 
     // Wire SessionMedia host
     this._media.setHost({
@@ -411,9 +405,7 @@ export class Session extends EventEmitter<SessionEvents> {
       'representationError',
       'fallbackActivated',
     ] as const;
-    for (const event of mediaEvents) {
-      this._media.on(event as any, (data: any) => this.emit(event as any, data));
-    }
+    this.forwardEvents(this._media, mediaEvents);
 
     // Wire SessionManager host — gives it access to the current graph
     this._sessionManager.setHost({
@@ -428,9 +420,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Forward SessionManager events to Session events
     const sessionManagerEvents = ['viewNodeChanged', 'graphStructureChanged', 'viewHistoryChanged'] as const;
-    for (const event of sessionManagerEvents) {
-      this._sessionManager.on(event as any, (data: any) => this.emit(event as any, data));
-    }
+    this.forwardEvents(this._sessionManager, sessionManagerEvents);
   }
 
   /** Media source management service */
@@ -1128,24 +1118,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const pathname = new URL(url).pathname;
     const name = decodeURIComponent(basename(pathname));
-    const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
-    const videoExts = new Set([
-      'mp4',
-      'm4v',
-      '3gp',
-      '3g2',
-      'mov',
-      'qt',
-      'mkv',
-      'mk3d',
-      'webm',
-      'ogg',
-      'ogv',
-      'ogm',
-      'ogx',
-      'avi',
-    ]);
-    if (videoExts.has(ext)) {
+    const ext = name.includes('.') ? (name.split('.').pop() ?? '').toLowerCase() : '';
+    if (isVideoExtension(ext)) {
       return this.loadVideo(name, url);
     }
     if (isDecoderBackedExtension(ext)) {
@@ -1153,6 +1127,19 @@ export class Session extends EventEmitter<SessionEvents> {
       return this.loadImageFile(file);
     }
     return this.loadImage(name, url);
+  }
+
+  /**
+   * Re-emit the given events of a sub-component on this Session. Event names
+   * are shared between the two event maps and carry the same payloads.
+   */
+  private forwardEvents<K extends keyof SessionEvents & string>(
+    source: { on(event: K, callback: (data: SessionEvents[K]) => void): unknown },
+    events: readonly K[],
+  ): void {
+    for (const event of events) {
+      source.on(event, (data) => this.emit(event, data));
+    }
   }
 
   /**
@@ -1190,6 +1177,10 @@ export class Session extends EventEmitter<SessionEvents> {
 
   getSequenceFrameSync(frameIndex?: number): ImageBitmap | null {
     return this._media.getSequenceFrameSync(frameIndex);
+  }
+
+  getNearestLoadedSequenceFrameSync(frameIndex?: number): ImageBitmap | null {
+    return this._media.getNearestLoadedSequenceFrameSync(frameIndex);
   }
 
   getVideoFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {

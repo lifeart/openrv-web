@@ -1904,3 +1904,74 @@ describe('ViewerInputHandler – OTIO drop handling (Issue #465)', () => {
     expect(newHandler.onOTIOFileDrop).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Several image sequences dropped at once
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler drop - multiple image sequences', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const dropEvent = new Event('drop', { bubbles: true }) as Event & {
+      dataTransfer: { files: File[] };
+    };
+    dropEvent.dataTransfer = { files };
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('SEQ-DROP-001: loads each dropped sequence as its own source', async () => {
+    const session = ctx.getSession();
+    const a = [1, 2, 3].map((n) => new File(['a'], `shotA.000${n}.exr`));
+    const b = [1, 2].map((n) => new File(['b'], `plateB_00${n}.dpx`));
+    // Interleave the files to make sure grouping does not depend on order
+    dispatchDrop(ctx.getContainer(), [a[0]!, b[0]!, a[1]!, b[1]!, a[2]!]);
+
+    await vi.waitFor(() => {
+      expect(session.loadSequence).toHaveBeenCalledTimes(2);
+    });
+    expect(vi.mocked(session.loadSequence).mock.calls[0]![0]).toEqual(a);
+    expect(vi.mocked(session.loadSequence).mock.calls[1]![0]).toEqual(b);
+    expect(session.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('SEQ-DROP-002: loads files outside any sequence individually alongside sequences', async () => {
+    const session = ctx.getSession();
+    const seq = [1, 2].map((n) => new File(['a'], `render.${n}.png`));
+    const movie = new File(['m'], 'reference.mov');
+    const still = new File(['s'], 'slate.jpg');
+    dispatchDrop(ctx.getContainer(), [movie, ...seq, still]);
+
+    await vi.waitFor(() => {
+      expect(session.loadFile).toHaveBeenCalledTimes(2);
+    });
+    expect(session.loadSequence).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(session.loadSequence).mock.calls[0]![0]).toEqual(seq);
+    expect(vi.mocked(session.loadFile).mock.calls.map((c) => c[0])).toEqual([movie, still]);
+  });
+
+  it('SEQ-DROP-003: a failing sequence does not prevent the others from loading', async () => {
+    const session = ctx.getSession();
+    vi.mocked(session.loadSequence).mockRejectedValueOnce(new Error('boom'));
+    const a = [1, 2].map((n) => new File(['a'], `a.${n}.exr`));
+    const b = [1, 2].map((n) => new File(['b'], `b.${n}.exr`));
+    dispatchDrop(ctx.getContainer(), [...a, ...b]);
+
+    await vi.waitFor(() => {
+      expect(session.loadSequence).toHaveBeenCalledTimes(2);
+    });
+  });
+});

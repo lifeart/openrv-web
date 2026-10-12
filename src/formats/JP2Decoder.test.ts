@@ -922,11 +922,12 @@ describe('JP2Decoder', () => {
       expect(() => parseJP2Header(buffer)).toThrow('Failed to parse JP2 header');
     });
 
-    it('JP2-ERR-004: should throw when decoding without WASM and no decoder provided', async () => {
-      // Make sure module-level decoder is not set
+    it('JP2-ERR-004: should throw when a provided decoder has not been initialised', async () => {
       setJP2WasmDecoder(null);
       const buffer = makeJ2KCodestream({ width: 32, height: 32, numComponents: 3, bitsPerComponent: 8 });
-      await expect(decodeJP2(buffer)).rejects.toThrow('JP2 WASM module not loaded');
+      await expect(decodeJP2(buffer, undefined, new TestableJP2WasmDecoder())).rejects.toThrow(
+        'JP2 WASM module not loaded',
+      );
     });
 
     it('JP2-ERR-005: parseJP2Header should throw for empty buffer', () => {

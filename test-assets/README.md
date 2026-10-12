@@ -60,3 +60,21 @@ To regenerate the PNG images, install the `canvas` package and run:
 pnpm add -D canvas
 npx tsx test-assets/generate-test-images.ts
 ```
+
+## JPEG 2000 / HTJ2K (`jpeg2000/`)
+
+Tiny lossless fixtures used by `src/formats/JP2Decoder.wasm.test.ts` (real WASM decode).
+All are 16×8. "rgb8" pixels are `(16x, 32y, 255-16x)`.
+
+| File | Format | Content | Generated with |
+|------|--------|---------|----------------|
+| `rgb8.jp2` | JP2 box, classic J2K | rgb8 | Pillow `save(irreversible=False)` |
+| `rgb8.j2k` | raw classic codestream, 2 decomposition levels | rgb8 | Pillow `save(irreversible=False, num_resolutions=3)` |
+| `gray8.jp2` | JP2 box, classic J2K | L = 16x | Pillow |
+| `rgba8.jp2` | JP2 box, classic J2K, 4 components | rgb8 + alpha 128 | Pillow (unsupported by the OpenJPEG wrapper; error-path test) |
+| `gray16.j2k` | raw classic codestream, 16-bit | `(4096x + 16y) & 0xffff` | Pillow (`I;16`) |
+| `rgb8_codestream.jhc` | raw HTJ2K codestream, 2 levels | rgb8 | `@cornerstonejs/codec-openjph` `HTJ2KEncoder` |
+| `rgb8.jph` | JPH box file wrapping the above | rgb8 | hand-built boxes (`jP  `, `ftyp jph `, `jp2h`, `jp2c`) |
+| `rgba8.jhc` | raw HTJ2K codestream, 4 components | rgb8 + alpha 128 | `HTJ2KEncoder` |
+| `gray12.j2c` | raw HTJ2K codestream, 12-bit | `256x + y` | `HTJ2KEncoder` |
+| `signed16.j2c` | raw HTJ2K codestream, signed 16-bit | `-32768 + 512 * (y*16 + x)` | `HTJ2KEncoder` |

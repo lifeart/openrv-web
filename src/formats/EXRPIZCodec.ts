@@ -1,298 +1,250 @@
 /**
  * EXRPIZCodec - PIZ wavelet compression codec for OpenEXR
  *
- * PIZ is the most common compression in VFX EXR files.
- * Pipeline: Huffman decode -> LUT inverse -> Haar wavelet reconstruction -> byte reorder
+ * Follows OpenEXR's PizCompressor::uncompress:
+ *   1. Read the value bitmap (minNonZero/maxNonZero byte range) and build the
+ *      reverse LUT.
+ *   2. Huffman-decode the 16-bit words (see EXRHuffman).
+ *   3. Inverse 2D Haar wavelet per channel plane (and per 16-bit word of
+ *      32-bit channels).
+ *   4. Apply the reverse LUT.
+ *   5. Re-interleave the channel planes into scanline order (respecting
+ *      channel y-subsampling).
+ *
+ * The decompressed planes hold, for each channel in header order,
+ * `nx * ny * (size / 2)` 16-bit words, where nx/ny are the number of samples
+ * of that channel inside the block.
  */
+
+import { DecoderError } from '../core/errors';
+import { hufUncompress } from './EXRHuffman';
 
 const USHORT_RANGE = 1 << 16;
 const BITMAP_SIZE = USHORT_RANGE >> 3; // 8192 bytes
 
-/**
- * Read a Huffman-coded bitmap from the data stream
- */
-function hufUnpackEncTable(
-  data: Uint8Array,
-  offset: number,
-  dataLength: number,
-): { bitmap: Uint8Array; bytesRead: number } {
-  const bitmap = new Uint8Array(BITMAP_SIZE);
+/** Per-channel sample layout of one PIZ block. */
+export interface PIZChannelLayout {
+  /** Bytes per sample: 2 (HALF) or 4 (FLOAT/UINT). */
+  size: number;
+  /** Samples per line in this block. */
+  nx: number;
+  /** Lines with samples in this block. */
+  ny: number;
+  /** Vertical subsampling factor. */
+  ySampling: number;
+}
 
-  let pos = offset;
-  const end = offset + dataLength;
-
-  // Read the run-length encoded bitmap
-  let bitmapPos = 0;
-
-  while (pos < end && bitmapPos < BITMAP_SIZE) {
-    const byte = data[pos++]!;
-
-    if (byte <= 0x7f) {
-      // Literal bytes
-      const count = byte + 1;
-      for (let i = 0; i < count && bitmapPos < BITMAP_SIZE && pos < end; i++) {
-        bitmap[bitmapPos++] = data[pos++]!;
-      }
-    } else {
-      // Repeat zero
-      const count = byte - 0x7f;
-      for (let i = 0; i < count && bitmapPos < BITMAP_SIZE; i++) {
-        bitmap[bitmapPos++] = 0;
-      }
-    }
-  }
-
-  return { bitmap, bytesRead: pos - offset };
+/** Python-style modulo (result has the sign of the divisor). */
+function modp(a: number, b: number): number {
+  return ((a % b) + b) % b;
 }
 
 /**
- * Build forward and reverse lookup tables from bitmap
+ * Build the reverse LUT from the bitmap (reverseLutFromBitmap).
+ * Returns the LUT and the maximum LUT index.
  */
-export function buildLUTs(bitmap: Uint8Array): {
-  fwdLut: Uint16Array;
-  revLut: Uint16Array;
-  lutSize: number;
-} {
-  // Count set bits to determine LUT size
-  let lutSize = 0;
+export function reverseLutFromBitmap(bitmap: Uint8Array): { lut: Uint16Array; maxValue: number } {
+  const lut = new Uint16Array(USHORT_RANGE);
+  let k = 0;
   for (let i = 0; i < USHORT_RANGE; i++) {
-    if (bitmap[i >> 3]! & (1 << (i & 7))) {
-      lutSize++;
+    if (i === 0 || (bitmap[i >> 3] ?? 0) & (1 << (i & 7))) {
+      lut[k++] = i;
     }
   }
+  return { lut, maxValue: k - 1 };
+}
 
-  // Edge case: if no bits set, use identity mapping
-  if (lutSize === 0) {
-    lutSize = USHORT_RANGE;
-    const fwdLut = new Uint16Array(USHORT_RANGE);
-    const revLut = new Uint16Array(USHORT_RANGE);
-    for (let i = 0; i < USHORT_RANGE; i++) {
-      fwdLut[i] = i;
-      revLut[i] = i;
-    }
-    return { fwdLut, revLut, lutSize };
-  }
+function wdec14(l: number, h: number): [number, number] {
+  const ls = (l << 16) >> 16; // to signed short
+  const hs = (h << 16) >> 16;
+  const ai = ls + (hs & 1) + (hs >> 1);
+  const as = (ai << 16) >> 16;
+  const bs = ((ai - hs) << 16) >> 16;
+  return [as & 0xffff, bs & 0xffff];
+}
 
-  const fwdLut = new Uint16Array(USHORT_RANGE);
-  const revLut = new Uint16Array(lutSize);
+const A_OFFSET = 1 << 15;
+const MOD_MASK = 0xffff;
 
-  let j = 0;
-  for (let i = 0; i < USHORT_RANGE; i++) {
-    if (bitmap[i >> 3]! & (1 << (i & 7))) {
-      fwdLut[i] = j;
-      revLut[j] = i;
-      j++;
-    }
-  }
-
-  return { fwdLut, revLut, lutSize };
+function wdec16(l: number, h: number): [number, number] {
+  const m = l;
+  const d = h;
+  const bb = (m - (d >> 1)) & MOD_MASK;
+  const aa = (d + bb - A_OFFSET) & MOD_MASK;
+  return [aa, bb];
 }
 
 /**
- * Apply reverse LUT to convert packed values back to original
- */
-export function applyReverseLUT(data: Uint16Array, revLut: Uint16Array, lutSize: number): void {
-  for (let i = 0; i < data.length; i++) {
-    const val = data[i]!;
-    if (val < lutSize) {
-      data[i] = revLut[val]!;
-    }
-  }
-}
-
-/**
- * Inverse Haar wavelet transform (1D, in-place)
+ * Inverse 2D Haar wavelet transform (OpenEXR ImfWav.cpp `wav2Decode`), in place.
+ *
+ * @param buf - Word buffer
+ * @param start - Index of the first word of the plane
+ * @param nx - Number of samples per row
+ * @param ox - Stride between samples in a row
+ * @param ny - Number of rows
+ * @param oy - Stride between rows
+ * @param mx - Maximum value (selects 14-bit vs 16-bit lifting)
  */
 export function wav2Decode(
-  buffer: Uint16Array,
-  nx: number, // number of values (width)
-  ox: number, // stride between values in x
-  ny: number, // number of rows (height or 1 for 1D)
-  oy: number, // stride between rows
-  maxValue: number, // max value for clamping
+  buf: Uint16Array,
+  start: number,
+  nx: number,
+  ox: number,
+  ny: number,
+  oy: number,
+  mx: number,
 ): void {
-  const w = Math.max(nx, ny);
-  const a_b = new Int32Array(w); // Temp buffer for wavelet coefficients
+  const w14 = mx < 1 << 14;
+  const dec = w14 ? wdec14 : wdec16;
+  const n = nx > ny ? ny : nx;
+  let p = 1;
+  while (p <= n) p <<= 1;
+  p >>= 1;
+  let p2 = p;
+  p >>= 1;
 
-  // Process each row
-  for (let y = 0; y < ny; y++) {
-    // Determine current row transform size
-    const n = nx;
-    let p = 1;
-    let p2: number;
+  while (p >= 1) {
+    let py = start;
+    const ey = start + oy * (ny - p2);
+    const oy1 = oy * p;
+    const oy2 = oy * p2;
+    const ox1 = ox * p;
+    const ox2 = ox * p2;
 
-    // Find the starting level (smallest power of 2 >= n)
-    while (p < n) p <<= 1;
-    p >>= 1;
-
-    // Reconstruct from coarsest to finest level
-    while (p >= 1) {
-      p2 = p;
-      const offset = y * oy;
-
-      // Load wavelet coefficients
-      for (let i = 0; i < n; i++) {
-        a_b[i] = buffer[offset + i * ox]!;
+    for (; py <= ey; py += oy2) {
+      let px = py;
+      const ex = py + ox * (nx - p2);
+      for (; px <= ex; px += ox2) {
+        const p01 = px + ox1;
+        const p10 = px + oy1;
+        const p11 = p10 + ox1;
+        const [i00, i10] = dec(buf[px] ?? 0, buf[p10] ?? 0);
+        const [i01, i11] = dec(buf[p01] ?? 0, buf[p11] ?? 0);
+        const [a0, a1] = dec(i00, i01);
+        const [b0, b1] = dec(i10, i11);
+        buf[px] = a0;
+        buf[p01] = a1;
+        buf[p10] = b0;
+        buf[p11] = b1;
       }
-
-      // Inverse wavelet step: reconstruct from averages and differences
-      const halfN = Math.min(p2, Math.ceil(n / 2));
-
-      for (let i = 0; i < halfN; i++) {
-        const avg = a_b[i]!;
-        const diff = i + halfN < n ? a_b[i + halfN]! : 0;
-
-        const val1 = avg + diff - (maxValue >> 1);
-        const val2 = avg - diff + (maxValue >> 1) + (maxValue & 1); // Handle odd maxValue
-
-        // The reconstruction uses unsigned 16-bit wrapping
-        const idx1 = 2 * i;
-        const idx2 = 2 * i + 1;
-
-        if (idx1 < n) buffer[offset + idx1 * ox] = (val1 & 0xffff) as number;
-        if (idx2 < n) buffer[offset + idx2 * ox] = (val2 & 0xffff) as number;
+      // Odd column
+      if (nx & p) {
+        const p10 = px + oy1;
+        const [i00, i10] = dec(buf[px] ?? 0, buf[p10] ?? 0);
+        buf[p10] = i10;
+        buf[px] = i00;
       }
-
-      p >>= 1;
     }
+
+    // Odd line
+    if (ny & p) {
+      let px = py;
+      const ex = py + ox * (nx - p2);
+      for (; px <= ex; px += ox2) {
+        const p01 = px + ox1;
+        const [i00, i01] = dec(buf[px] ?? 0, buf[p01] ?? 0);
+        buf[p01] = i01;
+        buf[px] = i00;
+      }
+    }
+
+    p2 = p;
+    p >>= 1;
   }
 }
 
 /**
- * Reverse byte reorder (de-interleave bytes)
- * PIZ stores all MSBs first, then all LSBs.
- */
-export function reverseByteReorder(data: Uint8Array, outSize: number): Uint8Array {
-  const result = new Uint8Array(outSize);
-  const halfSize = Math.ceil(outSize / 2);
-
-  for (let i = 0; i < halfSize; i++) {
-    const hiIdx = i;
-    const loIdx = i + halfSize;
-
-    const hi = hiIdx < data.length ? data[hiIdx]! : 0;
-    const lo = loIdx < data.length ? data[loIdx]! : 0;
-
-    const dstIdx = i * 2;
-    if (dstIdx < outSize) result[dstIdx] = hi;
-    if (dstIdx + 1 < outSize) result[dstIdx + 1] = lo;
-  }
-
-  return result;
-}
-
-/**
- * Reverse predictor (delta decode)
- */
-export function reversePredictor(data: Uint8Array): void {
-  for (let i = 1; i < data.length; i++) {
-    data[i] = (data[i]! + data[i - 1]!) & 0xff;
-  }
-}
-
-/**
- * Decompress PIZ-compressed data
+ * Decompress one PIZ block.
  *
- * @param compressedData - The compressed data bytes
- * @param uncompressedSize - Expected size of uncompressed data in bytes
- * @param width - Image width in pixels
- * @param numChannels - Number of channels in the data
- * @param numLines - Number of scanlines in this block
- * @param channelSizes - Size in bytes per pixel per channel (2 for HALF, 4 for FLOAT)
- * @returns Decompressed data
+ * @param compressedData - The compressed block bytes
+ * @param uncompressedSize - Expected size of the block in scanline layout (bytes)
+ * @param channels - Per-channel sample layout of the block, in header order
+ * @param y0 - Absolute y coordinate of the first line of the block
+ * @param numLines - Number of lines in the block
+ * @returns Decompressed data in standard EXR scanline layout (little-endian)
  */
 export function decompressPIZ(
   compressedData: Uint8Array,
   uncompressedSize: number,
-  width: number,
-  numChannels: number,
+  channels: PIZChannelLayout[],
+  y0: number,
   numLines: number,
-  channelSizes: number[],
 ): Uint8Array {
-  if (compressedData.length === 0 || uncompressedSize === 0) {
-    return new Uint8Array(uncompressedSize);
-  }
-
-  let pos = 0;
-
-  // 1. Read minNonZero and maxNonZero
-  const minNonZero = compressedData[pos]! | (compressedData[pos + 1]! << 8);
-  pos += 2;
-  const maxNonZero = compressedData[pos]! | (compressedData[pos + 1]! << 8);
-  pos += 2;
-
-  // 2. Read/build bitmap and LUTs
-  let bitmap: Uint8Array;
-
-  if (minNonZero <= maxNonZero) {
-    const bitmapDataLen = maxNonZero - minNonZero + 1;
-    bitmap = new Uint8Array(BITMAP_SIZE);
-
-    // Copy bitmap data
-    for (let i = 0; i < bitmapDataLen && pos < compressedData.length; i++) {
-      bitmap[minNonZero + i] = compressedData[pos++]!;
-    }
-  } else {
-    // Empty bitmap - all zeros
-    bitmap = new Uint8Array(BITMAP_SIZE);
-    // Set all bits (identity LUT)
-    bitmap.fill(0xff);
-  }
-
-  const { revLut, lutSize } = buildLUTs(bitmap);
-
-  // 3. Read the remaining compressed pixel data
-  const pixelDataBytes = compressedData.slice(pos);
-
-  // 4. Reverse byte reorder
-  const reordered = reverseByteReorder(pixelDataBytes, uncompressedSize);
-
-  // 5. Reverse predictor (delta decode)
-  reversePredictor(reordered);
-
-  // 6. Convert to Uint16 array for wavelet processing
-  const numShorts = uncompressedSize / 2;
-  const shorts = new Uint16Array(numShorts);
-  for (let i = 0; i < numShorts; i++) {
-    shorts[i] = reordered[i * 2]! | (reordered[i * 2 + 1]! << 8);
-  }
-
-  // 7. Apply reverse LUT
-  applyReverseLUT(shorts, revLut, lutSize);
-
-  // 8. Inverse Haar wavelet transform per channel
-  let channelOffset = 0;
-  for (let ch = 0; ch < numChannels; ch++) {
-    const bytesPerPixel = channelSizes[ch] ?? 2;
-    const shortsPerPixel = bytesPerPixel / 2;
-    const channelShorts = width * numLines * shortsPerPixel;
-
-    if (channelOffset + channelShorts <= numShorts) {
-      const channelView = shorts.subarray(channelOffset, channelOffset + channelShorts);
-
-      // Apply 2D wavelet: first in X, then in Y
-      wav2Decode(
-        channelView,
-        width * shortsPerPixel,
-        1,
-        numLines,
-        width * shortsPerPixel,
-        lutSize > 0 ? lutSize : USHORT_RANGE,
-      );
-    }
-
-    channelOffset += channelShorts;
-  }
-
-  // 9. Convert back to bytes
   const result = new Uint8Array(uncompressedSize);
-  for (let i = 0; i < numShorts; i++) {
-    result[i * 2] = shorts[i]! & 0xff;
-    result[i * 2 + 1] = (shorts[i]! >> 8) & 0xff;
+  if (compressedData.length === 0 || uncompressedSize === 0) {
+    return result;
+  }
+
+  const view = new DataView(compressedData.buffer, compressedData.byteOffset, compressedData.byteLength);
+  if (compressedData.length < 4) throw new DecoderError('EXR', 'PIZ: block too short');
+
+  // 1. Bitmap
+  const minNonZero = view.getUint16(0, true);
+  const maxNonZero = view.getUint16(2, true);
+  let pos = 4;
+  if (maxNonZero >= BITMAP_SIZE) throw new DecoderError('EXR', 'PIZ: invalid bitmap range');
+
+  const bitmap = new Uint8Array(BITMAP_SIZE);
+  if (minNonZero <= maxNonZero) {
+    const len = maxNonZero - minNonZero + 1;
+    if (pos + len > compressedData.length) throw new DecoderError('EXR', 'PIZ: truncated bitmap');
+    bitmap.set(compressedData.subarray(pos, pos + len), minNonZero);
+    pos += len;
+  }
+  const { lut, maxValue } = reverseLutFromBitmap(bitmap);
+
+  // 2. Huffman
+  if (pos + 4 > compressedData.length) throw new DecoderError('EXR', 'PIZ: truncated data length');
+  const length = view.getInt32(pos, true);
+  pos += 4;
+  if (length < 0 || pos + length > compressedData.length) {
+    throw new DecoderError('EXR', 'PIZ: invalid compressed data length');
+  }
+
+  let totalWords = 0;
+  for (const ch of channels) totalWords += ch.nx * ch.ny * (ch.size / 2);
+  if (totalWords * 2 !== uncompressedSize) {
+    throw new DecoderError('EXR', 'PIZ: channel layout does not match block size');
+  }
+
+  const words = hufUncompress(compressedData.subarray(pos, pos + length), totalWords);
+
+  // 3. Wavelet decode per channel plane
+  const planeStarts: number[] = [];
+  let start = 0;
+  for (const ch of channels) {
+    planeStarts.push(start);
+    const wordsPerSample = ch.size / 2;
+    for (let j = 0; j < wordsPerSample; j++) {
+      wav2Decode(words, start + j, ch.nx, wordsPerSample, ch.ny, ch.nx * wordsPerSample, maxValue);
+    }
+    start += ch.nx * ch.ny * wordsPerSample;
+  }
+
+  // 4. Reverse LUT
+  for (let i = 0; i < words.length; i++) {
+    words[i] = lut[words[i] ?? 0] ?? 0;
+  }
+
+  // 5. Re-interleave planes into scanlines
+  const out = new DataView(result.buffer);
+  let outPos = 0;
+  const cursors = planeStarts.slice();
+  for (let line = 0; line < numLines; line++) {
+    const y = y0 + line;
+    for (const [c, ch] of channels.entries()) {
+      if (modp(y, ch.ySampling) !== 0) continue;
+      const n = ch.nx * (ch.size / 2);
+      let cur = cursors[c] ?? 0;
+      for (let i = 0; i < n; i++) {
+        out.setUint16(outPos, words[cur++] ?? 0, true);
+        outPos += 2;
+      }
+      cursors[c] = cur;
+    }
   }
 
   return result;
 }
 
-// Re-export for testing
-export { hufUnpackEncTable, USHORT_RANGE, BITMAP_SIZE };
+export { USHORT_RANGE, BITMAP_SIZE };

@@ -48,7 +48,6 @@ describe('Session.loadSourceFromUrl', () => {
 
   describe('scheme validation', () => {
     it('rejects javascript: scheme', async () => {
-      // eslint-disable-next-line no-script-url
       await expect(session.loadSourceFromUrl('javascript:alert(1)')).rejects.toThrow('Unsupported URL scheme');
     });
 
@@ -92,6 +91,14 @@ describe('Session.loadSourceFromUrl', () => {
     it('detects .webm as video', async () => {
       await session.loadSourceFromUrl('https://example.com/clip.webm');
       expect(loadVideoSpy).toHaveBeenCalledWith('clip.webm', 'https://example.com/clip.webm');
+    });
+
+    it('detects MPEG-TS (.ts, .mts, .m2ts) as video', async () => {
+      for (const ext of ['ts', 'mts', 'm2ts']) {
+        await session.loadSourceFromUrl(`https://example.com/clip.${ext}`);
+        expect(loadVideoSpy).toHaveBeenCalledWith(`clip.${ext}`, `https://example.com/clip.${ext}`);
+      }
+      expect(loadImageSpy).not.toHaveBeenCalled();
     });
   });
 

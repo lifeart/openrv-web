@@ -44,7 +44,7 @@ function createCineonMagic(): ArrayBuffer {
  * Create a minimal float TIFF header for format detection.
  * Must include enough data for getTIFFInfo to parse SampleFormat tag.
  */
-function createFloatTIFFMagic(): ArrayBuffer {
+function createFloatTIFFMagic(bitsPerSample = 32): ArrayBuffer {
   // Needs enough space for header + IFD with SampleFormat tag
   const buffer = new ArrayBuffer(512);
   const view = new DataView(buffer);
@@ -78,7 +78,7 @@ function createFloatTIFFMagic(): ArrayBuffer {
   view.setUint16(pos, 258, true);
   view.setUint16(pos + 2, 3, true); // SHORT
   view.setUint32(pos + 4, 1, true);
-  view.setUint16(pos + 8, 32, true);
+  view.setUint16(pos + 8, bitsPerSample, true);
   pos += 12;
 
   // Tag 339: SampleFormat = 3 (float)
@@ -203,6 +203,14 @@ describe('DecoderRegistry', () => {
     it('should detect float TIFF format', () => {
       const registry = new DecoderRegistry();
       expect(registry.detectFormat(createFloatTIFFMagic())).toBe('TIFF');
+    });
+
+    it('should route 16-bit half-float and 64-bit double TIFFs to the float TIFF decoder', () => {
+      const registry = new DecoderRegistry();
+      expect(registry.detectFormat(createFloatTIFFMagic(16))).toBe('TIFF');
+      expect(registry.detectFormat(createFloatTIFFMagic(64))).toBe('TIFF');
+      // Unsupported float widths are not claimed by the float TIFF decoder
+      expect(registry.detectFormat(createFloatTIFFMagic(24))).not.toBe('TIFF');
     });
 
     it('should not detect non-float TIFF as float TIFF', () => {
