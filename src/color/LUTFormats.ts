@@ -5,7 +5,7 @@
  * RV3DLUT (OpenRV native 3D), RVCHANNELLUT (OpenRV native 1D)
  */
 
-import type { LUT, LUT3D, LUT1D } from './LUTLoader';
+import { applyLUT3D, type LUT, type LUT3D, type LUT1D } from './LUTLoader';
 import { reorderRFastestToBFastest, normalizeIntegers } from './LUTUtils';
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -210,16 +210,27 @@ export function parseCSPLUT(content: string): LUT {
   while (cursor < lines.length && lines[cursor]!.length === 0) cursor++;
 
   if (lutType === '1D') {
-    // For 1D type, use the pre-LUT shaper data directly
-    // Find the maximum size among channels
+    // For 1D type the per-channel shaper IS the LUT: each channel maps its
+    // input positions to its outputs. Evenly spaced inputs map onto the
+    // LUT1D domain directly; anything else is resampled onto a uniform grid
+    // over the channel's input range.
     const maxSize = Math.max(...preLUTs.map((p) => p.outputs.length));
     const data = new Float32Array(maxSize * 3);
-    for (let i = 0; i < maxSize; i++) {
-      for (let ch = 0; ch < 3; ch++) {
-        const preLut = preLUTs[ch]!;
-        if (i < preLut.outputs.length) {
-          data[i * 3 + ch] = preLut.outputs[i]!;
-        }
+    const domainMin: [number, number, number] = [0, 0, 0];
+    const domainMax: [number, number, number] = [1, 1, 1];
+    for (let ch = 0; ch < 3; ch++) {
+      const preLut = preLUTs[ch]!;
+      const first = preLut.inputs[0] ?? 0;
+      const last = preLut.inputs[preLut.inputs.length - 1] ?? 1;
+      const hasRange = preLut.inputs.length >= 2 && last > first;
+      const lo = hasRange ? first : 0;
+      const hi = hasRange ? last : 1;
+      domainMin[ch] = lo;
+      domainMax[ch] = hi;
+      const direct = preLut.outputs.length === maxSize && isUniformlySpaced(preLut.inputs);
+      for (let i = 0; i < maxSize; i++) {
+        const x = lo + ((hi - lo) * i) / Math.max(1, maxSize - 1);
+        data[i * 3 + ch] = direct ? (preLut.outputs[i] ?? 0) : evalPreLUT(preLut, x);
       }
     }
 
@@ -227,8 +238,8 @@ export function parseCSPLUT(content: string): LUT {
       type: '1d',
       title,
       size: maxSize,
-      domainMin: [0, 0, 0],
-      domainMax: [1, 1, 1],
+      domainMin,
+      domainMax,
       data,
     } as LUT1D;
   }
@@ -274,14 +285,124 @@ export function parseCSPLUT(content: string): LUT {
   // Reorder from R-fastest to B-fastest
   const reordered = reorderRFastestToBFastest(data, size);
 
-  return {
+  const cube: LUT3D = {
     type: '3d',
     title,
     size,
     domainMin: [0, 0, 0],
     domainMax: [1, 1, 1],
     data: reordered,
-  } as LUT3D;
+  };
+  return applyCSPPreLUT(cube, preLUTs);
+}
+
+type CSPPreLUT = { inputs: number[]; outputs: number[] };
+
+const CSP_PRELUT_EPS = 1e-6;
+/** Grid size used when a non-linear CSP pre-LUT has to be baked into the cube. */
+const CSP_PRELUT_MIN_RESAMPLE = 33;
+const CSP_PRELUT_MAX_RESAMPLE = 65;
+
+function isUniformlySpaced(values: number[]): boolean {
+  if (values.length < 2) return true;
+  const first = values[0] ?? 0;
+  const step = ((values[values.length - 1] ?? 0) - first) / (values.length - 1);
+  const tol = Math.max(CSP_PRELUT_EPS, Math.abs(step) * 1e-4);
+  return values.every((v, i) => Math.abs(v - (first + step * i)) <= tol);
+}
+
+/** Piecewise-linear evaluation of a CSP pre-LUT; input is clamped to its range (as in cineSpace). */
+function evalPreLUT(preLut: CSPPreLUT, x: number): number {
+  const { inputs, outputs } = preLut;
+  const n = inputs.length;
+  if (n === 0) return x;
+  if (n === 1 || x <= (inputs[0] ?? 0)) return outputs[0] ?? 0;
+  if (x >= (inputs[n - 1] ?? 0)) return outputs[n - 1] ?? 0;
+  let lo = 0;
+  let hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if ((inputs[mid] ?? 0) <= x) lo = mid;
+    else hi = mid;
+  }
+  const x0 = inputs[lo] ?? 0;
+  const x1 = inputs[hi] ?? 0;
+  const t = x1 > x0 ? (x - x0) / (x1 - x0) : 0;
+  const y0 = outputs[lo] ?? 0;
+  return y0 + ((outputs[hi] ?? 0) - y0) * t;
+}
+
+/**
+ * A pre-LUT that is a straight line from (in0, 0) to (inN, 1) is exactly a
+ * LUT3D domain of [in0, inN] (inputs outside are clamped either way).
+ */
+function preLUTAsDomain(preLut: CSPPreLUT): [number, number] | null {
+  const { inputs, outputs } = preLut;
+  const n = inputs.length;
+  if (n < 2) return null;
+  const in0 = inputs[0] ?? 0;
+  const inN = inputs[n - 1] ?? 0;
+  if (!(inN > in0)) return null;
+  if (Math.abs(outputs[0] ?? 0) > CSP_PRELUT_EPS || Math.abs((outputs[n - 1] ?? 0) - 1) > CSP_PRELUT_EPS) return null;
+  for (let i = 0; i < n; i++) {
+    const expected = ((inputs[i] ?? 0) - in0) / (inN - in0);
+    if (Math.abs((outputs[i] ?? 0) - expected) > CSP_PRELUT_EPS) return null;
+  }
+  return [in0, inN];
+}
+
+/**
+ * Honour the CSP per-channel pre-LUT (shaper) instead of dropping it.
+ *
+ * - Linear pre-LUTs spanning [0,1] become the cube's domain (exact).
+ * - Any other pre-LUT (log shapers, partial ranges) is baked: the cube is
+ *   resampled on a uniform grid over each channel's pre-LUT input range,
+ *   each grid point looking up the original cube at the shaped coordinate.
+ *   Accuracy is then limited by the grid size (max of the cube size and 33,
+ *   capped at 65), since the LUT pipeline has no separate shaper stage.
+ */
+function applyCSPPreLUT(cube: LUT3D, preLUTs: CSPPreLUT[]): LUT3D {
+  const domains = preLUTs.map(preLUTAsDomain);
+  const [dr, dg, db] = domains;
+  if (dr && dg && db) {
+    return { ...cube, domainMin: [dr[0], dg[0], db[0]], domainMax: [dr[1], dg[1], db[1]] };
+  }
+
+  const size = Math.min(CSP_PRELUT_MAX_RESAMPLE, Math.max(cube.size, CSP_PRELUT_MIN_RESAMPLE));
+  const ranges = preLUTs.map((p): [number, number] => {
+    const lo = p.inputs[0] ?? 0;
+    const hi = p.inputs[p.inputs.length - 1] ?? 1;
+    return hi > lo ? [lo, hi] : [0, 1];
+  });
+  const [rr, rg, rb] = ranges as [[number, number], [number, number], [number, number]];
+  // Shaped coordinate of each grid line, per channel.
+  const shaped = preLUTs.map((p, ch) => {
+    const [lo, hi] = ranges[ch] ?? [0, 1];
+    const axis = new Float64Array(size);
+    for (let i = 0; i < size; i++) axis[i] = evalPreLUT(p, lo + ((hi - lo) * i) / (size - 1));
+    return axis;
+  });
+  const [sr, sg, sb] = shaped as [Float64Array, Float64Array, Float64Array];
+  const data = new Float32Array(size * size * size * 3);
+  // Internal layout: B fastest (index = (r*s² + g*s + b) * 3), as applyLUT3D reads.
+  let idx = 0;
+  for (let r = 0; r < size; r++) {
+    for (let g = 0; g < size; g++) {
+      for (let b = 0; b < size; b++) {
+        const out = applyLUT3D(cube, sr[r] ?? 0, sg[g] ?? 0, sb[b] ?? 0);
+        data[idx++] = out[0];
+        data[idx++] = out[1];
+        data[idx++] = out[2];
+      }
+    }
+  }
+  return {
+    ...cube,
+    size,
+    domainMin: [rr[0], rg[0], rb[0]],
+    domainMax: [rr[1], rg[1], rb[1]],
+    data,
+  };
 }
 
 // ─── 3. IRIDAS .itx ──────────────────────────────────────────────────

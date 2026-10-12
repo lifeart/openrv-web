@@ -541,6 +541,82 @@ describe('Rising Sun .csp Parser', () => {
 
     expect(() => parseCSPLUT(content)).toThrow('Expected 8 data entries, got 2');
   });
+
+  /** Identity cube (R fastest) behind the given per-channel pre-LUT lines. */
+  function cspWithPreLUT(pre: [string, string, string], size = 5): string {
+    const lines = ['CSPLUTV100', '3D', ''];
+    for (let ch = 0; ch < 3; ch++) lines.push(...pre[ch]!.split('\n'));
+    lines.push('', `${size} ${size} ${size}`);
+    for (let b = 0; b < size; b++) {
+      for (let g = 0; g < size; g++) {
+        for (let r = 0; r < size; r++) lines.push(`${r / (size - 1)} ${g / (size - 1)} ${b / (size - 1)}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  it('LCSP-013: a linear pre-LUT over [0,4] becomes the cube domain (HDR range not clamped to 1)', () => {
+    const pre = '2\n0.0 4.0\n0.0 1.0';
+    const lut = parseCSPLUT(cspWithPreLUT([pre, pre, pre]));
+    if (!isLUT3D(lut)) throw new Error('Expected 3D LUT');
+    expect(lut.domainMin).toEqual([0, 0, 0]);
+    expect(lut.domainMax).toEqual([4, 4, 4]);
+    // Input 2.0 lands in the middle of the cube (0.5), not clamped at the top
+    const out = applyLUT3D(lut, 2, 1, 3);
+    expect(out[0]).toBeCloseTo(0.5, 5);
+    expect(out[1]).toBeCloseTo(0.25, 5);
+    expect(out[2]).toBeCloseTo(0.75, 5);
+  });
+
+  it('LCSP-014: a non-linear (log2) pre-LUT is baked into the cube', () => {
+    // Shaper: y = log2(1 + x) / log2(17) over x in [0, 16], sampled at 17 points
+    const xs = Array.from({ length: 17 }, (_, i) => i);
+    const ys = xs.map((x) => Math.log2(1 + x) / Math.log2(17));
+    const pre = `17\n${xs.join(' ')}\n${ys.join(' ')}`;
+    const lut = parseCSPLUT(cspWithPreLUT([pre, pre, pre], 9));
+    if (!isLUT3D(lut)) throw new Error('Expected 3D LUT');
+    expect(lut.domainMin).toEqual([0, 0, 0]);
+    expect(lut.domainMax).toEqual([16, 16, 16]);
+    expect(lut.size).toBe(33);
+    // Identity cube: output equals the shaped value (to within the 33-point
+    // grid over [0,16], which is coarse where the log curve is steepest)
+    for (const x of [0, 0.5, 3, 7, 16]) {
+      const expected = Math.log2(1 + x) / Math.log2(17);
+      const out = applyLUT3D(lut, x, x, x);
+      expect(Math.abs(out[0] - expected)).toBeLessThan(0.03);
+    }
+    // Values above the pre-LUT range clamp, as in cineSpace
+    expect(applyLUT3D(lut, 40, 40, 40)[0]).toBeCloseTo(1, 5);
+  });
+
+  it('LCSP-015: per-channel pre-LUTs are honoured independently', () => {
+    const identity = '2\n0.0 1.0\n0.0 1.0';
+    const half = '2\n0.0 1.0\n0.0 0.5'; // G only reaches the middle of the cube
+    const lut = parseCSPLUT(cspWithPreLUT([identity, half, identity]));
+    if (!isLUT3D(lut)) throw new Error('Expected 3D LUT');
+    const out = applyLUT3D(lut, 1, 1, 1);
+    expect(out[0]).toBeCloseTo(1, 4);
+    expect(out[1]).toBeCloseTo(0.5, 4);
+    expect(out[2]).toBeCloseTo(1, 4);
+  });
+
+  it('LCSP-016: 1D type uses its input positions as the domain', () => {
+    const ch = '3\n0.0 1.0 2.0\n0.0 0.25 1.0';
+    const lut = parseCSPLUT(['CSPLUTV100', '1D', '', ch, ch, ch].join('\n'));
+    if (!isLUT1D(lut)) throw new Error('Expected 1D LUT');
+    expect(lut.domainMax).toEqual([2, 2, 2]);
+    expect(applyLUT1D(lut, 1, 1.5, 2)).toEqual([0.25, 0.625, 1]);
+  });
+
+  it('LCSP-017: 1D type resamples non-uniform input positions', () => {
+    const ch = '3\n0.0 0.1 1.0\n0.0 0.5 1.0';
+    const lut = parseCSPLUT(['CSPLUTV100', '1D', '', ch, ch, ch].join('\n'));
+    if (!isLUT1D(lut)) throw new Error('Expected 1D LUT');
+    // x = 0.5 is 4/9 of the way from 0.1 to 1.0 on the original curve
+    const expected = 0.5 + 0.5 * (0.4 / 0.9);
+    // Resampled at 3 uniform points (0, 0.5, 1) the midpoint is exact
+    expect(applyLUT1D(lut, 0.5, 0.5, 0.5)[0]).toBeCloseTo(expected, 5);
+  });
 });
 
 // ─── IRIDAS .itx Parser Tests ────────────────────────────────────────
