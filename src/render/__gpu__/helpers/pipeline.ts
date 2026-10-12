@@ -101,6 +101,8 @@ export function setupIdentityPipeline(gl: WebGL2RenderingContext, program: WebGL
   gl.uniform1i(gl.getUniformLocation(program, 'u_displayTransfer'), 0);
   // Output encoding: display transfer path (0); with u_displayTransfer = 0 this is linear
   gl.uniform1i(gl.getUniformLocation(program, 'u_outputEncoding'), 0);
+  // Display render (not a scope readback)
+  gl.uniform1i(gl.getUniformLocation(program, 'u_scopeAnalysis'), 0);
   gl.uniform1f(gl.getUniformLocation(program, 'u_displayGamma'), 1.0);
   gl.uniform1f(gl.getUniformLocation(program, 'u_displayBrightness'), 1.0);
   gl.uniform1f(gl.getUniformLocation(program, 'u_displayCustomGamma'), 2.2);

@@ -15,6 +15,7 @@ import {
   getLastUniform1i,
   getLastUniform1f,
 } from '../../test/mocks';
+import { OUTPUT_ENCODING_LINEAR } from '../config/RenderConfig';
 
 /**
  * Create capabilities with specified HDR support.
@@ -2881,51 +2882,80 @@ describe('Renderer scope tone mapping neutralization', () => {
     glExt.getError = () => NO_ERROR;
   }
 
-  it('REN-SCOPE-TM-001: scope readback disables and restores tone mapping in HDR mode', () => {
+  /** Stub renderImage and record the render state a scope readback renders with. */
+  function captureScopeRenderState(renderer: Renderer) {
+    const internals = renderer as any;
+    const stateManager = internals.stateManager;
+    const seen: Array<{ scopeAnalysis: boolean; encoding: number | null; toneMapping: unknown }> = [];
+    internals.renderImage = () => {
+      seen.push({
+        scopeAnalysis: internals._scopeAnalysis,
+        encoding: internals._readbackEncoding,
+        toneMapping: stateManager.getToneMappingState(),
+      });
+    };
+    return seen;
+  }
+
+  // The scope readback used to switch tone mapping off only on HDR displays, so
+  // on an SDR display the scopes measured tone-mapped data. Tone mapping is now
+  // skipped in the shader (u_scopeAnalysis) on every display, and the tone
+  // mapping state itself is never touched.
+  for (const mode of ['hlg', 'sdr'] as const) {
+    it(`REN-SCOPE-TM-${mode}: scope readback renders in scope analysis mode with tone mapping state untouched (${mode} display)`, () => {
+      const renderer = new Renderer();
+      prepareScopeReadbackGL(renderer);
+
+      const stateManager = (renderer as any).stateManager;
+      stateManager.setToneMappingState({ enabled: true, operator: 'aces' });
+      const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
+      const displaySpy = vi.spyOn(stateManager, 'setDisplayColorState');
+      (renderer as any).hdrOutputMode = mode;
+      const seen = captureScopeRenderState(renderer);
+
+      const result = (renderer as any).renderImageToFloatSync(
+        {} as IPImage,
+        2,
+        2,
+        {} as WebGLFramebuffer,
+      ) as Float32Array | null;
+
+      expect(result).not.toBeNull();
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.scopeAnalysis).toBe(true);
+      expect(seen[0]!.encoding).toBe(OUTPUT_ENCODING_LINEAR);
+      expect(seen[0]!.toneMapping).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
+      expect(toneSpy).not.toHaveBeenCalled();
+      expect(displaySpy).not.toHaveBeenCalled();
+      // Restored after the readback
+      expect((renderer as any)._scopeAnalysis).toBe(false);
+      expect((renderer as any)._readbackEncoding).toBeNull();
+      expect((renderer as any).hdrOutputMode).toBe(mode);
+    });
+  }
+
+  it('REN-SCOPE-TM-003: the shader gets u_scopeAnalysis=1 for scope readbacks and 0 for display renders', () => {
     const renderer = new Renderer();
     prepareScopeReadbackGL(renderer);
+    const mockGL = (renderer as any).gl as WebGL2RenderingContext;
+    renderer.setToneMappingState({ enabled: true, operator: 'aces' });
+    const image = new IPImage({ width: 2, height: 2, channels: 4, dataType: 'float32' });
 
-    const stateManager = (renderer as any).stateManager;
-    stateManager.setToneMappingState({ enabled: true, operator: 'aces' });
+    (renderer as any).renderImageToFloatSync(image, 2, 2, {} as WebGLFramebuffer);
+    expect(getLastUniform1i(mockGL, 'u_scopeAnalysis')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(OUTPUT_ENCODING_LINEAR);
 
-    const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
-    (renderer as any).hdrOutputMode = 'hlg';
-    (renderer as any).renderImage = () => {};
-
-    const result = (renderer as any).renderImageToFloatSync(
-      {} as IPImage,
-      2,
-      2,
-      {} as WebGLFramebuffer,
-    ) as Float32Array | null;
-
-    expect(result).not.toBeNull();
-    expect(toneSpy).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
-    expect(toneSpy).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true, operator: 'aces' }));
-    expect(stateManager.getToneMappingState()).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
+    renderer.renderImage(image);
+    expect(getLastUniform1i(mockGL, 'u_scopeAnalysis')).toBe(0);
+    expect(getLastUniform1i(mockGL, 'u_toneMappingOperator')).toBe(3);
   });
 
-  it('REN-SCOPE-TM-002: scope readback keeps tone mapping unchanged in SDR mode', () => {
+  it('REN-SCOPE-TM-004: renderSDRFrame is never a scope analysis render', () => {
     const renderer = new Renderer();
-    prepareScopeReadbackGL(renderer);
-
-    const stateManager = (renderer as any).stateManager;
-    stateManager.setToneMappingState({ enabled: true, operator: 'aces' });
-
-    const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
-    (renderer as any).hdrOutputMode = 'sdr';
-    (renderer as any).renderImage = () => {};
-
-    const result = (renderer as any).renderImageToFloatSync(
-      {} as IPImage,
-      2,
-      2,
-      {} as WebGLFramebuffer,
-    ) as Float32Array | null;
-
-    expect(result).not.toBeNull();
-    expect(toneSpy).not.toHaveBeenCalled();
-    expect(stateManager.getToneMappingState()).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
+    const mockGL = initRendererWithMockGL(renderer);
+    renderer.resize(4, 4);
+    renderer.renderSDRFrame(document.createElement('canvas'));
+    expect(getLastUniform1i(mockGL, 'u_scopeAnalysis')).toBe(0);
   });
 });
 

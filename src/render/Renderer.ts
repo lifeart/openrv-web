@@ -56,14 +56,6 @@ import {
 
 const log = new Logger('Renderer');
 
-/** Neutral display color config for scope rendering — no display OETF, gamma, or brightness. */
-const SCOPE_DISPLAY_CONFIG: DisplayColorConfig = {
-  transferFunction: 0,
-  displayGamma: 1,
-  displayBrightness: 1,
-  customGamma: 2.2,
-};
-
 /** Determine if an image requires RGBA16F scope FBO (HDR) or can use RGBA8 (SDR). */
 export function isHDRContent(image: IPImage): boolean {
   if (image.dataType === 'float32' || image.dataType === 'uint16') return true;
@@ -115,6 +107,9 @@ export class Renderer implements RendererBackend {
   // Output encoding forced while rendering into an offscreen FBO for readback
   // (scopes, HDR blits). null = derive from hdrOutputMode for the drawing buffer.
   private _readbackEncoding: OutputEncodingCode | null = null;
+
+  // True while rendering a scope readback (u_scopeAnalysis). See beginScopeReadback.
+  private _scopeAnalysis = false;
 
   // Last `u_outputEncoding` code bound during a render call (test-only).
   private _lastOutputEncodingCode: OutputEncodingCode = OUTPUT_ENCODING_DISPLAY;
@@ -644,6 +639,7 @@ export class Renderer implements RendererBackend {
     const outputEncoding = this._readbackEncoding ?? outputEncodingForHDRMode(this.hdrOutputMode);
     this.displayShader.setUniformInt('u_outputEncoding', outputEncoding);
     this._lastOutputEncodingCode = outputEncoding;
+    this.displayShader.setUniformInt('u_scopeAnalysis', this._scopeAnalysis ? 1 : 0);
 
     // Set HDR headroom for tone mapping (1.0 for SDR, >1.0 for HDR displays)
     this.displayShader.setUniform('u_hdrHeadroom', this.hdrOutputMode === 'sdr' ? 1.0 : this.hdrHeadroom);
@@ -1534,8 +1530,10 @@ export class Renderer implements RendererBackend {
   }
 
   /**
-   * Render the current image through the full shader pipeline at reduced
-   * resolution for scope analysis (histogram, waveform, vectorscope).
+   * Render the current image at reduced resolution for scope analysis
+   * (histogram, waveform, vectorscope). The shader runs in scope analysis
+   * mode: the result is the graded scene-referred signal, without tone
+   * mapping or display stages (see beginScopeReadback for the exact list).
    *
    * Uses the existing RGBA16F FBO + PBO async readback infrastructure to
    * avoid GPU stalls. Returns float pixel data with rows in top-to-bottom
@@ -1653,24 +1651,9 @@ export class Renderer implements RendererBackend {
       }
     }
 
-    // Neutralize display/tone-mapping output so scopes show scene-referred data
-    const prevDisplayState = this.stateManager.getDisplayColorState();
-    this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
-    const prevToneMappingState = this.stateManager.getToneMappingState();
-
     // Step 1: Render current frame to scope FBO
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
-    const prevHdrMode = this.hdrOutputMode;
-    const disableToneMappingForScopes = prevHdrMode !== 'sdr' && prevToneMappingState.enabled;
-    if (disableToneMappingForScopes) {
-      this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
-    }
-    // SDR: clamp output to [0,1] for RGBA8 FBO; HDR: preserve >1.0 values
-    this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
-    // Scopes measure linear data, independent of the drawing buffer's encoding.
-    // A scope readback is not a display render: keep a pending output change.
-    const pendingOutputChange = this.outputConfigChanged;
-    this._readbackEncoding = OUTPUT_ENCODING_LINEAR;
+    const endScopeReadback = this.beginScopeReadback(isSDR);
 
     const readType = isSDR ? gl.UNSIGNED_BYTE : gl.FLOAT;
     const readBuf = isSDR ? this.scopePBOCachedPixelsUint8! : this.scopePBOCachedPixels!;
@@ -1713,18 +1696,46 @@ export class Renderer implements RendererBackend {
         this.scopePBOReady = true;
       }
     } finally {
-      this.hdrOutputMode = prevHdrMode;
-      this._readbackEncoding = null;
-      this.outputConfigChanged = pendingOutputChange;
+      endScopeReadback();
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
-      this.stateManager.setDisplayColorState(prevDisplayState);
-      if (disableToneMappingForScopes) {
-        this.stateManager.setToneMappingState(prevToneMappingState);
-      }
     }
 
     return readBuf;
+  }
+
+  /**
+   * Switch the next renderImage() calls to scope analysis and return the
+   * function that switches back.
+   *
+   * Scopes measure the graded scene-referred signal, the same on SDR and HDR
+   * displays and whatever the drawing buffer's encoding:
+   * - included: input decode (linearize, EOTF, file LUT, input primaries to the
+   *   BT.709 working space), every grading stage (exposure, CDL, curves,
+   *   wheels, look LUT, ...), sharpen, creative per-channel gamma, inversion
+   *   and premultiplication;
+   * - excluded: out-of-range overlay, tone mapping, gamut mapping, output
+   *   primaries, display LUT, display transfer (linear output), display gamma
+   *   and brightness, channel isolation, false color, contour, zebra,
+   *   dither/quantize and the background pattern (u_scopeAnalysis in
+   *   viewer.frag.glsl).
+   * HDR content is read back unclamped (1.0 = 203 cd/m²); SDR content reads
+   * back through an RGBA8 target, so it stays in [0, 1].
+   */
+  private beginScopeReadback(isSDR: boolean): () => void {
+    const prevHdrMode = this.hdrOutputMode;
+    // A scope readback is not a display render: keep a pending output change.
+    const pendingOutputChange = this.outputConfigChanged;
+    // SDR: clamp output to [0,1] for the RGBA8 FBO; HDR: preserve >1.0 values
+    this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
+    this._readbackEncoding = OUTPUT_ENCODING_LINEAR;
+    this._scopeAnalysis = true;
+    return () => {
+      this.hdrOutputMode = prevHdrMode;
+      this._readbackEncoding = null;
+      this._scopeAnalysis = false;
+      this.outputConfigChanged = pendingOutputChange;
+    };
   }
 
   /**
@@ -1741,22 +1752,8 @@ export class Renderer implements RendererBackend {
 
     const isSDR = !isHDRContent(image);
 
-    // Neutralize display/tone-mapping output so scopes show scene-referred data
-    const prevDisplayState = this.stateManager.getDisplayColorState();
-    this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
-    const prevToneMappingState = this.stateManager.getToneMappingState();
-
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
-    const prevHdrMode = this.hdrOutputMode;
-    const disableToneMappingForScopes = prevHdrMode !== 'sdr' && prevToneMappingState.enabled;
-    if (disableToneMappingForScopes) {
-      this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
-    }
-    this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
-    // Scopes measure linear data, independent of the drawing buffer's encoding.
-    // A scope readback is not a display render: keep a pending output change.
-    const pendingOutputChange = this.outputConfigChanged;
-    this._readbackEncoding = OUTPUT_ENCODING_LINEAR;
+    const endScopeReadback = this.beginScopeReadback(isSDR);
 
     const pixelCount = width * height * RGBA_CHANNELS;
     const pixels: Float32Array | Uint8Array = isSDR ? new Uint8Array(pixelCount) : new Float32Array(pixelCount);
@@ -1769,15 +1766,9 @@ export class Renderer implements RendererBackend {
       this.renderImage(image, 0, 0, 1, 1);
       gl.readPixels(0, 0, width, height, gl.RGBA, readType, pixels);
     } finally {
-      this.hdrOutputMode = prevHdrMode;
-      this._readbackEncoding = null;
-      this.outputConfigChanged = pendingOutputChange;
+      endScopeReadback();
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
-      this.stateManager.setDisplayColorState(prevDisplayState);
-      if (disableToneMappingForScopes) {
-        this.stateManager.setToneMappingState(prevToneMappingState);
-      }
     }
 
     return gl.getError() === gl.NO_ERROR ? pixels : null;
@@ -2747,6 +2738,7 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_outputEncoding', sdrOutputEncoding);
     this._lastOutputEncodingCode = sdrOutputEncoding;
+    this.displayShader.setUniformInt('u_scopeAnalysis', 0);
     this.displayShader.setUniformInt('u_inputTransfer', sdrInputTransfer);
     this._lastInputTransferCode = sdrInputTransfer;
     if (rec2100Buffer) {
