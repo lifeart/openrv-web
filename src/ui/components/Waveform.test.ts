@@ -7,6 +7,7 @@ const mockProcessor = vi.hoisted(() => ({
   setImage: vi.fn(),
   setFloatImage: vi.fn(),
   renderWaveform: vi.fn(),
+  getWaveformAxisMax: vi.fn((_scale?: string) => 1.0),
 }));
 
 const mockGetSharedScopesProcessor = vi.hoisted(() => vi.fn((): typeof mockProcessor | null => mockProcessor));
@@ -507,6 +508,7 @@ describe('Waveform GPU rendering', () => {
     expect(call[2]).toEqual({
       channels: { r: true, g: false, b: true },
       intensity: 0.22,
+      scale: 'ire',
     });
   });
 
@@ -523,6 +525,7 @@ describe('Waveform GPU rendering', () => {
     expect(lastCall?.[2]).toEqual({
       channels: { r: false, g: true, b: true },
       intensity: 0.25,
+      scale: 'ire',
     });
   });
 
@@ -611,6 +614,7 @@ describe('Waveform updateFloat', () => {
     expect(call![2]).toEqual({
       channels: { r: true, g: true, b: false },
       intensity: 0.18,
+      scale: 'ire',
     });
   });
 
@@ -860,5 +864,91 @@ describe('Waveform RGB Overlay Controls', () => {
       waveform.setIntensity(0.3);
       expect(() => waveform.update(imageData)).not.toThrow();
     });
+  });
+});
+
+describe('Waveform vertical scale', () => {
+  let waveform: Waveform;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockProcessor.getWaveformAxisMax.mockImplementation(() => 1.0);
+    waveform = new Waveform();
+  });
+
+  afterEach(() => {
+    waveform.dispose();
+  });
+
+  function footerText(testid: string): string | null | undefined {
+    return waveform.render().querySelector(`[data-testid="${testid}"]`)?.textContent;
+  }
+
+  it('WF-SCALE-001: defaults to the IRE scale (0-100 for SDR)', () => {
+    expect(waveform.getScale()).toBe('ire');
+    const button = waveform.render().querySelector('[data-testid="waveform-scale-button"]');
+    expect(button?.textContent).toBe('IRE');
+    expect(footerText('waveform-scale-unit')).toBe('IRE %');
+    expect(footerText('waveform-scale-top')).toBe('100');
+  });
+
+  it('WF-SCALE-002: the scale button cycles IRE -> Nits -> PQ -> IRE and emits scaleChanged', () => {
+    const handler = vi.fn();
+    waveform.on('scaleChanged', handler);
+    const button = waveform.render().querySelector('[data-testid="waveform-scale-button"]') as HTMLButtonElement;
+
+    button.click();
+    expect(waveform.getScale()).toBe('nits');
+    expect(button.textContent).toBe('Nits');
+    button.click();
+    expect(waveform.getScale()).toBe('pq');
+    expect(button.textContent).toBe('PQ');
+    button.click();
+    expect(waveform.getScale()).toBe('ire');
+    expect(handler.mock.calls.map((c) => c[0])).toEqual(['nits', 'pq', 'ire']);
+  });
+
+  it('WF-SCALE-003: the scale is passed to the GPU waveform and redraws the cached HDR frame', () => {
+    const floatData = new Float32Array(4 * 4 * 4).fill(4.0);
+    waveform.updateFloat(floatData, 4, 4);
+    mockProcessor.renderWaveform.mockClear();
+
+    waveform.setScale('pq');
+
+    expect(mockProcessor.setFloatImage).toHaveBeenLastCalledWith(floatData, 4, 4);
+    expect(mockProcessor.renderWaveform.mock.calls.at(-1)?.[2]).toEqual(expect.objectContaining({ scale: 'pq' }));
+  });
+
+  it('WF-SCALE-004: the nits scale labels the axis top in cd/m² (4.0 -> 812)', () => {
+    mockProcessor.getWaveformAxisMax.mockImplementation((scale?: string) => (scale === 'nits' ? 4.0 : 1.0));
+    waveform.setScale('nits');
+    waveform.updateFloat(new Float32Array(4 * 4 * 4).fill(4.0), 4, 4);
+
+    expect(mockProcessor.getWaveformAxisMax).toHaveBeenCalledWith('nits');
+    expect(footerText('waveform-scale-unit')).toBe('cd/m²');
+    expect(footerText('waveform-scale-top')).toBe('812');
+  });
+
+  it('WF-SCALE-005: the PQ scale has a fixed 10000 cd/m² top', () => {
+    waveform.setScale('pq');
+    expect(footerText('waveform-scale-unit')).toBe('cd/m² (PQ)');
+    expect(footerText('waveform-scale-top')).toBe('10k');
+  });
+
+  it('WF-SCALE-006: the CPU fallback draws every mode under every scale', () => {
+    mockGetSharedScopesProcessor.mockReturnValue(null);
+    try {
+      const imageData = new ImageData(8, 8);
+      imageData.data.fill(200);
+      for (const scale of ['ire', 'nits', 'pq'] as const) {
+        waveform.setScale(scale);
+        for (const mode of ['luma', 'rgb', 'parade', 'ycbcr'] as const) {
+          waveform.setMode(mode);
+          expect(() => waveform.update(imageData)).not.toThrow();
+        }
+      }
+    } finally {
+      mockGetSharedScopesProcessor.mockReturnValue(mockProcessor);
+    }
   });
 });

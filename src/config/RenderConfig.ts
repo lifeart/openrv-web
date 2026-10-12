@@ -139,6 +139,9 @@ export const OUTPUT_MODE_HDR = 1;
 // values use 1.0 = HDR reference white (203 cd/m², ITU-R BT.2408).
 // ---------------------------------------------------------------------------
 
+/** Luminance of linear working value 1.0: HDR reference white, in cd/m² (ITU-R BT.2408). */
+export const HDR_REFERENCE_WHITE_NITS = 203;
+
 /** SDR: apply the user's display transfer (u_displayTransfer) */
 export const OUTPUT_ENCODING_DISPLAY = 0;
 
