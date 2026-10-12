@@ -1536,54 +1536,8 @@ async function decodeTiledImage(
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
-  // Build channel lookup, excluding UINT channels (not decodable)
-  const channelLookup = new Map<string, EXRChannel>();
-  for (const ch of header.channels) {
-    if (ch.pixelType === EXRPixelType.UINT) continue;
-    channelLookup.set(ch.name, ch);
-  }
-
-  // Determine output channel mapping (same logic as scanline)
-  let outputMapping: Map<string, string>;
-  if (channelMapping && channelMapping.size > 0) {
-    outputMapping = channelMapping;
-  } else {
-    outputMapping = new Map();
-    if (channelLookup.has('R')) outputMapping.set('R', 'R');
-    if (channelLookup.has('G')) outputMapping.set('G', 'G');
-    if (channelLookup.has('B')) outputMapping.set('B', 'B');
-    if (channelLookup.has('A')) outputMapping.set('A', 'A');
-    if (channelLookup.has('Y') && !channelLookup.has('R')) {
-      outputMapping.set('R', 'Y');
-      outputMapping.set('G', 'Y');
-      outputMapping.set('B', 'Y');
-    }
-  }
-
-  if (outputMapping.size === 0) {
-    throw new DecoderError('EXR', 'No supported channels found in EXR file');
-  }
-
-  const numOutputChannels = 4;
-  const output = new Float32Array(width * height * numOutputChannels);
-
-  if (!outputMapping.has('A')) {
-    for (let i = 3; i < output.length; i += 4) {
-      output[i] = 1.0;
-    }
-  }
-
-  const sourceToOutputIndices = new Map<string, number[]>();
-  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
-
-  for (const [outputCh, sourceCh] of outputMapping.entries()) {
-    const outputIdx = outputChannelIndices[outputCh];
-    if (outputIdx !== undefined) {
-      const existing = sourceToOutputIndices.get(sourceCh) || [];
-      existing.push(outputIdx);
-      sourceToOutputIndices.set(sourceCh, existing);
-    }
-  }
+  // Same output routing as scanline images, including Y/RY/BY -> RGB.
+  const out = createScanlineOutput(header, resolveOutputMapping(header, channelMapping));
 
   // Compute tile grid for level 0 (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
@@ -1650,9 +1604,9 @@ async function decodeTiledImage(
         const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
         const lineDataOffset = line * tileScanlineBytes + channelOffset;
 
-        const outputIndices = sourceToOutputIndices.get(ch.name);
+        const targets = out.targets.get(ch.name);
 
-        if (outputIndices && outputIndices.length > 0) {
+        if (targets) {
           for (let x = 0; x < actualTileWidth; x++) {
             const outputX = tilePixelX + x;
             if (outputX >= width) continue;
@@ -1667,10 +1621,8 @@ async function decodeTiledImage(
               value = dataView.getFloat32(srcOffset, true);
             }
 
-            for (const outputIdx of outputIndices) {
-              const dstIdx = (outputY * width + outputX) * numOutputChannels + outputIdx;
-              output[dstIdx] = value;
-            }
+            const pixel = outputY * width + outputX;
+            for (const t of targets) t.buf[pixel * t.stride + t.offset] = value;
           }
         }
 
@@ -1679,7 +1631,7 @@ async function decodeTiledImage(
     }
   }
 
-  return output;
+  return finishScanlineOutput(out);
 }
 
 /**
@@ -1702,53 +1654,8 @@ async function decodeMultiPartTiledImage(
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
-  // Build channel lookup, excluding UINT channels (not decodable)
-  const channelLookup = new Map<string, EXRChannel>();
-  for (const ch of header.channels) {
-    if (ch.pixelType === EXRPixelType.UINT) continue;
-    channelLookup.set(ch.name, ch);
-  }
-
-  let outputMapping: Map<string, string>;
-  if (channelMapping && channelMapping.size > 0) {
-    outputMapping = channelMapping;
-  } else {
-    outputMapping = new Map();
-    if (channelLookup.has('R')) outputMapping.set('R', 'R');
-    if (channelLookup.has('G')) outputMapping.set('G', 'G');
-    if (channelLookup.has('B')) outputMapping.set('B', 'B');
-    if (channelLookup.has('A')) outputMapping.set('A', 'A');
-    if (channelLookup.has('Y') && !channelLookup.has('R')) {
-      outputMapping.set('R', 'Y');
-      outputMapping.set('G', 'Y');
-      outputMapping.set('B', 'Y');
-    }
-  }
-
-  if (outputMapping.size === 0) {
-    throw new DecoderError('EXR', 'No supported channels found in EXR file');
-  }
-
-  const numOutputChannels = 4;
-  const output = new Float32Array(width * height * numOutputChannels);
-
-  if (!outputMapping.has('A')) {
-    for (let i = 3; i < output.length; i += 4) {
-      output[i] = 1.0;
-    }
-  }
-
-  const sourceToOutputIndices = new Map<string, number[]>();
-  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
-
-  for (const [outputCh, sourceCh] of outputMapping.entries()) {
-    const outputIdx = outputChannelIndices[outputCh];
-    if (outputIdx !== undefined) {
-      const existing = sourceToOutputIndices.get(sourceCh) || [];
-      existing.push(outputIdx);
-      sourceToOutputIndices.set(sourceCh, existing);
-    }
-  }
+  // Same output routing as scanline images, including Y/RY/BY -> RGB.
+  const out = createScanlineOutput(header, resolveOutputMapping(header, channelMapping));
 
   // Level 0 tile count (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
@@ -1823,9 +1730,9 @@ async function decodeMultiPartTiledImage(
         const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
         const lineDataOffset = line * tileScanlineBytes + channelOffset;
 
-        const outputIndices = sourceToOutputIndices.get(ch.name);
+        const targets = out.targets.get(ch.name);
 
-        if (outputIndices && outputIndices.length > 0) {
+        if (targets) {
           for (let x = 0; x < actualTileWidth; x++) {
             const outputX = tilePixelX + x;
             if (outputX >= width) continue;
@@ -1840,10 +1747,8 @@ async function decodeMultiPartTiledImage(
               value = dataView.getFloat32(srcOffset, true);
             }
 
-            for (const outputIdx of outputIndices) {
-              const dstIdx = (outputY * width + outputX) * numOutputChannels + outputIdx;
-              output[dstIdx] = value;
-            }
+            const pixel = outputY * width + outputX;
+            for (const t of targets) t.buf[pixel * t.stride + t.offset] = value;
           }
         }
 
@@ -1852,7 +1757,7 @@ async function decodeMultiPartTiledImage(
     }
   }
 
-  return output;
+  return finishScanlineOutput(out);
 }
 
 /**
