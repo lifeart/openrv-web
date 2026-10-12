@@ -36,10 +36,11 @@ test.describe('Session Snapshots', () => {
       await page.keyboard.press('Control+Shift+s');
       await page.waitForTimeout(500);
 
-      // Should show success alert
-      const alert = page.locator('.modal, [class*="alert"]');
-      // Alert might auto-dismiss, so we check for either the alert or its absence after timeout
-      await page.waitForTimeout(1000);
+      // Should show a non-blocking success toast (no modal to dismiss)
+      await expect(page.locator('[data-testid="toast"][data-toast-type="success"]').first()).toContainText('Snapshot', {
+        timeout: 3000,
+      });
+      await expect(page.locator('#modal-container .modal')).toHaveCount(0);
     });
 
     test('SNAP-E002: snapshot captures current session state', async ({ page }) => {

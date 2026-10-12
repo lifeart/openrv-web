@@ -126,6 +126,7 @@ import { buildAnnotateTab } from './services/tabContent/buildAnnotateTab';
 import { buildPanelToggles, type PanelTogglesResult } from './services/tabContent/buildPanelToggles';
 
 import { Logger } from './utils/Logger';
+import { PANEL_WIDTHS } from './ui/components/shared/theme';
 
 const logger = new Logger('AppControlRegistry');
 /**
@@ -188,17 +189,17 @@ export class AppControlRegistry {
     this.effects = createEffectsControls({ viewer, session, timelineEditorHost });
 
     // Noise reduction panel wrapper
-    this.noiseReductionPanel = createPanel({ width: '320px', maxHeight: '70vh', align: 'right' });
+    this.noiseReductionPanel = createPanel({ width: PANEL_WIDTHS.panelWide, maxHeight: '70vh', align: 'right' });
     this.noiseReductionPanel.element.appendChild(createPanelHeader('Noise Reduction'));
     this.noiseReductionPanel.element.appendChild(this.effects.noiseReductionControl.render());
 
     // Watermark panel wrapper
-    this.watermarkPanel = createPanel({ width: '360px', maxHeight: '70vh', align: 'right' });
+    this.watermarkPanel = createPanel({ width: PANEL_WIDTHS.wideMedium, maxHeight: '70vh', align: 'right' });
     this.watermarkPanel.element.appendChild(createPanelHeader('Watermark'));
     this.watermarkPanel.element.appendChild(this.effects.watermarkControl.render());
 
     // Slate editor panel wrapper
-    this.slateEditorPanel = createPanel({ width: '400px', maxHeight: '70vh', align: 'right' });
+    this.slateEditorPanel = createPanel({ width: PANEL_WIDTHS.dialog, maxHeight: '70vh', align: 'right' });
     this.slateEditorPanel.element.appendChild(createPanelHeader('Slate / Leader'));
     const slateEditorHost = document.createElement('div');
     slateEditorHost.style.cssText =
@@ -479,6 +480,7 @@ export class AppControlRegistry {
     this.convergenceButton = viewResult.convergenceButton;
     this.floatingWindowButton = viewResult.floatingWindowButton;
     contextToolbar.setTabContent('view', viewResult.element);
+    contextToolbar.setTabOverflowItems('view', viewResult.overflowItems);
 
     // Initially hide per-eye controls (shown when stereo mode is activated)
     this.updateStereoEyeControlsVisibility();

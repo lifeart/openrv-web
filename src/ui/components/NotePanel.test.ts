@@ -14,6 +14,8 @@ const mockGetGeneralPrefs = vi.fn(() => ({ userName: '' }));
 vi.mock('../../core/PreferencesManager', () => ({
   getCorePreferencesManager: () => ({
     getGeneralPrefs: mockGetGeneralPrefs,
+    setGeneralPrefs: vi.fn(),
+    on: vi.fn(() => () => {}),
   }),
 }));
 
@@ -523,6 +525,15 @@ describe('NotePanel', () => {
       expect(notes[0]?.author).toBe('User');
     });
 
+    it('renders an Author field prefilled from preferences (U5)', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: 'Jane Doe' });
+      const fresh = new NotePanel(session);
+      const input = fresh.getElement().querySelector('[data-testid="note-author-name-input"]') as HTMLInputElement;
+      expect(input).toBeTruthy();
+      expect(input.value).toBe('Jane Doe');
+      fresh.dispose();
+    });
+
     it('falls back to "User" when userName is whitespace-only', () => {
       mockGetGeneralPrefs.mockReturnValue({ userName: '   ' });
       panel.addNoteAtCurrentFrame();
@@ -913,6 +924,28 @@ describe('NotePanel', () => {
       panel.show();
 
       expect(mockExclusive.hide).not.toHaveBeenCalled();
+    });
+
+    it('U9: show() closes every registered exclusive panel, not only the last one', () => {
+      const markers = { isVisible: vi.fn().mockReturnValue(true), hide: vi.fn() };
+      const history = { isVisible: vi.fn().mockReturnValue(true), hide: vi.fn() };
+      panel.setExclusiveWith(markers);
+      panel.setExclusiveWith(history);
+
+      panel.show();
+
+      expect(markers.hide).toHaveBeenCalledTimes(1);
+      expect(history.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('U9: registering the same partner twice hides it only once', () => {
+      const markers = { isVisible: vi.fn().mockReturnValue(true), hide: vi.fn() };
+      panel.setExclusiveWith(markers);
+      panel.setExclusiveWith(markers);
+
+      panel.show();
+
+      expect(markers.hide).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -12,6 +12,7 @@
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { shortcutTooltip } from '../../utils/input/KeyBindings';
 import {
   type OCIOState,
   getAvailableConfigs,
@@ -102,7 +103,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     this.toggleButton = createButton('OCIO', () => this.toggle(), {
       variant: 'icon',
       icon: getIconSvg('palette', 'sm'),
-      title: 'Toggle OCIO color management panel (O)',
+      title: shortcutTooltip('Toggle OCIO color management panel', 'panel.ocio'),
     });
     this.toggleButton.dataset.testid = 'ocio-panel-button';
     this.toggleButton.style.color = 'var(--text-muted)';
@@ -939,12 +940,12 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   private showValidationFeedback(message: string, type: 'success' | 'warning' | 'error'): void {
     if (!this.validationFeedback) return;
 
-    const colors: Record<string, { bg: string; border: string; text: string }> = {
+    const colors: Record<typeof type, { bg: string; border: string; text: string }> = {
       success: { bg: 'rgba(40, 167, 69, 0.1)', border: '#28a745', text: '#28a745' },
       warning: { bg: 'rgba(255, 193, 7, 0.1)', border: '#ffc107', text: '#ffc107' },
       error: { bg: 'rgba(220, 53, 69, 0.1)', border: '#dc3545', text: '#dc3545' },
     };
-    const c = colors[type]!;
+    const c = colors[type];
     this.validationFeedback.textContent = message;
     this.validationFeedback.style.display = 'block';
     this.validationFeedback.style.background = c.bg;

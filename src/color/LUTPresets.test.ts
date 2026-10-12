@@ -49,11 +49,15 @@ describe('LUTPresets', () => {
         const lut = generatePresetLUT(preset.id);
         expect(lut).not.toBeNull();
 
+        // One assertion per preset: ~15k expect() calls per preset made this
+        // test time out under coverage instrumentation.
         const data = lut!.data;
+        const outOfRange: number[] = [];
         for (let i = 0; i < data.length; i++) {
-          expect(data[i]).toBeGreaterThanOrEqual(0);
-          expect(data[i]).toBeLessThanOrEqual(1);
+          const v = data[i] ?? Number.NaN;
+          if (!(v >= 0 && v <= 1)) outOfRange.push(i);
         }
+        expect(outOfRange, `preset "${preset.id}" values outside [0,1] at indices`).toEqual([]);
       }
     });
 

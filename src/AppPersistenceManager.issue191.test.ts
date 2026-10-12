@@ -53,8 +53,13 @@ vi.mock('./ui/components/shared/Modal', () => ({
   showConfirm: vi.fn(async () => false),
 }));
 
+vi.mock('./ui/components/shared/Toast', () => ({
+  showToast: vi.fn(),
+}));
+
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { showAlert } from './ui/components/shared/Modal';
+import { showToast } from './ui/components/shared/Toast';
 
 // ---------------------------------------------------------------------------
 // Context factory
@@ -192,9 +197,10 @@ describe('AppPersistenceManager - issue #191: checkpoint failure warns user', ()
       // Should still have proceeded with restore (fromJSON called)
       expect(SessionSerializer.fromJSON).toHaveBeenCalled();
 
-      // Should also show restore success alert
-      const restoreAlerts = alertFn.mock.calls.filter((call: any[]) => call[1]?.title === 'Snapshot Restored');
-      expect(restoreAlerts.length).toBe(1);
+      // Should also show the (non-blocking) restore success toast
+      const toastFn = showToast as ReturnType<typeof vi.fn>;
+      const restoreToasts = toastFn.mock.calls.filter((call: unknown[]) => String(call[0]).startsWith('Restored'));
+      expect(restoreToasts.length).toBe(1);
     });
 
     it('does not show checkpoint warning when checkpoint succeeds', async () => {

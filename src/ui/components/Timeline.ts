@@ -59,6 +59,12 @@ export class Timeline {
   private _timecodeDisplayMode: TimecodeDisplayMode = 'frames';
 
   protected isDragging = false;
+  /** Which in/out handle is being dragged, if any (null = scrubbing the playhead). */
+  private draggingHandle: 'in' | 'out' | null = null;
+  /** Hover readout (timecode + thumbnail) shown above the pointer. */
+  private hoverTooltip: HTMLElement;
+  private hoverThumb: HTMLCanvasElement;
+  private hoverLabel: HTMLElement;
   protected width = 0;
   protected height = 0;
 
@@ -175,7 +181,42 @@ export class Timeline {
       cursor: pointer;
       touch-action: none;
     `;
+    // Keyboard and screen-reader access: the canvas acts as a frame slider
+    this.canvas.tabIndex = 0;
+    this.canvas.setAttribute('role', 'slider');
+    this.canvas.setAttribute('aria-label', 'Timeline');
+    this.canvas.setAttribute('aria-orientation', 'horizontal');
     this.container.appendChild(this.canvas);
+
+    this.hoverTooltip = document.createElement('div');
+    this.hoverTooltip.dataset.testid = 'timeline-hover-tooltip';
+    this.hoverTooltip.setAttribute('aria-hidden', 'true');
+    this.hoverTooltip.style.cssText = `
+      position: absolute;
+      bottom: 100%;
+      margin-bottom: 4px;
+      transform: translateX(-50%);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 3px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: ${Z_INDEX.tooltip};
+    `;
+    this.hoverThumb = document.createElement('canvas');
+    this.hoverThumb.style.cssText = 'display: none; border-radius: 2px;';
+    this.hoverLabel = document.createElement('span');
+    this.hoverTooltip.append(this.hoverThumb, this.hoverLabel);
+    // Insert before the canvas so the timeline canvas stays the container's last canvas
+    this.container.insertBefore(this.hoverTooltip, this.canvas);
 
     // Create magnifying glass toggle button (overlaid on left padding area)
     this.magnifierToggleButton = document.createElement('button');
@@ -236,6 +277,8 @@ export class Timeline {
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('contextmenu', this.onContextMenu);
+    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.addEventListener('keydown', this.onKeyDown);
 
     // Listen to session changes
     this.subs.add(this.session.on('frameChanged', () => this.scheduleDraw()));
@@ -518,22 +561,166 @@ export class Timeline {
 
     this.isDragging = true;
     this.canvas.setPointerCapture(e.pointerId);
+
+    // Grabbing an in/out bracket drags that point instead of scrubbing
+    this.draggingHandle = this.handleAtClientX(e.clientX);
+    if (this.draggingHandle) {
+      this.dragHandleTo(e.clientX);
+      return;
+    }
+
     this.session.onScrubStart();
     this.seekToPosition(e.clientX);
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (!this.isDragging) return;
+    this.updateHover(e.clientX);
+    if (!this.isDragging) {
+      this.canvas.style.cursor = this.handleAtClientX(e.clientX) ? 'ew-resize' : 'pointer';
+      return;
+    }
+    if (this.draggingHandle) {
+      this.dragHandleTo(e.clientX);
+      return;
+    }
     this.seekToPosition(e.clientX);
   };
 
   private onPointerUp = (e: PointerEvent): void => {
     if (this.isDragging) {
       this.canvas.releasePointerCapture(e.pointerId);
-      this.session.onScrubEnd();
+      if (!this.draggingHandle) {
+        this.session.onScrubEnd();
+      }
     }
     this.isDragging = false;
+    this.draggingHandle = null;
   };
+
+  private onPointerLeave = (): void => {
+    if (!this.isDragging) {
+      this.hoverTooltip.style.display = 'none';
+    }
+  };
+
+  /**
+   * Keyboard control while the timeline has focus. Arrows step one frame
+   * (Shift: 10), Home/End jump to the in/out points. Handled keys don't
+   * propagate, so global frame-step shortcuts don't fire a second time.
+   */
+  private onKeyDown = (e: KeyboardEvent): void => {
+    const source = this.session.currentSource;
+    if (!source || e.ctrlKey || e.metaKey || e.altKey) return;
+    const step = e.shiftKey ? 10 : 1;
+    const current = this.session.currentFrame;
+    let target: number;
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowDown':
+        target = current - step;
+        break;
+      case 'ArrowRight':
+      case 'ArrowUp':
+        target = current + step;
+        break;
+      case 'PageDown':
+        target = current - 10;
+        break;
+      case 'PageUp':
+        target = current + 10;
+        break;
+      case 'Home':
+        target = this.session.inPoint;
+        break;
+      case 'End':
+        target = this.session.outPoint;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    const duration = source.duration ?? 1;
+    this.session.goToFrame(Math.max(1, Math.min(duration, target)));
+  };
+
+  /** Pixel distance within which a pointer grabs an in/out bracket. */
+  private static readonly HANDLE_HIT_PX = 6;
+
+  /**
+   * Return the in/out bracket under clientX, if a custom range is set.
+   * With the full range the brackets sit on the track ends, where a click
+   * should still seek to the first/last frame.
+   */
+  private handleAtClientX(clientX: number): 'in' | 'out' | null {
+    const source = this.session.currentSource;
+    const duration = source?.duration ?? 1;
+    if (!source || duration <= 1) return null;
+    const inPoint = this.session.inPoint;
+    const outPoint = this.session.outPoint;
+    if (inPoint === 1 && outPoint === duration) return null;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const padding = 60;
+    const trackWidth = rect.width - padding * 2;
+    const frameToClientX = (f: number) => rect.left + padding + ((f - 1) / (duration - 1)) * trackWidth;
+    const inDist = Math.abs(clientX - frameToClientX(inPoint));
+    const outDist = Math.abs(clientX - frameToClientX(outPoint));
+    const hit = Timeline.HANDLE_HIT_PX;
+    if (inDist > hit && outDist > hit) return null;
+    return inDist <= outDist ? 'in' : 'out';
+  }
+
+  private dragHandleTo(clientX: number): void {
+    const frame = this.frameAtClientX(clientX);
+    if (this.draggingHandle === 'in') {
+      this.session.setInPoint(Math.min(frame, this.session.outPoint));
+    } else if (this.draggingHandle === 'out') {
+      this.session.setOutPoint(Math.max(frame, this.session.inPoint));
+    }
+  }
+
+  /** Show the frame/timecode (and cached thumbnail) under the pointer. */
+  private updateHover(clientX: number): void {
+    const source = this.session.currentSource;
+    if (!source) {
+      this.hoverTooltip.style.display = 'none';
+      return;
+    }
+    const frame = this.frameAtClientX(clientX);
+    const fps = this.session.fps;
+    const label = formatFrameDisplay(frame, fps, this._timecodeDisplayMode);
+    const timecode = formatTimecode(frame, fps);
+    this.hoverLabel.textContent = label === timecode ? label : `${label} · ${timecode}`;
+
+    const thumb = this.thumbnailsEnabled ? this.thumbnailManager.getThumbnail(frame) : null;
+    if (thumb) {
+      const scale = Math.min(1, 96 / Math.max(1, thumb.width));
+      this.hoverThumb.width = Math.round(thumb.width * scale);
+      this.hoverThumb.height = Math.round(thumb.height * scale);
+      this.hoverThumb.getContext('2d')?.drawImage(thumb, 0, 0, this.hoverThumb.width, this.hoverThumb.height);
+      this.hoverThumb.style.display = 'block';
+    } else {
+      this.hoverThumb.style.display = 'none';
+    }
+
+    const rect = this.container.getBoundingClientRect();
+    const x = Math.max(40, Math.min(rect.width - 40, clientX - rect.left));
+    this.hoverTooltip.style.left = `${x}px`;
+    this.hoverTooltip.style.display = 'flex';
+  }
+
+  /** Keep the slider's ARIA state in step with the playhead. */
+  private updateAria(currentFrame: number, duration: number): void {
+    const fps = this.session.fps;
+    this.canvas.setAttribute('aria-valuemin', '1');
+    this.canvas.setAttribute('aria-valuemax', String(Math.max(1, duration)));
+    this.canvas.setAttribute('aria-valuenow', String(currentFrame));
+    this.canvas.setAttribute(
+      'aria-valuetext',
+      `Frame ${currentFrame} of ${duration}, ${formatTimecode(currentFrame, fps)}`,
+    );
+  }
 
   private seekToPosition(clientX: number): void {
     const frame = this.frameAtClientX(clientX);
@@ -675,6 +862,7 @@ export class Timeline {
     const inPoint = this.session.inPoint;
     const outPoint = this.session.outPoint;
     const currentFrame = this.session.currentFrame;
+    this.updateAria(currentFrame, duration);
 
     // Draw track background (full duration)
     ctx.fillStyle = colors.track;
@@ -1046,6 +1234,8 @@ export class Timeline {
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.removeEventListener('keydown', this.onKeyDown);
     this.contextMenu.dispose();
     this.thumbnailManager.dispose();
     this.subs.dispose();

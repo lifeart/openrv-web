@@ -2265,6 +2265,35 @@ export async function waitForBufferingState(page: Page, isBuffering: boolean, ti
 /**
  * Wait for a tab to become active (its panel visible in the DOM).
  */
+/**
+ * Open the View tab "Overlays" dropdown (spotlight, matte, bug, EXR window,
+ * info strip, timecode and FPS toggles live there). No-op if already open.
+ */
+export async function openViewOverlaysMenu(page: Page): Promise<void> {
+  const menu = page.locator('[data-testid="view-overlays-menu"]');
+  if (await menu.isVisible().catch(() => false)) return;
+  await page.locator('[data-testid="view-overlays-button"]').click();
+  await menu.waitFor({ state: 'visible', timeout: TIMEOUT_SHORT });
+}
+
+/**
+ * Make a header/toolbar control reachable: when the bar is too narrow the
+ * control may have been moved into a "More" (⋯) overflow menu; open that
+ * menu if the control is not visible in the bar.
+ */
+export async function revealToolbarControl(page: Page, selector: string): Promise<void> {
+  const control = page.locator(selector).first();
+  if (await control.isVisible().catch(() => false)) return;
+  for (const more of ['[data-testid="header-overflow-button"]', '[data-testid="context-toolbar-overflow-button"]']) {
+    const moreButton = page.locator(more).first();
+    if (await moreButton.isVisible().catch(() => false)) {
+      await moreButton.click();
+      if (await control.isVisible().catch(() => false)) return;
+      await page.keyboard.press('Escape');
+    }
+  }
+}
+
 export async function waitForTabActive(page: Page, tabName: string, timeout = TIMEOUT_SHORT): Promise<void> {
   await page.waitForFunction(
     (name) => {

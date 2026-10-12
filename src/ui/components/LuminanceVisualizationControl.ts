@@ -9,7 +9,7 @@ import { type LuminanceVisualization, type LuminanceVisMode } from './LuminanceV
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus, createButton } from './shared/Button';
 import { createPanel, type Panel } from './shared/Panel';
-import { SHADOWS, Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 const MODE_LABELS: Record<LuminanceVisMode, string> = {
@@ -96,7 +96,7 @@ export class LuminanceVisualizationControl {
 
     // Create dropdown via shared createPanel for consistent z-index + chrome.
     // Custom positioning is kept (positionDropdown) so we use the bare element.
-    this.dropdownPanel = createPanel({ width: '220px' });
+    this.dropdownPanel = createPanel({ width: PANEL_WIDTHS.narrow });
     this.dropdown = this.dropdownPanel.element;
     this.dropdown.classList.add('luminance-vis-dropdown');
     this.dropdown.setAttribute('role', 'dialog');

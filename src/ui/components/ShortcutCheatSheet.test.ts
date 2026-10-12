@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ShortcutCheatSheet } from './ShortcutCheatSheet';
+import { ShortcutCheatSheet, CHEATSHEET_STYLE_ID, buildCheatSheetStyles } from './ShortcutCheatSheet';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import type { ShortcutEditorManager } from './ShortcutEditor';
 import type { KeyCombination } from '../../utils/input/KeyboardManager';
 
@@ -93,6 +94,40 @@ describe('ShortcutCheatSheet', () => {
   afterEach(() => {
     sheet.dispose();
     document.body.removeChild(container);
+  });
+
+  it('CS-STY-001: injects a stylesheet for the cheatsheet classes once', () => {
+    const style = document.getElementById(CHEATSHEET_STYLE_ID);
+    expect(style).not.toBeNull();
+    const second = new ShortcutCheatSheet(container, manager);
+    expect(document.querySelectorAll(`#${CHEATSHEET_STYLE_ID}`).length).toBe(1);
+    second.dispose();
+  });
+
+  it('CS-STY-002: styles use theme tokens: modal z-index, theme variables, scrollable multi-column body', () => {
+    const css = buildCheatSheetStyles();
+    expect(css).toContain(`z-index: ${Z_INDEX.modal}`);
+    expect(css).toContain('position: fixed');
+    expect(css).toContain(`column-width: ${PANEL_WIDTHS.standard}`);
+    expect(css).toContain('overflow-y: auto');
+    expect(css).toContain('var(--bg-secondary)');
+    expect(css).toContain('var(--text-primary)');
+    // No hardcoded hex colors
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
+  });
+
+  it('CS-STY-003: renders a titled panel wrapping the columns', () => {
+    sheet.show();
+    const panel = container.querySelector('.cheatsheet-overlay > .cheatsheet-panel');
+    expect(panel).not.toBeNull();
+    expect(panel!.querySelector('.cheatsheet-title')?.textContent).toBe('Keyboard Shortcuts');
+    expect(panel!.querySelector('.cheatsheet-columns .cheatsheet-group')).not.toBeNull();
+  });
+
+  it('CS-STY-004: shows an empty-state message when nothing matches', () => {
+    sheet.show();
+    sheet.filter('xyznonexistent');
+    expect(container.querySelector('.cheatsheet-empty')?.textContent).toBe('No matching shortcuts');
   });
 
   it('CS-001: constructor creates overlay element', () => {
@@ -378,6 +413,14 @@ describe('ShortcutCheatSheet', () => {
     const event = new MouseEvent('mousedown', { bubbles: true });
     row.dispatchEvent(event);
 
+    expect(sheet.isVisible()).toBe(true);
+  });
+
+  it('CS-024b: clicking inside content after a re-render (filter) does NOT dismiss', () => {
+    sheet.show();
+    sheet.filter('play');
+    const row = container.querySelector('.cheatsheet-row') as HTMLElement;
+    row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     expect(sheet.isVisible()).toBe(true);
   });
 

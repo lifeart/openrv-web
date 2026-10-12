@@ -18,7 +18,20 @@ import { loadTwoVideoFiles, waitForTestHelper, getSessionState } from './fixture
  * Reference: Multi-clip sequencing / Edit Decision Lists
  */
 
+/**
+ * "Clip added" confirmations are non-blocking toasts now; dismiss any that are
+ * visible so they cannot sit on top of the next click target. Warning modals
+ * (e.g. "Cannot Add Clip") still use the blocking modal, so handle those too.
+ */
 async function dismissBlockingModal(page: import('@playwright/test').Page): Promise<void> {
+  const toasts = page.locator('[data-testid="toast"]');
+  const toastCount = await toasts.count();
+  for (let i = toastCount - 1; i >= 0; i--) {
+    await toasts
+      .nth(i)
+      .click()
+      .catch(() => undefined);
+  }
   const okButton = page.locator('#modal-container button:has-text("OK")');
   if (await okButton.isVisible()) {
     await okButton.click();

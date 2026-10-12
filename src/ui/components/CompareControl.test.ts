@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CompareControl, DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './CompareControl';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
+import { setExperimentalFeaturesEnabled } from '../../core/experimentalFeatures';
 import {
   resetOutsideClickRegistry,
   dispatchOutsideClick,
@@ -1227,6 +1228,23 @@ describe('CompareControl', () => {
 
     afterEach(() => {
       document.querySelectorAll('.compare-control, .compare-dropdown').forEach((el) => el.remove());
+      setExperimentalFeaturesEnabled(false);
+    });
+
+    it('QUAD-049a: quad view section hidden when experimental features are off (default)', () => {
+      const dropdown = openDropdown();
+      const section = dropdown.querySelector('.quad-view-section') as HTMLElement;
+      expect(section).not.toBeNull();
+      expect(section.style.display).toBe('none');
+    });
+
+    it('QUAD-049b: quad view section shown when experimental features are enabled (live)', () => {
+      const dropdown = openDropdown();
+      const section = dropdown.querySelector('.quad-view-section') as HTMLElement;
+      setExperimentalFeaturesEnabled(true);
+      expect(section.style.display).toBe('flex');
+      setExperimentalFeaturesEnabled(false);
+      expect(section.style.display).toBe('none');
     });
 
     it('QUAD-050: dropdown has quad view toggle button', () => {

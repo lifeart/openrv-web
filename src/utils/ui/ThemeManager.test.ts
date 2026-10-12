@@ -436,4 +436,28 @@ describe('ThemeManager mode types', () => {
       expect(colors.bgPrimary).toBeDefined();
     });
   });
+
+  describe('contrast (WCAG AA)', () => {
+    const luminance = (hex: string): number => {
+      const n = parseInt(hex.slice(1), 16);
+      const channels = [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff].map((v) => {
+        const c = v / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+    };
+    const contrast = (a: string, b: string): number => {
+      const la = luminance(a);
+      const lb = luminance(b);
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+
+    it.each(['dark', 'light'] as const)('THEME-C001: %s textMuted meets 4.5:1 on panel backgrounds', (mode) => {
+      manager.setMode(mode);
+      const c = manager.getColors();
+      for (const bg of [c.bgPrimary, c.bgSecondary, c.bgTertiary, c.viewerBg]) {
+        expect(contrast(c.textMuted, bg)).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  });
 });

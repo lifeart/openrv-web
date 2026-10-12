@@ -3,6 +3,7 @@ import { EventEmitter } from './utils/EventEmitter';
 import { wirePlaybackControls, type PlaybackWiringDeps } from './AppPlaybackWiring';
 import type { AppWiringContext } from './AppWiringContext';
 import * as Modal from './ui/components/shared/Modal';
+import * as Toast from './ui/components/shared/Toast';
 
 // ---------------------------------------------------------------------------
 // Module-level mocks for video export pipeline
@@ -85,6 +86,10 @@ vi.mock('./utils/export/AnnotationPDFExporter', () => ({
 }));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
+const showToastSpy = vi.spyOn(Toast, 'showToast').mockReturnValue({
+  element: document.createElement('div'),
+  dismiss: () => {},
+});
 const showAnnotationImportDialogSpy = vi.spyOn(Modal, 'showAnnotationImportDialog').mockResolvedValue(null);
 
 function createMockVolumeControl() {
@@ -341,8 +346,22 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportSourceFrame).toHaveBeenCalledWith('jpeg', 0.8);
   });
 
-  it('PW-007: showShortcuts calls keyboardHandler.showCustomBindingsDialog()', () => {
+  it('PW-007: showShortcuts falls back to the bindings editor when no cheat sheet exists', () => {
     headerBar.emit('showShortcuts', undefined);
+    const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    expect(handler.showCustomBindingsDialog).toHaveBeenCalled();
+  });
+
+  it('PW-007b: showShortcuts opens the cheat sheet, not the rebinding editor', () => {
+    const sheet = { show: vi.fn() };
+    deps.getShortcutCheatSheet = vi.fn(() => sheet);
+    headerBar.emit('showShortcuts', undefined);
+    expect(sheet.show).toHaveBeenCalledTimes(1);
+    expect(deps.getKeyboardHandler).not.toHaveBeenCalled();
+  });
+
+  it('PW-007c: showCustomKeyBindings opens the rebinding editor', () => {
+    headerBar.emit('showCustomKeyBindings', undefined);
     const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(handler.showCustomBindingsDialog).toHaveBeenCalled();
   });
@@ -550,7 +569,7 @@ describe('wirePlaybackControls', () => {
     });
 
     await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
+      expect(showToastSpy).toHaveBeenCalledWith(
         expect.stringContaining('merged'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -596,7 +615,7 @@ describe('wirePlaybackControls', () => {
     });
 
     await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
+      expect(showToastSpy).toHaveBeenCalledWith(
         expect.stringContaining('replaced'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -604,7 +623,7 @@ describe('wirePlaybackControls', () => {
 
     // Verify frame offset is mentioned in the message
     await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
+      expect(showToastSpy).toHaveBeenCalledWith(
         expect.stringContaining('frame offset: 50'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -650,7 +669,7 @@ describe('wirePlaybackControls', () => {
     });
 
     await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
+      expect(showToastSpy).toHaveBeenCalledWith(
         expect.stringContaining('replaced'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -714,9 +733,8 @@ describe('wirePlaybackControls', () => {
       },
     });
 
-    expect(showAlertSpy).toHaveBeenCalledWith('Switched to fallback representation: SDR Proxy (1920x1080)', {
+    expect(showToastSpy).toHaveBeenCalledWith('Switched to fallback representation: SDR Proxy (1920x1080)', {
       type: 'info',
-      title: 'Fallback Activated',
     });
   });
 
@@ -875,7 +893,7 @@ describe('wirePlaybackControls — video export', () => {
     emitVideoExport(true);
 
     await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
+      expect(showToastSpy).toHaveBeenCalledWith(
         expect.stringContaining('Exported'),
         expect.objectContaining({ type: 'success' }),
       );
@@ -949,7 +967,7 @@ describe('wirePlaybackControls — video export', () => {
     emitVideoExport(true);
 
     await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
+      expect(showToastSpy).toHaveBeenCalledWith(
         expect.stringContaining('cancelled'),
         expect.objectContaining({ type: 'info' }),
       );

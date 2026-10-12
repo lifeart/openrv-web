@@ -111,17 +111,34 @@ test.describe('HeaderBar Mobile Scroll', () => {
     }
   });
 
-  test('HDRSCROLL-007: header bar should allow scrolling to utility controls', async ({ page }) => {
-    // The fullscreen button is in the utility group (far right)
+  test('HDRSCROLL-007: utility controls are reachable through the More menu', async ({ page }) => {
+    // The fullscreen button is in the utility group (far right). On narrow
+    // viewports it is moved into the always-visible "More" (⋯) menu.
     const fullscreenButton = page.locator('[data-testid="fullscreen-toggle-button"]');
     await expect(fullscreenButton).toBeAttached();
 
-    // Scroll it into view
-    await fullscreenButton.scrollIntoViewIfNeeded();
+    const moreButton = page.locator('[data-testid="header-overflow-button"]');
+    await expect(moreButton).toBeVisible();
+    await moreButton.click();
+    await expect(page.locator('[data-testid="header-overflow-menu"]')).toBeVisible();
     await expect(fullscreenButton).toBeVisible();
 
     // Verify it's within the viewport after scroll
     const isInView = await fullscreenButton.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= window.innerWidth;
+    });
+    expect(isInView).toBe(true);
+  });
+
+  test('HDRSCROLL-009: play button is visible without scrolling on a phone-width viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loadVideoFile(page);
+    await waitForMediaLoaded(page);
+
+    const playButton = page.locator('button[title*="Play"], button[title*="Pause"]').first();
+    await expect(playButton).toBeVisible();
+    const isInView = await playButton.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       return rect.left >= 0 && rect.right <= window.innerWidth;
     });

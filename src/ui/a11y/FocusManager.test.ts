@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FocusManager, type FocusZone } from './FocusManager';
 
 function createButtons(count: number): HTMLButtonElement[] {
@@ -134,6 +134,25 @@ describe('FocusManager', () => {
     expect(document.activeElement).toBe(buttons[2]);
   });
 
+  // FM-007b
+  it('End/arrows in a single-item zone (viewer) are left to global shortcuts', () => {
+    const buttons = createButtons(1);
+    fm.addZone(createZone('viewer', buttons));
+    buttons[0]!.focus();
+    expect(pressKey('End').defaultPrevented).toBe(false);
+    expect(pressKey('ArrowRight').defaultPrevented).toBe(false);
+  });
+
+  // FM-007c
+  it('a focused slider keeps its arrow keys', () => {
+    const buttons = createButtons(2);
+    buttons[0]!.setAttribute('role', 'slider');
+    fm.addZone(createZone('timeline', buttons));
+    buttons[0]!.focus();
+    expect(pressKey('ArrowRight').defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(buttons[0]);
+  });
+
   // FM-008
   it('Arrow wraps at boundaries', () => {
     const buttons = createButtons(3);
@@ -244,6 +263,29 @@ describe('FocusManager', () => {
 
     fm.releaseFocus();
     expect(document.activeElement).toBe(outsideBtn);
+  });
+
+  // FM-013b
+  it('nested trapFocus resumes the outer trap on release', () => {
+    const outer = document.createElement('div');
+    const outerBtn = document.createElement('button');
+    outer.appendChild(outerBtn);
+    const inner = document.createElement('div');
+    const innerBtn = document.createElement('button');
+    inner.appendChild(innerBtn);
+    document.body.append(outer, inner);
+
+    fm.trapFocus(outer);
+    fm.trapFocus(inner);
+    expect(document.activeElement).toBe(innerBtn);
+
+    fm.releaseFocus();
+    expect(document.activeElement).toBe(outerBtn);
+
+    // Outer trap is active again: Tab stays inside it
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    outerBtn.dispatchEvent(event);
+    expect(document.activeElement).toBe(outerBtn);
   });
 
   // FM-014
@@ -431,5 +473,46 @@ describe('FocusManager', () => {
     // Next zone should skip B and go to C
     fm.focusNextZone();
     expect(document.activeElement).toBe(buttonsC[0]);
+  });
+});
+
+describe('FocusManager pointer-focused buttons (U7)', () => {
+  let fm: FocusManager;
+
+  beforeEach(() => {
+    fm = new FocusManager();
+  });
+
+  afterEach(() => {
+    fm.dispose();
+    document.body.innerHTML = '';
+  });
+
+  it('FM-PTR-001: arrows on a mouse-clicked toolbar button are left to global shortcuts', () => {
+    const buttons = createButtons(3);
+    fm.addZone(createZone('toolbar', buttons));
+    fm.initRovingTabindex('toolbar');
+    buttons[0]!.focus();
+    // A click-focused button does not match :focus-visible in browsers
+    const matches = buttons[0]!.matches.bind(buttons[0]!);
+    vi.spyOn(buttons[0]!, 'matches').mockImplementation((sel: string) =>
+      sel === ':focus-visible' ? false : matches(sel),
+    );
+
+    const event = pressKey('ArrowRight');
+    expect(document.activeElement).toBe(buttons[0]);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('FM-PTR-002: keyboard-focused toolbar buttons keep roving navigation and consume the key', () => {
+    const buttons = createButtons(3);
+    fm.addZone(createZone('toolbar', buttons));
+    fm.initRovingTabindex('toolbar');
+    buttons[0]!.focus();
+
+    const event = pressKey('ArrowRight');
+    expect(document.activeElement).toBe(buttons[1]);
+    // preventDefault lets KeyboardManager skip the key (no frame step on top)
+    expect(event.defaultPrevented).toBe(true);
   });
 });

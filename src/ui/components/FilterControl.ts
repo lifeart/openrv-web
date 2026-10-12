@@ -8,6 +8,7 @@ export { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
 
 import type { FilterSettings } from '../../core/types/filter';
 import { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
+import { computeAnchoredPanelPosition } from './shared/anchorPosition';
 
 export interface FilterControlEvents extends EventMap {
   filtersChanged: FilterSettings;
@@ -278,9 +279,10 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     }
 
     // Position relative to button
-    const rect = this.filterButton.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
+    // Falls back to top-right under the header when the button is hidden.
+    const pos = computeAnchoredPanelPosition(this.filterButton, 240, 'right');
+    this.panel.style.top = `${pos.top}px`;
+    this.panel.style.left = `${pos.left}px`;
 
     this.isPanelOpen = true;
     this.panel.style.display = 'block';

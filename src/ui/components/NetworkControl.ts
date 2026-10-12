@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { shortcutTooltip } from '../../utils/input/KeyBindings';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
@@ -18,7 +19,9 @@ import type {
   ParticipantPermission,
 } from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
+import { getPreferredUserName } from '../../core/UserIdentity';
+import { createUserNameField, type UserNameField } from './UserNameField';
 
 /**
  * Validate that a color string is a safe CSS color value.
@@ -98,6 +101,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private responseTokenSection!: HTMLElement;
   private responseTokenInput!: HTMLInputElement;
   private roomCodeInput!: HTMLInputElement;
+  private userNameField: UserNameField | null = null;
   private pinCodeInput!: HTMLInputElement;
   private reconnectPanel!: HTMLElement;
   private errorDisplay!: HTMLElement;
@@ -148,7 +152,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     // Button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'network-sync-button';
-    this.button.title = 'Network Sync (Shift+N)';
+    this.button.title = shortcutTooltip('Network Sync', 'network.togglePanel');
     this.button.setAttribute('aria-haspopup', 'true');
     this.button.setAttribute('aria-expanded', 'false');
     this.button.setAttribute('aria-label', 'Network Sync');
@@ -222,7 +226,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.panel.dataset.testid = 'network-panel';
     this.panel.style.cssText = `
       position: fixed;
-      width: 280px;
+      width: ${PANEL_WIDTHS.standard};
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 8px;
@@ -388,6 +392,11 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     panel.dataset.testid = 'network-disconnected-panel';
     panel.style.cssText = 'padding: 12px;';
 
+    // Display name (persisted in GeneralPrefs.userName)
+    this.userNameField = createUserNameField({ testId: 'network-user-name-input' });
+    this.userNameField.element.style.marginBottom = '12px';
+    panel.appendChild(this.userNameField.element);
+
     // PIN section
     const pinSection = document.createElement('div');
     pinSection.style.cssText = 'margin-bottom: 12px;';
@@ -440,7 +449,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
         digits.length >= 4
       ) {
         this.state.linkedRoomAutoJoinArmed = false;
-        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: 'User' });
+        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: this.resolveUserName('User') });
       }
     });
     pinSection.appendChild(this.pinCodeInput);
@@ -473,7 +482,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     });
     createBtn.addEventListener('click', () => {
       this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
-      this.emit('createRoom', { userName: this.state.syncSettings ? 'Host' : 'User' });
+      this.emit('createRoom', { userName: this.resolveUserName(this.state.syncSettings ? 'Host' : 'User') });
     });
     createSection.appendChild(createBtn);
     panel.appendChild(createSection);
@@ -1066,7 +1075,17 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       return;
     }
     this.hideError();
-    this.emit('joinRoom', { roomCode: code, userName: 'User' });
+    this.emit('joinRoom', { roomCode: code, userName: this.resolveUserName('User') });
+  }
+
+  /**
+   * The display name to announce when creating/joining a room: the name typed
+   * in the panel (persisted to preferences), else the stored preference, else
+   * `fallback` (the historical 'User' / 'Host' defaults).
+   */
+  private resolveUserName(fallback: string): string {
+    this.userNameField?.commit();
+    return getPreferredUserName(fallback);
   }
 
   // ---- State Updates ----
@@ -1572,6 +1591,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   dispose(): void {
     this.resolveMediaPrompt(false);
     this.closePanel();
+    this.userNameField?.dispose();
+    this.userNameField = null;
     if (document.body.contains(this.panel)) {
       document.body.removeChild(this.panel);
     }

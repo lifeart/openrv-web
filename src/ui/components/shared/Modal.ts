@@ -41,68 +41,154 @@ export interface PromptOptions extends ModalOptions {
   cancelText?: string;
 }
 
-// Singleton container for modals
-let modalContainer: HTMLElement | null = null;
-let customModalEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
-// Pre-trap focus saved when no FocusManager is available (fallback)
-let preTrapFocus: Element | null = null;
-
-function cleanupCustomModalEscapeHandler(): void {
-  if (customModalEscapeHandler) {
-    document.removeEventListener('keydown', customModalEscapeHandler);
-    customModalEscapeHandler = null;
-  }
+// Modal layers. The first open modal uses the `#modal-container` element;
+// each modal opened on top of it (e.g. a confirm raised from a custom modal)
+// gets its own stacked layer so the dialog underneath is preserved.
+interface ModalLayer {
+  element: HTMLElement;
+  /** Focus to restore when no FocusManager is available (fallback). */
+  preTrapFocus: Element | null;
+  keyHandlers: Array<{ listener: (e: KeyboardEvent) => void; capture: boolean }>;
 }
+
+let modalContainer: HTMLElement | null = null;
+const layerStack: ModalLayer[] = [];
+/** Key events already handled by a modal layer, so a layer revealed mid-dispatch ignores them. */
+const handledKeyEvents = new WeakSet<Event>();
+
+const LAYER_STYLE = `
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+`;
 
 function getModalContainer(): HTMLElement {
   if (!modalContainer) {
     modalContainer = document.createElement('div');
     modalContainer.id = 'modal-container';
-    modalContainer.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: ${Z_INDEX.modal};
-      display: none;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(2px);
-    `;
+    modalContainer.style.cssText = LAYER_STYLE;
+    modalContainer.style.zIndex = String(Z_INDEX.modal);
     document.body.appendChild(modalContainer);
   }
   return modalContainer;
 }
 
-function showContainer(): void {
-  const container = getModalContainer();
-  container.style.display = 'flex';
+function findLayer(element: HTMLElement): ModalLayer | undefined {
+  return layerStack.find((l) => l.element === element);
+}
+
+function isTopLayer(element: HTMLElement): boolean {
+  return layerStack[layerStack.length - 1]?.element === element;
+}
+
+/**
+ * Open a new modal layer and return its (empty) container element.
+ * The base container is reused when no modal is open.
+ */
+function openLayer(): HTMLElement {
+  let element: HTMLElement;
+  if (layerStack.length === 0) {
+    element = getModalContainer();
+    element.innerHTML = '';
+  } else {
+    element = document.createElement('div');
+    element.className = 'modal-container-layer';
+    element.style.cssText = LAYER_STYLE;
+    element.style.zIndex = String(Z_INDEX.modal + layerStack.length);
+    document.body.appendChild(element);
+  }
+  layerStack.push({ element, preTrapFocus: null, keyHandlers: [] });
+  return element;
+}
+
+function showContainer(element: HTMLElement): void {
+  element.style.display = 'flex';
+  const layer = findLayer(element);
   if (focusManager) {
     // FocusManager handles saving/restoring focus internally
-    focusManager.trapFocus(container);
-  } else {
-    preTrapFocus = document.activeElement;
+    focusManager.trapFocus(element);
+  } else if (layer) {
+    layer.preTrapFocus = document.activeElement;
   }
 }
 
-function hideContainer(): void {
-  cleanupCustomModalEscapeHandler();
+function hideContainer(element: HTMLElement): void {
+  const layer = findLayer(element);
+  if (!layer) return;
+  layerStack.splice(layerStack.indexOf(layer), 1);
+  for (const { listener, capture } of layer.keyHandlers) {
+    document.removeEventListener('keydown', listener, capture);
+  }
+  layer.keyHandlers = [];
   if (focusManager) {
     // FocusManager restores focus to the element saved in trapFocus()
     focusManager.releaseFocus();
-  } else if (preTrapFocus instanceof HTMLElement) {
+  } else if (layer.preTrapFocus instanceof HTMLElement) {
     // Fallback: restore focus manually when no FocusManager
-    preTrapFocus.focus();
+    layer.preTrapFocus.focus();
   }
-  preTrapFocus = null;
-  const container = getModalContainer();
-  container.style.display = 'none';
-  container.innerHTML = '';
+  element.style.display = 'none';
+  element.innerHTML = '';
+  if (element !== modalContainer) {
+    element.remove();
+  }
 }
 
-function createModalBase(options: ModalOptions = {}): HTMLElement {
+/**
+ * Register a keydown handler for a modal layer. It only runs while the layer is
+ * the top-most one, and is removed when the layer closes.
+ *
+ * Built-in dialogs (`dialogKeys: true`) listen in the capture phase, before app
+ * shortcuts. Enter on a focused button inside the dialog activates that button
+ * rather than the dialog's default action, so Enter on "Cancel" cancels. Enter
+ * and Escape are marked handled so the same keypress can't also reach app
+ * shortcuts or re-click the element focus returns to.
+ *
+ * Custom content (`dialogKeys: false`) listens in the bubble phase so the content
+ * can handle keys itself first, and only Escape is handled.
+ */
+function addLayerKeyHandler(
+  element: HTMLElement,
+  handler: (e: KeyboardEvent) => void,
+  { dialogKeys = true }: { dialogKeys?: boolean } = {},
+): void {
+  const layer = findLayer(element);
+  if (!layer) return;
+  const wrapped = (e: KeyboardEvent) => {
+    if (!isTopLayer(element) || handledKeyEvents.has(e)) return;
+    if (!dialogKeys) {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        e.preventDefault();
+        handledKeyEvents.add(e);
+        handler(e);
+      }
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      handledKeyEvents.add(e);
+    }
+    if (e.key === 'Enter') {
+      const active = document.activeElement;
+      if (active instanceof HTMLButtonElement && element.contains(active)) {
+        if (!active.disabled) active.click();
+        return;
+      }
+    }
+    handler(e);
+  };
+  layer.keyHandlers.push({ listener: wrapped, capture: dialogKeys });
+  document.addEventListener('keydown', wrapped, dialogKeys);
+}
+
+function createModalBase(layer: HTMLElement, options: ModalOptions = {}): HTMLElement {
   const { title, width = '400px', closable = true, onClose } = options;
 
   const modalTitleId = `modal-title-${++modalTitleCounter}`;
@@ -166,7 +252,7 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
       const closeBtn = createButton(
         '',
         () => {
-          hideContainer();
+          hideContainer(layer);
           onClose?.();
         },
         {
@@ -190,13 +276,11 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
  */
 export function showAlert(message: string, options: AlertOptions = {}): Promise<void> {
   return new Promise((resolve) => {
-    cleanupCustomModalEscapeHandler();
     const { title = 'Alert', type = 'info', onClose } = options;
 
-    const container = getModalContainer();
-    container.innerHTML = '';
+    const container = openLayer();
 
-    const modal = createModalBase({
+    const modal = createModalBase(container, {
       ...options,
       title,
       onClose: () => {
@@ -249,20 +333,18 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
     // Close on Escape or Enter - defined early so button handler can remove it
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'Enter') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve();
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
 
     const okBtn = createButton(
       'OK',
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve();
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'primary', minWidth: '80px' },
     );
@@ -271,12 +353,12 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
     modal.appendChild(footer);
 
     container.appendChild(modal);
-    showContainer();
+    showContainer(container);
 
     // Focus OK button
     okBtn.focus();
 
-    document.addEventListener('keydown', handleKeydown);
+    addLayerKeyHandler(container, handleKeydown);
   });
 }
 
@@ -285,7 +367,6 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
  */
 export function showConfirm(message: string, options: ConfirmOptions = {}): Promise<boolean> {
   return new Promise((resolve) => {
-    cleanupCustomModalEscapeHandler();
     const {
       title = 'Confirm',
       confirmText = 'OK',
@@ -294,10 +375,9 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
       onClose,
     } = options;
 
-    const container = getModalContainer();
-    container.innerHTML = '';
+    const container = openLayer();
 
-    const modal = createModalBase({
+    const modal = createModalBase(container, {
       ...options,
       title,
       onClose: () => {
@@ -331,25 +411,22 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
     // Keyboard handling - defined early so button handlers can remove it
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(false);
-        document.removeEventListener('keydown', handleKeydown);
       } else if (e.key === 'Enter') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(true);
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
 
     const cancelBtn = createButton(
       cancelText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(false);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'default', minWidth: '80px' },
     );
@@ -357,10 +434,9 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
     const confirmBtn = createButton(
       confirmText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(true);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: confirmVariant, minWidth: '80px' },
     );
@@ -370,12 +446,12 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
     modal.appendChild(footer);
 
     container.appendChild(modal);
-    showContainer();
+    showContainer(container);
 
     // Focus confirm button
     confirmBtn.focus();
 
-    document.addEventListener('keydown', handleKeydown);
+    addLayerKeyHandler(container, handleKeydown);
   });
 }
 
@@ -384,7 +460,6 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
  */
 export function showPrompt(message: string, options: PromptOptions = {}): Promise<string | null> {
   return new Promise((resolve) => {
-    cleanupCustomModalEscapeHandler();
     const {
       title = 'Input',
       placeholder = '',
@@ -394,10 +469,9 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
       onClose,
     } = options;
 
-    const container = getModalContainer();
-    container.innerHTML = '';
+    const container = openLayer();
 
-    const modal = createModalBase({
+    const modal = createModalBase(container, {
       ...options,
       title,
       onClose: () => {
@@ -460,25 +534,22 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
     // Keyboard handling - defined early so button handlers can remove it
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(null);
-        document.removeEventListener('keydown', handleKeydown);
       } else if (e.key === 'Enter') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(input.value);
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
 
     const cancelBtn = createButton(
       cancelText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(null);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'default', minWidth: '80px' },
     );
@@ -486,10 +557,9 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
     const confirmBtn = createButton(
       confirmText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(input.value);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'primary', minWidth: '80px' },
     );
@@ -499,13 +569,13 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
     modal.appendChild(footer);
 
     container.appendChild(modal);
-    showContainer();
+    showContainer(container);
 
     // Focus input
     input.focus();
     input.select();
 
-    document.addEventListener('keydown', handleKeydown);
+    addLayerKeyHandler(container, handleKeydown);
   });
 }
 
@@ -525,11 +595,9 @@ export interface ModalHandle {
  * Show a custom modal with any content
  */
 export function showModal(content: HTMLElement, options: ModalOptions = {}): ModalHandle {
-  cleanupCustomModalEscapeHandler();
-  const container = getModalContainer();
-  container.innerHTML = '';
+  const container = openLayer();
 
-  const modal = createModalBase(options);
+  const modal = createModalBase(container, options);
 
   const contentWrapper = document.createElement('div');
   contentWrapper.style.cssText = `
@@ -541,10 +609,10 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): Mod
   modal.appendChild(contentWrapper);
 
   container.appendChild(modal);
-  showContainer();
+  showContainer(container);
 
   const close = () => {
-    hideContainer();
+    hideContainer(container);
     options.onClose?.();
   };
 
@@ -553,12 +621,7 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): Mod
   };
 
   if (options.closable !== false) {
-    customModalEscapeHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        close();
-      }
-    };
-    document.addEventListener('keydown', customModalEscapeHandler);
+    addLayerKeyHandler(container, close, { dialogKeys: false });
   }
 
   return {
@@ -568,11 +631,12 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): Mod
 }
 
 /**
- * Close any open modal
+ * Close all open modals
  */
 export function closeModal(): void {
-  cleanupCustomModalEscapeHandler();
-  hideContainer();
+  for (const layer of [...layerStack].reverse()) {
+    hideContainer(layer.element);
+  }
 }
 
 export interface FileReloadOptions extends ModalOptions {
@@ -614,13 +678,11 @@ export interface AnnotationImportOptions {
  */
 export function showAnnotationImportDialog(options: ModalOptions = {}): Promise<AnnotationImportOptions | null> {
   return new Promise((resolve) => {
-    cleanupCustomModalEscapeHandler();
     const { title = 'Import Annotations', onClose } = options;
 
-    const container = getModalContainer();
-    container.innerHTML = '';
+    const container = openLayer();
 
-    const modal = createModalBase({
+    const modal = createModalBase(container, {
       ...options,
       title,
       onClose: () => {
@@ -755,25 +817,22 @@ export function showAnnotationImportDialog(options: ModalOptions = {}): Promise<
 
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(null);
-        document.removeEventListener('keydown', handleKeydown);
       } else if (e.key === 'Enter') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve({ mode: selectedMode, frameOffset: parseInt(offsetInput.value, 10) || 0 });
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
 
     const cancelBtn = createButton(
       'Cancel',
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(null);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'default', minWidth: '80px' },
     );
@@ -782,10 +841,9 @@ export function showAnnotationImportDialog(options: ModalOptions = {}): Promise<
     const importBtn = createButton(
       'Import',
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve({ mode: selectedMode, frameOffset: parseInt(offsetInput.value, 10) || 0 });
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'primary', minWidth: '80px' },
     );
@@ -796,12 +854,12 @@ export function showAnnotationImportDialog(options: ModalOptions = {}): Promise<
     modal.appendChild(footer);
 
     container.appendChild(modal);
-    showContainer();
+    showContainer(container);
 
     // Focus the import button
     importBtn.focus();
 
-    document.addEventListener('keydown', handleKeydown);
+    addLayerKeyHandler(container, handleKeydown);
   });
 }
 
@@ -811,7 +869,6 @@ export function showAnnotationImportDialog(options: ModalOptions = {}): Promise<
  */
 export function showFileReloadPrompt(filename: string, options: FileReloadOptions = {}): Promise<FileReloadResult> {
   return new Promise((resolve) => {
-    cleanupCustomModalEscapeHandler();
     const {
       title = 'Reload File',
       accept = 'image/*,video/*',
@@ -821,10 +878,9 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
       onClose,
     } = options;
 
-    const container = getModalContainer();
-    container.innerHTML = '';
+    const container = openLayer();
 
-    const modal = createModalBase({
+    const modal = createModalBase(container, {
       ...options,
       title,
       onClose: () => {
@@ -947,26 +1003,23 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
     // Keyboard handling - declare early so buttons can remove it
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(FILE_RELOAD_CANCEL);
-        document.removeEventListener('keydown', handleKeydown);
       } else if (e.key === 'Enter' && selectedFile && !loadBtn.disabled) {
         // Enter confirms when file is selected
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(selectedFile);
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
 
     const cancelBtn = createButton(
       cancelText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(FILE_RELOAD_CANCEL);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'default', minWidth: '80px' },
     );
@@ -975,10 +1028,9 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
     const skipBtn = createButton(
       skipText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(null);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'default', minWidth: '80px' },
     );
@@ -996,10 +1048,9 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
     const loadBtn = createButton(
       'Load',
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(selectedFile);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'primary', minWidth: '80px' },
     );
@@ -1016,10 +1067,10 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
     modal.appendChild(footer);
 
     container.appendChild(modal);
-    showContainer();
+    showContainer(container);
 
     // Register keyboard handler
-    document.addEventListener('keydown', handleKeydown);
+    addLayerKeyHandler(container, handleKeydown);
   });
 }
 
@@ -1032,7 +1083,6 @@ export function showSequenceReloadPrompt(
   options: FileReloadOptions = {},
 ): Promise<SequenceReloadResult> {
   return new Promise((resolve) => {
-    cleanupCustomModalEscapeHandler();
     const {
       title = 'Reload Sequence',
       accept = 'image/*',
@@ -1042,10 +1092,9 @@ export function showSequenceReloadPrompt(
       onClose,
     } = options;
 
-    const container = getModalContainer();
-    container.innerHTML = '';
+    const container = openLayer();
 
-    const modal = createModalBase({
+    const modal = createModalBase(container, {
       ...options,
       title,
       onClose: () => {
@@ -1143,25 +1192,22 @@ export function showSequenceReloadPrompt(
     // Keyboard handling
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(FILE_RELOAD_CANCEL);
-        document.removeEventListener('keydown', handleKeydown);
       } else if (e.key === 'Enter' && selectedFiles.length > 0 && !loadBtn.disabled) {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(selectedFiles);
-        document.removeEventListener('keydown', handleKeydown);
       }
     };
 
     const cancelBtn = createButton(
       cancelText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(FILE_RELOAD_CANCEL);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'default', minWidth: '80px' },
     );
@@ -1170,10 +1216,9 @@ export function showSequenceReloadPrompt(
     const skipBtn = createButton(
       skipText,
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(null);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'default', minWidth: '80px' },
     );
@@ -1191,10 +1236,9 @@ export function showSequenceReloadPrompt(
     const loadBtn = createButton(
       'Load',
       () => {
-        hideContainer();
+        hideContainer(container);
         onClose?.();
         resolve(selectedFiles);
-        document.removeEventListener('keydown', handleKeydown);
       },
       { variant: 'primary', minWidth: '80px' },
     );
@@ -1211,9 +1255,9 @@ export function showSequenceReloadPrompt(
     modal.appendChild(footer);
 
     container.appendChild(modal);
-    showContainer();
+    showContainer(container);
 
     // Register keyboard handler
-    document.addEventListener('keydown', handleKeydown);
+    addLayerKeyHandler(container, handleKeydown);
   });
 }

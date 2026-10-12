@@ -57,8 +57,11 @@ export const PANEL_WIDTHS = {
   panel: '300px',
   panelWide: '320px',
   wide: '340px',
+  wideMedium: '360px',
+  extraWide: '380px',
   dialog: '400px',
   dialogWide: '420px',
+  dialogExtraWide: '500px',
 } as const;
 
 // Box-shadow tokens
@@ -115,6 +118,9 @@ export const Z_INDEX = {
   modal: 10000,
   // Tooltips above modals
   tooltip: 10001,
+  // Non-blocking toast / HUD notifications (above modals so a confirmation
+  // emitted while a dialog is closing is still visible)
+  toast: 10002,
   // Accessibility skip link (always on top)
   a11ySkipLink: 100000,
 } as const;

@@ -333,21 +333,26 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Switch to QC tab',
   },
 
-  // Paint tools (handled by PaintToolbar component)
+  // Paint tools (handled by PaintToolbar component). Scoped to the paint
+  // context (Annotate tab) so bare letters do not arm drawing tools elsewhere.
   'paint.pan': {
     code: 'KeyV',
+    context: 'paint',
     description: 'Select pan tool',
   },
   'paint.pen': {
     code: 'KeyP',
+    context: 'paint',
     description: 'Select pen tool',
   },
   'paint.eraser': {
     code: 'KeyE',
+    context: 'paint',
     description: 'Select eraser tool',
   },
   'paint.text': {
     code: 'KeyT',
+    context: 'paint',
     description: 'Select text tool',
   },
   'paint.rectangle': {
@@ -362,14 +367,17 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'paint.line': {
     code: 'KeyL',
+    context: 'paint',
     description: 'Select line tool',
   },
   'paint.arrow': {
     code: 'KeyA',
+    context: 'paint',
     description: 'Select arrow tool',
   },
   'paint.toggleBrush': {
     code: 'KeyB',
+    context: 'paint',
     description: 'Toggle brush type',
   },
   'paint.toggleGhost': {
@@ -389,6 +397,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'paint.toggleHold': {
     code: 'KeyX',
+    context: 'paint',
     description: 'Toggle hold mode',
   },
 
@@ -689,10 +698,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     context: 'panel',
     description: 'Toggle network sync panel',
   },
+  // Ctrl+Shift+N is reserved by Chromium (new incognito window), so the
+  // quick-disconnect uses Ctrl+Alt+Shift+N instead.
   'network.disconnect': {
     code: 'KeyN',
     shift: true,
     ctrl: true,
+    alt: true,
     description: 'Quick disconnect from sync room',
   },
 
@@ -882,6 +894,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
  * Get a human-readable description of a key combination
  */
 export function describeKeyCombo(combo: KeyCombination): string {
+  if (isUnboundCombo(combo)) return 'Unbound';
   const parts = [];
   if (combo.ctrl) parts.push('Ctrl');
   if (combo.shift) parts.push('Shift');
@@ -889,6 +902,68 @@ export function describeKeyCombo(combo: KeyCombination): string {
   if (combo.meta) parts.push('Cmd');
   parts.push(codeToKey(combo.code));
   return parts.join('+');
+}
+
+/**
+ * Sentinel key code for an action the user deliberately left without a key
+ * (e.g. after giving its key to another action in the shortcut editor).
+ */
+export const UNBOUND_CODE = 'Unbound';
+
+/** True when the combo is the "no key assigned" sentinel. */
+export function isUnboundCombo(combo: KeyCombination): boolean {
+  return combo.code === UNBOUND_CODE;
+}
+
+/**
+ * Human-readable key label for an action id, e.g. `formatActionShortcut('timeline.cycleLoopMode')`
+ * → `"Ctrl+L"`. Uses the effective (customized) combo when a resolver is
+ * installed via {@link setShortcutComboResolver}, otherwise the default.
+ * Returns an empty string for unknown or unbound actions.
+ */
+export function formatActionShortcut(action: string): string {
+  const combo = shortcutComboResolver?.(action) ?? defaultComboFor(action);
+  if (!combo || isUnboundCombo(combo)) return '';
+  return describeKeyCombo(combo);
+}
+
+const CONTEXT_TAB_LABELS: Partial<Record<BindingContext, string>> = {
+  viewer: 'View tab',
+  color: 'Color tab',
+  transform: 'Transform tab',
+  paint: 'Annotate tab',
+  panel: 'QC tab',
+};
+
+/**
+ * Tooltip text for a control with a keyboard shortcut, generated from the
+ * binding registry so the hint never drifts from the real key:
+ * `shortcutTooltip('Cycle loop mode', 'timeline.cycleLoopMode')` → `"Cycle loop mode (Ctrl+L)"`.
+ * Context-scoped bindings name the tab where the key works.
+ */
+export function shortcutTooltip(label: string, action: string): string {
+  const key = formatActionShortcut(action);
+  if (!key) return label;
+  const context = DEFAULT_KEY_BINDINGS[action]?.context;
+  const where = context ? CONTEXT_TAB_LABELS[context] : undefined;
+  return where ? `${label} (${key} on ${where})` : `${label} (${key})`;
+}
+
+let shortcutComboResolver: ((action: string) => KeyCombination | undefined) | null = null;
+
+/**
+ * Install the lookup used by {@link formatActionShortcut} for effective
+ * (user-customized) combos. Pass `null` to fall back to defaults.
+ */
+export function setShortcutComboResolver(resolver: ((action: string) => KeyCombination | undefined) | null): void {
+  shortcutComboResolver = resolver;
+}
+
+function defaultComboFor(action: string): KeyCombination | undefined {
+  const entry = DEFAULT_KEY_BINDINGS[action];
+  if (!entry) return undefined;
+  const { description: _d, context: _c, ...combo } = entry;
+  return combo;
 }
 
 /**

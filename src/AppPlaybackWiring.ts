@@ -28,6 +28,7 @@ import {
 import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
 import { showAlert, showAnnotationImportDialog, showModal } from './ui/components/shared/Modal';
+import { showToast } from './ui/components/shared/Toast';
 import { createButton } from './ui/components/shared/Button';
 import { PANEL_WIDTHS } from './ui/components/shared/theme';
 import { generateSlateFrame } from './export/SlateRenderer';
@@ -49,6 +50,8 @@ export interface PlaybackWiringDeps {
   getKeyboardHandler: () => AppKeyboardHandler;
   getFullscreenManager: () => FullscreenManager | undefined;
   getAudioMixer?: () => AudioMixer;
+  /** Read-only shortcut cheat sheet overlay (Help > Keyboard Shortcuts). */
+  getShortcutCheatSheet?: () => { show(): void } | null;
 }
 
 /**
@@ -60,7 +63,19 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   let videoExportInProgress = false;
 
   // HeaderBar events
-  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
+  // Help > Keyboard Shortcuts opens the read-only cheat sheet (same as `?`);
+  // Help > Custom Key Bindings opens the rebinding editor. Fall back to the
+  // editor only when the cheat sheet is not available (e.g. before layout).
+  subs.add(
+    headerBar.on('showShortcuts', () => {
+      const sheet = deps.getShortcutCheatSheet?.() ?? null;
+      if (sheet) {
+        sheet.show();
+      } else {
+        deps.getKeyboardHandler().showCustomBindingsDialog();
+      }
+    }),
+  );
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
   subs.add(
@@ -146,10 +161,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   );
   subs.add(
     session.on('fallbackActivated', ({ fallbackRepresentation }) => {
-      showAlert(`Switched to fallback representation: ${fallbackRepresentation.label}`, {
-        type: 'info',
-        title: 'Fallback Activated',
-      });
+      showToast(`Switched to fallback representation: ${fallbackRepresentation.label}`, { type: 'info' });
     }),
   );
 
@@ -344,9 +356,8 @@ async function handleAnnotationImport(
 
     const modeVerb = importOptions.mode === 'merge' ? 'merged' : 'replaced';
     const offsetNote = importOptions.frameOffset !== 0 ? ` (frame offset: ${importOptions.frameOffset})` : '';
-    showAlert(`Successfully ${modeVerb} annotations. ${count} annotation(s) imported${offsetNote}.`, {
+    showToast(`Successfully ${modeVerb} annotations. ${count} annotation(s) imported${offsetNote}.`, {
       type: 'success',
-      title: 'Import Complete',
     });
   } catch {
     showAlert('Failed to read the annotation file.', {
@@ -450,7 +461,11 @@ async function handleSequenceExport(
   // closable: false — only the Cancel button can dismiss the dialog. This
   // preserves the legacy behavior where Escape did nothing during export and
   // ensures the export task can drive teardown explicitly when it finishes.
-  const modalHandle = showModal(progressBody, { title: 'Export Frames', closable: false, width: '360px' });
+  const modalHandle = showModal(progressBody, {
+    title: 'Export Frames',
+    closable: false,
+    width: PANEL_WIDTHS.wideMedium,
+  });
 
   // Store current frame to restore later
   const originalFrame = session.currentFrame;
@@ -493,9 +508,9 @@ async function handleSequenceExport(
 
     // Show result
     if (result.success) {
-      showAlert(`Successfully exported ${result.exportedFrames} frames`, { type: 'success', title: 'Export Complete' });
+      showToast(`Successfully exported ${result.exportedFrames} frames`, { type: 'success' });
     } else if (result.error?.includes('cancelled')) {
-      showAlert('Export cancelled', { type: 'info', title: 'Export' });
+      showToast('Export cancelled', { type: 'info' });
     } else {
       showAlert(`Export failed: ${result.error}`, { type: 'error', title: 'Export Error' });
     }
@@ -718,13 +733,10 @@ async function handleVideoExport(
     const name = sanitizeFilenameBase(source.name || 'video');
     const filename = `${name}_${frameRange.startFrame}-${frameRange.endFrame}.mp4`;
     downloadBlob(mp4Blob, filename);
-    showAlert(`Exported ${result.totalFrames} frames to ${filename}`, {
-      type: 'success',
-      title: 'Export Complete',
-    });
+    showToast(`Exported ${result.totalFrames} frames to ${filename}`, { type: 'success' });
   } catch (err) {
     if (err instanceof ExportCancelledError) {
-      showAlert('Video export cancelled', { type: 'info', title: 'Export' });
+      showToast('Video export cancelled', { type: 'info' });
     } else {
       const message = err instanceof Error ? err.message : String(err);
       showAlert(`MP4 export failed: ${message}`, { type: 'error', title: 'Export Error' });
@@ -759,7 +771,7 @@ function addCurrentSourceToPlaylist(
 
   controls.playlistManager.addClip(sourceIndex, source.name || `Source ${sourceIndex + 1}`, inPoint, outPoint);
 
-  showAlert(`Added "${source.name}" to playlist`, { type: 'success', title: 'Clip Added' });
+  showToast(`Added "${source.name}" to playlist`, { type: 'success' });
 }
 
 /**

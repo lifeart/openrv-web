@@ -9,6 +9,12 @@ import { MarkerListPanel, type MarkerExportData } from './MarkerListPanel';
 import { Session, MARKER_COLORS } from '../../core/session/Session';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import * as Modal from './shared/Modal';
+import * as Toast from './shared/Toast';
+
+vi.mock('./shared/Toast', () => ({
+  showToast: vi.fn(() => ({ element: document.createElement('div'), dismiss: () => {} })),
+  dismissAllToasts: vi.fn(),
+}));
 
 vi.mock('./shared/Modal', async (importOriginal) => {
   const original = await importOriginal<typeof Modal>();
@@ -940,7 +946,7 @@ describe('MarkerListPanel', () => {
       session.setMarker(20, 'Existing B', MARKER_COLORS[1]);
       panel.show();
 
-      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+      const alertMock = vi.mocked(Toast.showToast).mockClear();
 
       const importData: MarkerExportData = {
         version: 1,
@@ -956,8 +962,11 @@ describe('MarkerListPanel', () => {
       await applyImport(panel, importData, 'merge');
 
       // Should report 2 collisions and 1 imported
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('2 markers skipped due to frame collisions'));
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('2 markers skipped due to frame collisions'),
+        expect.anything(),
+      );
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'), expect.anything());
       // Existing markers unchanged
       expect(session.getMarker(10)?.note).toBe('Existing A');
       expect(session.getMarker(20)?.note).toBe('Existing B');
@@ -969,7 +978,7 @@ describe('MarkerListPanel', () => {
       session.setMarker(10, 'Existing', MARKER_COLORS[0]);
       panel.show();
 
-      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+      const alertMock = vi.mocked(Toast.showToast).mockClear();
 
       const importData: MarkerExportData = {
         version: 1,
@@ -983,14 +992,17 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData, 'merge');
 
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker skipped due to frame collisions'));
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('1 marker skipped due to frame collisions'),
+        expect.anything(),
+      );
     });
 
     it('MARK-U157: merge mode with no collisions does NOT mention collisions in alert', async () => {
       session.setMarker(10, 'Existing', MARKER_COLORS[0]);
       panel.show();
 
-      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+      const alertMock = vi.mocked(Toast.showToast).mockClear();
 
       const importData: MarkerExportData = {
         version: 1,
@@ -1002,13 +1014,13 @@ describe('MarkerListPanel', () => {
       await applyImport(panel, importData, 'merge');
 
       // Should show import summary but no collision message
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
-      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('collision'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'), expect.anything());
+      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('collision'), expect.anything());
     });
 
     it('MARK-U158: import reports invalid entry count when entries fail validation', async () => {
       panel.show();
-      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+      const alertMock = vi.mocked(Toast.showToast).mockClear();
 
       const importData = {
         version: 1,
@@ -1024,14 +1036,14 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData);
 
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('3 invalid entries skipped'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'), expect.anything());
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('3 invalid entries skipped'), expect.anything());
       expect(session.marks.size).toBe(1);
     });
 
     it('MARK-U159: import with no invalid entries does NOT mention invalid in alert', async () => {
       panel.show();
-      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+      const alertMock = vi.mocked(Toast.showToast).mockClear();
 
       const importData: MarkerExportData = {
         version: 1,
@@ -1045,14 +1057,14 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData);
 
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('2 markers imported'));
-      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('invalid'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('2 markers imported'), expect.anything());
+      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('invalid'), expect.anything());
     });
 
     it('MARK-U160A: import with mix of valid, invalid, and collisions shows all counts', async () => {
       session.setMarker(10, 'Existing', MARKER_COLORS[0]);
       panel.show();
-      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+      const alertMock = vi.mocked(Toast.showToast).mockClear();
 
       const importData = {
         version: 1,
@@ -1077,7 +1089,7 @@ describe('MarkerListPanel', () => {
 
     it('MARK-U160B: import reports single invalid entry with correct grammar', async () => {
       panel.show();
-      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+      const alertMock = vi.mocked(Toast.showToast).mockClear();
 
       const importData = {
         version: 1,
@@ -1091,7 +1103,7 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData);
 
-      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 invalid entry skipped'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 invalid entry skipped'), expect.anything());
     });
   });
 

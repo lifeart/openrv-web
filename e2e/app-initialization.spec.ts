@@ -126,10 +126,10 @@ test.describe('Application Initialization', () => {
     const shortcutsItem = page.locator('[data-testid="help-menu-help"]');
     await shortcutsItem.click();
 
-    // Modal with shortcuts should appear
-    await page.waitForTimeout(200);
-    const modal = page.getByRole('heading', { name: 'Custom Key Bindings' });
-    await expect(modal).toBeVisible();
+    // The shortcut cheat sheet should appear
+    const sheet = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.locator('.cheatsheet-title')).toHaveText('Keyboard Shortcuts');
   });
 
   test('APP-012: should have volume control', async ({ page }) => {

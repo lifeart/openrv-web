@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionURLService, type SessionURLDeps } from './SessionURLService';
+import { resetCorePreferencesManagerForTests } from '../core/PreferencesManager';
+import { setPreferredUserName } from '../core/UserIdentity';
 import type { SessionURLState } from '../core/session/SessionURLManager';
 import { encodeSessionState, decodeSessionState } from '../core/session/SessionURLManager';
 import { createMockSession, createMockViewer } from '../../test/mocks';
@@ -390,6 +392,26 @@ describe('SessionURLService', () => {
 
       expect(deps.networkControl.setJoinRoomCodeFromLink).toHaveBeenCalledWith('ABCD');
       expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('ABCD', 'User', undefined);
+    });
+
+    it('SU-039b: auto-join uses the stored display name when one is set (U5)', async () => {
+      localStorage.clear();
+      resetCorePreferencesManagerForTests();
+      setPreferredUserName('Alice');
+      try {
+        deps = createDeps({
+          getLocationSearch: () => '?room=ABCD',
+          getLocationHash: () => '',
+        });
+        service = new SessionURLService(deps);
+
+        await service.handleURLBootstrap();
+
+        expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('ABCD', 'Alice', undefined);
+      } finally {
+        localStorage.clear();
+        resetCorePreferencesManagerForTests();
+      }
     });
 
     it('SU-040: auto-joins room with PIN when both room and pin are present', async () => {

@@ -88,6 +88,7 @@ describe('PreferencesManager defaults', () => {
     expect(DEFAULT_GENERAL_PREFS.defaultFps).toBe(24);
     expect(DEFAULT_GENERAL_PREFS.autoPlayOnLoad).toBe(false);
     expect(DEFAULT_GENERAL_PREFS.showWelcome).toBe(true);
+    expect(DEFAULT_GENERAL_PREFS.experimentalFeatures).toBe(false);
   });
 });
 
@@ -894,6 +895,20 @@ describe('Issue #152: preferences wiring', () => {
     expect(m2.getGeneralPrefs().autoPlayOnLoad).toBe(true);
     expect(m2.getGeneralPrefs().showWelcome).toBe(false);
     expect(m2.getGeneralPrefs().defaultFps).toBe(60);
+  });
+
+  it('CPRF-152-006: experimentalFeatures persists and rejects non-boolean values', () => {
+    const { manager } = createManager();
+    expect(manager.getGeneralPrefs().experimentalFeatures).toBe(false);
+    manager.setGeneralPrefs({ experimentalFeatures: true });
+    expect(manager.getGeneralPrefs().experimentalFeatures).toBe(true);
+
+    const { manager: m2 } = createManager();
+    m2.importAll(manager.exportAll());
+    expect(m2.getGeneralPrefs().experimentalFeatures).toBe(true);
+
+    m2.setGeneralPrefs({ experimentalFeatures: 'yes' as unknown as boolean });
+    expect(m2.getGeneralPrefs().experimentalFeatures).toBe(false);
   });
 });
 

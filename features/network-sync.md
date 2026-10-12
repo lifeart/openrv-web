@@ -158,7 +158,7 @@ Status: Implemented (Infrastructure)
 
 ### Keyboard Shortcuts
 - `Shift+N`: Toggle network panel
-- `Shift+Ctrl+N`: Quick disconnect
+- `Ctrl+Shift+Alt+N`: Quick disconnect (Ctrl+Shift+N is reserved by Chromium)
 
 ## Technical Notes
 

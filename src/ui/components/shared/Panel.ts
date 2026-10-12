@@ -6,7 +6,8 @@
 
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../../utils/ui/OutsideClickRegistry';
 import { getIconSvg } from './Icons';
-import { SHADOWS, Z_INDEX } from './theme';
+import { PANEL_WIDTHS, SHADOWS, Z_INDEX } from './theme';
+import { computeAnchoredPanelPosition } from './anchorPosition';
 
 export type PanelVisibilityListener = (visible: boolean) => void;
 
@@ -27,7 +28,7 @@ export interface Panel {
 }
 
 export function createPanel(options: PanelOptions = {}): Panel {
-  const { width = '280px', maxHeight = '400px', align = 'left' } = options;
+  const { width = PANEL_WIDTHS.standard, maxHeight = '400px', align = 'left' } = options;
 
   const panel = document.createElement('div');
   panel.className = 'dropdown-panel';
@@ -72,16 +73,11 @@ export function createPanel(options: PanelOptions = {}): Panel {
   };
 
   function positionPanel(anchor: HTMLElement): void {
-    const rect = anchor.getBoundingClientRect();
-    const panelWidth = parseInt(width);
-
-    panel.style.top = `${rect.bottom + 4}px`;
-
-    if (align === 'right') {
-      panel.style.left = `${Math.max(8, rect.right - panelWidth)}px`;
-    } else {
-      panel.style.left = `${Math.min(rect.left, window.innerWidth - panelWidth - 8)}px`;
-    }
+    // Falls back to top-right under the header when the anchor is hidden
+    // (e.g. panel opened by shortcut while its button is on another tab).
+    const { top, left } = computeAnchoredPanelPosition(anchor, parseInt(width), align);
+    panel.style.top = `${top}px`;
+    panel.style.left = `${left}px`;
   }
 
   function show(anchor: HTMLElement): void {

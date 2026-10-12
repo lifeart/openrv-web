@@ -336,7 +336,7 @@ test.describe('Session Recovery - Blob URL Handling', () => {
     await expect(fileReloadDialog).not.toBeVisible({ timeout: 3000 });
 
     // Wait for media to be loaded and rendered.
-    // The project-load success modal can appear before session state has fully settled.
+    // The project-load success toast can appear before session state has fully settled.
     await waitForMediaLoaded(page);
     await expect(page.locator('[data-testid="viewer-image-canvas"]')).toBeVisible({ timeout: 5000 });
 

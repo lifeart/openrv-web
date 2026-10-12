@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
 import { CustomKeyBindingsManager } from './CustomKeyBindingsManager';
-import { DEFAULT_KEY_BINDINGS } from './KeyBindings';
+import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './KeyBindings';
 
 describe('CustomKeyBindingsManager', () => {
   let manager: CustomKeyBindingsManager;
@@ -168,6 +168,44 @@ describe('CustomKeyBindingsManager', () => {
         manager.setCustomBinding('playback.stepForward', spaceCombo, true);
       }).not.toThrow();
       expect(manager.getEffectiveCombo('playback.stepForward')).toEqual(spaceCombo);
+    });
+
+    it('CKBM-017b: overriding a conflict removes the key from the previous owner', () => {
+      const spaceCombo = { code: 'Space' };
+      manager.setCustomBinding('playback.stepForward', spaceCombo, true);
+
+      expect(manager.isUnbound('playback.toggle')).toBe(true);
+      expect(describeKeyCombo(manager.getEffectiveCombo('playback.toggle'))).toBe('Unbound');
+      // Exactly one action now owns Space
+      expect(manager.findActionsUsingCombo(spaceCombo)).toEqual(['playback.stepForward']);
+      expect(manager.findConflictingAction(spaceCombo, 'playback.stepForward')).toBeNull();
+    });
+
+    it('CKBM-017c: overriding a key shared by several defaults unbinds all of them', () => {
+      // L is shared by playback.faster (global) and paint.line (paint context)
+      const lCombo = { code: 'KeyL' };
+      expect(manager.findActionsUsingCombo(lCombo).sort()).toEqual(['paint.line', 'playback.faster']);
+      manager.setCustomBinding('timeline.toggleMark', lCombo, true);
+      expect(manager.isUnbound('playback.faster')).toBe(true);
+      expect(manager.isUnbound('paint.line')).toBe(true);
+      expect(manager.findActionsUsingCombo(lCombo)).toEqual(['timeline.toggleMark']);
+    });
+
+    it('CKBM-017d: unbound state persists and reset restores the default', () => {
+      manager.setCustomBinding('playback.stepForward', { code: 'Space' }, true);
+      const reloaded = new CustomKeyBindingsManager();
+      expect(reloaded.isUnbound('playback.toggle')).toBe(true);
+
+      reloaded.removeCustomBinding('playback.toggle');
+      expect(reloaded.isUnbound('playback.toggle')).toBe(false);
+      expect(reloaded.getEffectiveCombo('playback.toggle')).toEqual({ code: 'Space' });
+    });
+
+    it('CKBM-017e: unbound actions never count as conflicts', () => {
+      manager.unbindAction('playback.toggle');
+      manager.unbindAction('playback.stepForward');
+      expect(manager.findConflictingAction({ code: 'Unbound' })).toBeNull();
+      expect(manager.findConflictingAction({ code: 'Space' })).toBeNull();
     });
 
     it('CKBM-018: findConflictingAction returns owning action', () => {

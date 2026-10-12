@@ -15,8 +15,9 @@ import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { showAlert, showConfirm } from './shared/Modal';
+import { showToast } from './shared/Toast';
 import type { ExclusivePanelRef } from './NotePanel';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 /**
  * Marker export JSON structure
@@ -48,7 +49,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private editingFrame: number | null = null;
   private lastHighlightedFrame: number | null = null;
   private focusedMarkerIndex = -1;
-  private exclusivePanels: ExclusivePanelRef[] = [];
+  private readonly exclusivePanels = new Set<ExclusivePanelRef>();
 
   // Bound event handlers for cleanup
   private boundOnMarksChanged: () => void;
@@ -73,7 +74,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       position: absolute;
       right: 10px;
       top: 60px;
-      width: 320px;
+      width: ${PANEL_WIDTHS.panelWide};
       max-height: 450px;
       background: var(--overlay-bg);
       border: 1px solid var(--overlay-border);
@@ -227,7 +228,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
   /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanels.push(panel);
+    if (panel !== this) this.exclusivePanels.add(panel);
   }
 
   /**
@@ -416,7 +417,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       parts.push(`${collisionCount} marker${collisionCount > 1 ? 's' : ''} skipped due to frame collisions.`);
     }
 
-    await showAlert(parts.join(' '));
+    const skipped = invalidCount > 0 || (mode === 'merge' && collisionCount > 0);
+    showToast(parts.join(' '), { type: skipped ? 'info' : 'success', duration: skipped ? 6000 : undefined });
   }
 
   /**

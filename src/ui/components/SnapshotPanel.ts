@@ -13,7 +13,7 @@ import { type SnapshotManager, type Snapshot, type SnapshotPreview } from '../..
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
-import { Z_INDEX } from './shared/theme';
+import { PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 
 import { Logger } from '../../utils/Logger';
 
@@ -60,7 +60,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       position: fixed;
       right: 16px;
       top: 60px;
-      width: 320px;
+      width: ${PANEL_WIDTHS.panelWide};
       max-height: calc(100vh - 120px);
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);

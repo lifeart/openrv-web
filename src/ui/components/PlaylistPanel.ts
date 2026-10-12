@@ -15,7 +15,7 @@ import { type TransitionManager } from '../../core/session/TransitionManager';
 import { isTransitionType, DEFAULT_TRANSITION_DURATION, type TransitionType } from '../../core/types/transition';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { OPACITY, Z_INDEX } from './shared/theme';
+import { OPACITY, PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import { downloadEDL, type EDLClip, type EDLTransition } from '../../export/EDLWriter';
 import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
 
@@ -79,7 +79,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       position: fixed;
       right: 16px;
       top: 60px;
-      width: 340px;
+      width: ${PANEL_WIDTHS.wide};
       max-height: calc(100vh - 120px);
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);

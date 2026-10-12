@@ -10,6 +10,7 @@ import { type TabId } from './TabBar';
 import { getIconSvg, type IconName } from '../shared/Icons';
 import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton } from '../shared/Button';
 import { Z_INDEX } from '../shared/theme';
+import { ToolbarOverflowController, ToolbarPopover, type OverflowItem } from '../shared/ToolbarOverflow';
 
 export interface ContextToolbarEvents extends EventMap {
   // Events will be added as tabs are implemented
@@ -25,6 +26,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
 
   // Tab content containers
   private tabContents: Map<TabId, HTMLElement> = new Map();
+
+  // Per-tab "More" overflow menus (only for tabs that register items)
+  private overflow: Map<TabId, { popover: ToolbarPopover; controller: ToolbarOverflowController }> = new Map();
 
   constructor() {
     super();
@@ -142,6 +146,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
   setTabContent(tabId: TabId, element: HTMLElement): void {
     const content = this.tabContents.get(tabId);
     if (content) {
+      this.disposeTabOverflow(tabId);
       content.innerHTML = '';
       content.appendChild(element);
 
@@ -150,6 +155,60 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
         this.contentContainer.appendChild(content);
       }
     }
+  }
+
+  /**
+   * Enable a "More" (⋯) overflow menu for a tab. When the tab's controls do
+   * not fit, `items` are moved into the menu in the given order (first =
+   * least important) until they do; unregistered controls never move.
+   * Must be called after the tab content has been set.
+   */
+  setTabOverflowItems(tabId: TabId, items: OverflowItem[]): void {
+    const content = this.tabContents.get(tabId);
+    if (!content) return;
+    this.disposeTabOverflow(tabId);
+
+    const popover = new ToolbarPopover({
+      triggerTestId: 'context-toolbar-overflow-button',
+      panelTestId: 'context-toolbar-overflow-menu',
+      icon: 'more-horizontal',
+      title: 'More controls',
+      align: 'right',
+    });
+    popover.trigger.dataset.tab = tabId;
+    // Sticky to the right edge of the scrolling toolbar so it stays reachable
+    // even when the pinned (never-overflowing) controls alone do not fit.
+    popover.trigger.style.flexShrink = '0';
+    popover.trigger.style.position = 'sticky';
+    popover.trigger.style.right = '0';
+    popover.trigger.style.background = 'var(--bg-secondary)';
+    popover.trigger.style.zIndex = String(Z_INDEX.localStackHigh);
+    content.appendChild(popover.trigger);
+
+    const controller = new ToolbarOverflowController({
+      container: this.container,
+      popover,
+      items,
+      observe: [content],
+      isActive: () => this._activeTab === tabId,
+      onLayout: () => this.updateFades(),
+    });
+    this.overflow.set(tabId, { popover, controller });
+    controller.scheduleUpdate();
+  }
+
+  /** Re-run overflow layout for the active tab (e.g. after controls were shown/hidden). */
+  updateOverflow(): void {
+    this.overflow.get(this._activeTab)?.controller.scheduleUpdate();
+  }
+
+  private disposeTabOverflow(tabId: TabId): void {
+    const existing = this.overflow.get(tabId);
+    if (!existing) return;
+    existing.controller.dispose();
+    existing.popover.trigger.remove();
+    existing.popover.dispose();
+    this.overflow.delete(tabId);
   }
 
   /**
@@ -186,6 +245,8 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
 
     this._activeTab = tabId;
     this.showTabContent(tabId);
+    for (const { popover } of this.overflow.values()) popover.close();
+    this.updateOverflow();
 
     // Update toolbar aria-label to match tab
     const tabLabels: Record<TabId, string> = {
@@ -387,5 +448,6 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
 
   dispose(): void {
     this.container.removeEventListener('scroll', this.boundUpdateFades);
+    for (const tabId of [...this.overflow.keys()]) this.disposeTabOverflow(tabId);
   }
 }

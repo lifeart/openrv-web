@@ -21,6 +21,9 @@ import {
   type ConformStatus,
 } from '../../ui/components/ConformPanel';
 import { createPanel, createPanelHeader } from '../../ui/components/shared/Panel';
+import { PANEL_WIDTHS } from '../../ui/components/shared/theme';
+import { linkExclusivePanels } from '../../ui/components/shared/linkExclusivePanels';
+import { Logger } from '../../utils/Logger';
 import { getGlobalHistoryManager } from '../../utils/HistoryManager';
 import type { PanelControlGroup } from './ControlGroups';
 import type { Session } from '../../core/session/Session';
@@ -31,6 +34,8 @@ import type { SnapshotManager } from '../../core/session/SnapshotManager';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
+
+const log = new Logger('createPanelControls');
 
 export interface PanelControlDeps {
   session: Session;
@@ -94,8 +99,43 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
   const shotGridPanel = new ShotGridPanel();
   shotGridPanel.setConfigUI(shotGridConfig);
 
+  // Cross-group mutual exclusion: every panel above docks to the same
+  // top-right area, so opening any of them closes all the others (U9).
+  linkExclusivePanels([
+    {
+      isOpen: () => notePanel.isVisible(),
+      hide: () => notePanel.hide(),
+      onOpen: (cb) => notePanel.on('visibilityChanged', (open) => open && cb()),
+    },
+    {
+      isOpen: () => markerListPanel.isVisible(),
+      hide: () => markerListPanel.hide(),
+      onOpen: (cb) => markerListPanel.on('visibilityChanged', (open) => open && cb()),
+    },
+    {
+      isOpen: () => historyPanel.isVisible(),
+      hide: () => historyPanel.hide(),
+      onOpen: (cb) => historyPanel.on('visibilityChanged', (open) => open && cb()),
+    },
+    {
+      isOpen: () => snapshotPanel.isOpen(),
+      hide: () => snapshotPanel.hide(),
+      onOpen: (cb) => snapshotPanel.on('visibilityChanged', ({ open }) => open && cb()),
+    },
+    {
+      isOpen: () => playlistPanel.isOpen(),
+      hide: () => playlistPanel.hide(),
+      onOpen: (cb) => playlistPanel.on('visibilityChanged', ({ open }) => open && cb()),
+    },
+    {
+      isOpen: () => shotGridPanel.isOpen(),
+      hide: () => shotGridPanel.hide(),
+      onOpen: (cb) => shotGridPanel.on('visibilityChanged', (open) => open && cb()),
+    },
+  ]);
+
   // --- Conform / Re-link panel ---
-  const conformPanelElement = createPanel({ width: '500px', maxHeight: '70vh', align: 'right' });
+  const conformPanelElement = createPanel({ width: PANEL_WIDTHS.dialogExtraWide, maxHeight: '70vh', align: 'right' });
   conformPanelElement.element.appendChild(createPanelHeader('Conform / Re-link'));
   const conformPanelContainer = document.createElement('div');
   conformPanelContainer.style.cssText = 'padding: 8px; overflow-y: auto; max-height: 60vh;';
@@ -137,7 +177,8 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
     const countBefore = (session.allSources ?? []).length;
     try {
       await session.loadImageFile(file);
-    } catch {
+    } catch (err) {
+      log.warn('Conform relink: failed to load replacement file', file.name, err);
       return null;
     }
     const countAfter = (session.allSources ?? []).length;

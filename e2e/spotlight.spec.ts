@@ -8,6 +8,7 @@ import {
   waitForTabActive,
   waitForFrameChange,
   waitForPlaybackState,
+  openViewOverlaysMenu,
 } from './fixtures';
 
 /**
@@ -221,6 +222,7 @@ test.describe('Spotlight UI Controls', () => {
     await waitForTabActive(page, 'view');
 
     // Look for spotlight control
+    await openViewOverlaysMenu(page);
     const control = page.locator('[data-testid="spotlight-toggle-btn"]');
     await expect(control).toBeVisible();
   });
@@ -711,6 +713,7 @@ test.describe('Spotlight UI Button Toggle', () => {
     expect(state.enabled).toBe(false);
 
     // Click spotlight button
+    await openViewOverlaysMenu(page);
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
     await spotlightButton.click();
     await waitForSpotlightEnabled(page, true);
@@ -723,6 +726,8 @@ test.describe('Spotlight UI Button Toggle', () => {
   test('SL-E061: clicking spotlight button twice disables spotlight', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
     await waitForTabActive(page, 'view');
+
+    await openViewOverlaysMenu(page);
 
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
 
@@ -743,6 +748,8 @@ test.describe('Spotlight UI Button Toggle', () => {
     await page.click('button[data-tab-id="view"]');
     await waitForTabActive(page, 'view');
 
+    await openViewOverlaysMenu(page);
+
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
 
     // Check initial styling (should not have active color)
@@ -761,6 +768,8 @@ test.describe('Spotlight UI Button Toggle', () => {
   test('SL-E063: spotlight button syncs with keyboard toggle', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
     await waitForTabActive(page, 'view');
+
+    await openViewOverlaysMenu(page);
 
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
 
@@ -1263,6 +1272,8 @@ test.describe('Spotlight Feature Interactions', () => {
     await page.click('button[data-tab-id="view"]');
     await waitForTabActive(page, 'view');
 
+    await openViewOverlaysMenu(page);
+
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
     await spotlightButton.click();
     await waitForSpotlightEnabled(page, true);
@@ -1289,6 +1300,7 @@ test.describe('Spotlight Without Media', () => {
     await waitForTabActive(page, 'view');
 
     // Button should exist
+    await openViewOverlaysMenu(page);
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
     await expect(spotlightButton).toBeVisible();
   });

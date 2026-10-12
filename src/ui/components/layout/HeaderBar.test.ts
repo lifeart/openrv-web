@@ -10,6 +10,7 @@ import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import * as Modal from '../shared/Modal';
 import type { LayoutPreset } from '../../layout/LayoutStore';
 import { outsideClickRegistry } from '../../../utils/ui/OutsideClickRegistry';
+import { isExperimentalFeaturesEnabled, setExperimentalFeaturesEnabled } from '../../../core/experimentalFeatures';
 import {
   dispatchOutsideClick,
   dispatchOutsideEscape,
@@ -127,6 +128,14 @@ describe('HeaderBar', () => {
       expect(input).not.toBeNull();
     });
 
+    it('HDR-U020b: openMediaFileDialog opens the media file picker', () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+      const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
+      headerBar.openMediaFileDialog();
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('HDR-U021: file input accepts images, videos, and session files', () => {
       const el = headerBar.render();
       const input = el.querySelector('input[type="file"]') as HTMLInputElement;
@@ -218,6 +227,18 @@ describe('HeaderBar', () => {
       const buttons = el.querySelectorAll('button');
       const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode'));
       expect(loopBtn).not.toBeUndefined();
+    });
+
+    it('HDR-U035b: loop and save tooltips name the real shortcuts from the registry', () => {
+      const el = headerBar.render();
+      const buttons = Array.from(el.querySelectorAll('button'));
+      const loopBtn = buttons.find((btn) => btn.title?.includes('loop mode'))!;
+      // timeline.cycleLoopMode is Ctrl+L (bare L is playback.faster)
+      expect(loopBtn.title).toContain('(Ctrl+L)');
+      expect(loopBtn.title).not.toContain('(L)');
+      const saveBtn = buttons.find((btn) => btn.title?.startsWith('Save project'))!;
+      // Ctrl+Shift+S is "create snapshot", not save project
+      expect(saveBtn.title).not.toContain('Ctrl+Shift+S');
     });
 
     it('HDR-U036: has direction button', () => {
@@ -344,19 +365,19 @@ describe('HeaderBar', () => {
       const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
 
       // Default mode is loop
-      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (Ctrl+L)');
 
       // Cycle to pingpong
       loopBtn.click();
-      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (Ctrl+L)');
 
       // Cycle to once
       loopBtn.click();
-      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (Ctrl+L)');
 
       // Cycle back to loop
       loopBtn.click();
-      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (Ctrl+L)');
     });
 
     it('HDR-U053: loop button tooltip updates on loopModeChanged event', () => {
@@ -366,15 +387,15 @@ describe('HeaderBar', () => {
 
       session.loopMode = 'pingpong';
       session.emit('loopModeChanged', 'pingpong');
-      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (Ctrl+L)');
 
       session.loopMode = 'once';
       session.emit('loopModeChanged', 'once');
-      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (Ctrl+L)');
 
       session.loopMode = 'loop';
       session.emit('loopModeChanged', 'loop');
-      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (Ctrl+L)');
     });
   });
 
@@ -2510,6 +2531,36 @@ describe('HeaderBar', () => {
         expect(callback).toHaveBeenCalledTimes(1);
       });
       expect(loadFileSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('experimental features (U16)', () => {
+    afterEach(() => {
+      setExperimentalFeaturesEnabled(false);
+      document.querySelectorAll('[data-testid="help-menu-dropdown"]').forEach((m) => m.remove());
+    });
+
+    it('HDR-EXP-001: external presentation button is hidden by default', () => {
+      const el = headerBar.render();
+      const btn = el.querySelector('[data-testid="external-presentation-button"]') as HTMLButtonElement;
+      expect(btn).not.toBeNull();
+      expect(btn.style.display).toBe('none');
+    });
+
+    it('HDR-EXP-002: help menu toggle enables experimental features and shows the button', () => {
+      const el = headerBar.render();
+      const btn = el.querySelector('[data-testid="external-presentation-button"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement).click();
+      const item = document.querySelector('[data-testid="help-menu-experimental"]') as HTMLButtonElement;
+      expect(item).not.toBeNull();
+      expect(item.getAttribute('role')).toBe('menuitemcheckbox');
+      expect(item.getAttribute('aria-checked')).toBe('false');
+
+      item.click();
+
+      expect(isExperimentalFeaturesEnabled()).toBe(true);
+      expect(btn.style.display).toBe('');
+      expect(document.querySelector('[data-testid="help-menu-dropdown"]')).toBeNull();
     });
   });
 });

@@ -4,6 +4,7 @@ import { getIconSvg } from './shared/Icons';
 import { OPACITY, PANEL_WIDTHS, Z_INDEX } from './shared/theme';
 import type { StencilBox } from '../../core/types/wipe';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
+import { computeAnchoredPanelPosition } from './shared/anchorPosition';
 
 export type { StencilBox };
 
@@ -772,9 +773,10 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     }
 
     // Position relative to button
-    const rect = this.stackButton.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - 280)}px`; // Align right edge, min 8px from left
+    // Falls back to top-right under the header when the button is hidden.
+    const pos = computeAnchoredPanelPosition(this.stackButton, 280, 'right');
+    this.panel.style.top = `${pos.top}px`;
+    this.panel.style.left = `${pos.left}px`;
 
     this.panel.style.display = 'block';
     this.updateButtonState();

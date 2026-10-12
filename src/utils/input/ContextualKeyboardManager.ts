@@ -30,9 +30,24 @@ export interface ContextualBinding {
 export class ContextualKeyboardManager {
   private bindings: ContextualBinding[] = [];
   private readonly contextManager: ActiveContextManager;
+  private isActionOverridden: (action: string) => boolean = () => false;
 
   constructor(contextManager: ActiveContextManager) {
     this.contextManager = contextManager;
+  }
+
+  /** The currently active binding context. */
+  getActiveContext(): BindingContext {
+    return this.contextManager.activeContext;
+  }
+
+  /**
+   * Install a predicate reporting actions the user has rebound (or unbound).
+   * Such actions no longer answer to their built-in combo here; the user's
+   * custom combo is dispatched directly by the KeyboardManager instead.
+   */
+  setOverriddenActionCheck(check: (action: string) => boolean): void {
+    this.isActionOverridden = check;
   }
 
   /**
@@ -91,19 +106,18 @@ export class ContextualKeyboardManager {
   resolve(combo: KeyCombination): ContextualBinding | null {
     const comboId = this.comboToId(combo);
     const activeContext = this.contextManager.activeContext;
+    const matches = (b: ContextualBinding) => this.comboToId(b.combo) === comboId && !this.isActionOverridden(b.action);
 
     // First: look for a match in the active context (if not global)
     if (activeContext !== 'global') {
-      const contextMatch = this.bindings.find(
-        (b) => b.context === activeContext && this.comboToId(b.combo) === comboId,
-      );
+      const contextMatch = this.bindings.find((b) => b.context === activeContext && matches(b));
       if (contextMatch) {
         return contextMatch;
       }
     }
 
     // Second: fall back to global bindings
-    const globalMatch = this.bindings.find((b) => b.context === 'global' && this.comboToId(b.combo) === comboId);
+    const globalMatch = this.bindings.find((b) => b.context === 'global' && matches(b));
     return globalMatch ?? null;
   }
 

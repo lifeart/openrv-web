@@ -465,3 +465,116 @@ describe('Modal options', () => {
     expect(container?.textContent).toContain('Input');
   });
 });
+
+describe('Modal Enter key on focused button (U1)', () => {
+  afterEach(() => {
+    closeModal();
+  });
+
+  const findButton = (root: ParentNode | null | undefined, text: string) =>
+    Array.from(root?.querySelectorAll('button') || []).find((btn) => btn.textContent === text) as HTMLButtonElement;
+
+  it('MODAL-U070: Enter with Cancel focused resolves false', async () => {
+    const promise = showConfirm('Clear annotations?');
+    const cancel = findButton(document.getElementById('modal-container'), 'Cancel');
+    cancel.focus();
+
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await expect(promise).resolves.toBe(false);
+  });
+
+  it('MODAL-U071: Enter with confirm button focused resolves true', async () => {
+    const promise = showConfirm('Clear annotations?', { confirmText: 'Clear' });
+    const confirmBtn = findButton(document.getElementById('modal-container'), 'Clear');
+    confirmBtn.focus();
+
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await expect(promise).resolves.toBe(true);
+  });
+
+  it('MODAL-U072: handled Enter is default-prevented so it cannot re-activate the opener', async () => {
+    const opener = document.createElement('button');
+    const openerClick = vi.fn();
+    opener.addEventListener('click', openerClick);
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const promise = showConfirm('Delete snapshot?');
+    findButton(document.getElementById('modal-container'), 'Cancel').focus();
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(event);
+
+    await expect(promise).resolves.toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+    expect(openerClick).not.toHaveBeenCalled();
+    opener.remove();
+  });
+
+  it('MODAL-U073: Enter in prompt input still submits the value', async () => {
+    const promise = showPrompt('Name', { defaultValue: 'abc' });
+    const input = document.querySelector('#modal-container input') as HTMLInputElement;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await expect(promise).resolves.toBe('abc');
+  });
+});
+
+describe('Modal stacking (U4a)', () => {
+  afterEach(() => {
+    closeModal();
+  });
+
+  it('MODAL-U080: a confirm opened over a custom modal keeps the custom modal', async () => {
+    const content = document.createElement('div');
+    content.textContent = 'Shortcut editor';
+    const onClose = vi.fn();
+    showModal(content, { title: 'Shortcuts', onClose });
+
+    const promise = showConfirm('Override binding?');
+    // Both dialogs are in the DOM, the confirm on top
+    expect(document.getElementById('modal-container')?.textContent).toContain('Shortcut editor');
+    const layer = document.querySelector('.modal-container-layer') as HTMLElement;
+    expect(layer?.textContent).toContain('Override binding?');
+
+    const ok = Array.from(layer.querySelectorAll('button')).find((b) => b.textContent === 'OK') as HTMLButtonElement;
+    ok.click();
+
+    await expect(promise).resolves.toBe(true);
+    expect(document.querySelector('.modal-container-layer')).toBeNull();
+    expect(document.getElementById('modal-container')?.textContent).toContain('Shortcut editor');
+    expect(document.getElementById('modal-container')?.style.display).toBe('flex');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('MODAL-U081: Escape only closes the top-most dialog', async () => {
+    const content = document.createElement('div');
+    content.textContent = 'Editor';
+    const onClose = vi.fn();
+    showModal(content, { onClose });
+    const promise = showConfirm('Override?');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    await expect(promise).resolves.toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.getElementById('modal-container')?.textContent).toContain('Editor');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(document.getElementById('modal-container')?.style.display).toBe('none');
+  });
+
+  it('MODAL-U082: closeModal closes every layer', () => {
+    showModal(document.createElement('div'));
+    showConfirm('one');
+    showAlert('two');
+    expect(document.querySelectorAll('.modal-container-layer')).toHaveLength(2);
+
+    closeModal();
+
+    expect(document.querySelectorAll('.modal-container-layer')).toHaveLength(0);
+    expect(document.getElementById('modal-container')?.style.display).toBe('none');
+  });
+});

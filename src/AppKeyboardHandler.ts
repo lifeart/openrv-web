@@ -6,8 +6,9 @@
  */
 
 import type { KeyboardManager, KeyCombination } from './utils/input/KeyboardManager';
-import { DEFAULT_KEY_BINDINGS } from './utils/input/KeyBindings';
+import { DEFAULT_KEY_BINDINGS, isUnboundCombo } from './utils/input/KeyBindings';
 import type { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
+import type { BindingContext } from './utils/input/ActiveContextManager';
 import { showModal } from './ui/components/shared/Modal';
 import { ShortcutEditor } from './ui/components/ShortcutEditor';
 
@@ -54,10 +55,11 @@ export class AppKeyboardHandler {
     'view.cycleBackgroundPattern', // Shift+B - viewer context only; conflicts with channel.blue globally
     'network.togglePanel', // Shift+N - panel context only; conflicts with channel.none globally
     'lut.togglePanel', // Shift+L - color context only; conflicts with channel.luminance globally
+    'view.toggleFilterMode', // N key - global; resolved via contextual manager (filter=global, add note=paint)
+    'notes.addNote', // N key - paint (Annotate tab) context only; conflicts with view.toggleFilterMode globally
   ]);
   private static readonly HIDDEN_DEFAULTS = new Set([
     'view.toggleWaveform', // W key - legacy duplicate of panel.waveform
-    'notes.addNote', // N key - handled by view.toggleFilterMode
   ]);
 
   constructor(
@@ -114,8 +116,31 @@ export class AppKeyboardHandler {
         continue;
       }
 
-      this.keyboardManager.register(effectiveCombo, handler, defaultBinding.description);
+      // Actions the user explicitly unbound (e.g. by giving their key to
+      // another action) are not registered at all.
+      if (isUnboundCombo(effectiveCombo)) {
+        continue;
+      }
+
+      const isCustom = this.customKeyBindingsManager?.hasCustomBinding(action) ?? false;
+      this.keyboardManager.register(effectiveCombo, handler, defaultBinding.description, {
+        // User rebinds take precedence over the built-in context resolver.
+        priority: isCustom,
+        context: AppKeyboardHandler.gatingContext(action),
+      });
     }
+  }
+
+  /**
+   * Context that gates an action regardless of which key it is bound to.
+   * Paint tools only make sense on the Annotate tab: pressing P on the View tab
+   * must not arm the pen and turn the next drag into a stroke.
+   */
+  static gatingContext(action: string): BindingContext {
+    if (action.startsWith('paint.')) {
+      return DEFAULT_KEY_BINDINGS[action]?.context ?? 'paint';
+    }
+    return 'global';
   }
 
   /**

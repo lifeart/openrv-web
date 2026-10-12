@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { createButton, setButtonActive } from './shared/Button';
 import { createPanel, type Panel } from './shared/Panel';
+import { PANEL_WIDTHS } from './shared/theme';
 import { outsideClickRegistry, type OutsideClickDeregister } from '../../utils/ui/OutsideClickRegistry';
 
 export type { CropRegion, CropState } from '../../core/types/transform';
@@ -120,7 +121,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     // needs custom viewport-flip positioning and an extended outside-click
     // element list (the viewer container is excluded so crop-handle drags
     // do not dismiss). We just take the styled `element` and manage it.
-    this.panelHandle = createPanel({ width: '200px', align: 'right' });
+    this.panelHandle = createPanel({ width: PANEL_WIDTHS.menu, align: 'right' });
     this.panel = this.panelHandle.element;
     this.panel.classList.add('crop-panel');
     this.panel.setAttribute('role', 'dialog');

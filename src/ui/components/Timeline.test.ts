@@ -131,7 +131,7 @@ describe('Timeline', () => {
 
     it('TML-003: creates canvas element', () => {
       const container = timeline.render();
-      const canvas = container.querySelector('canvas');
+      const canvas = container.querySelector<HTMLCanvasElement>('[data-testid="timeline-canvas"]');
       expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     });
   });
@@ -452,7 +452,7 @@ describe('Timeline', () => {
      */
     function getCanvas(tl: TestTimeline): HTMLCanvasElement {
       const container = tl.render();
-      return container.querySelector('canvas')!;
+      return container.querySelector<HTMLCanvasElement>('[data-testid="timeline-canvas"]')!;
     }
 
     it('TL-H05a: should register pointerdown (not mousedown) listener', () => {
@@ -1220,7 +1220,7 @@ describe('Timeline', () => {
   describe('context menu integration', () => {
     function getCanvas(tl: TestTimeline): HTMLCanvasElement {
       const container = tl.render();
-      return container.querySelector('canvas')!;
+      return container.querySelector<HTMLCanvasElement>('[data-testid="timeline-canvas"]')!;
     }
 
     function mockCanvasRect(canvas: HTMLCanvasElement): void {
@@ -1275,7 +1275,7 @@ describe('Timeline', () => {
       tl.setSize(1000, 100);
       flushRaf();
 
-      const canvas = container.querySelector('canvas')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('[data-testid="timeline-canvas"]')!;
       mockCanvasRect(canvas);
 
       const event = new MouseEvent('contextmenu', {
@@ -1594,7 +1594,8 @@ describe('Timeline', () => {
       const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
 
       // Trigger context menu
-      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const canvas =
+        timeline.render().querySelector<HTMLCanvasElement>('[data-testid="timeline-canvas"]') ?? timeline.render();
       const contextEvent = new MouseEvent('contextmenu', {
         clientX: 500,
         clientY: 50,
@@ -1632,7 +1633,8 @@ describe('Timeline', () => {
 
       const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
 
-      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const canvas =
+        timeline.render().querySelector<HTMLCanvasElement>('[data-testid="timeline-canvas"]') ?? timeline.render();
       const contextEvent = new MouseEvent('contextmenu', {
         clientX: 500,
         clientY: 50,
@@ -1856,6 +1858,138 @@ describe('Timeline', () => {
 
       delete (ctx as any).fillStyle;
       tl.dispose();
+    });
+  });
+  describe('U14: keyboard, ARIA, hover readout and in/out dragging', () => {
+    const rect = {
+      width: 1000,
+      height: 100,
+      top: 0,
+      left: 0,
+      bottom: 100,
+      right: 1000,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    } as DOMRect;
+
+    function setup(): HTMLCanvasElement {
+      const canvas = timeline
+        .render()
+        .querySelector<HTMLCanvasElement>('[data-testid="timeline-canvas"]') as HTMLCanvasElement;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(rect);
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+      // Start from the full 1-100 range
+      session.resetInOutPoints();
+      return canvas;
+    }
+
+    // padding 60, track 880px wide, 100 frames: frame f sits at 60 + (f-1)/99*880
+    const xOf = (frame: number) => 60 + ((frame - 1) / 99) * 880;
+
+    it('TL-U14-001: canvas is a focusable slider with ARIA values', () => {
+      const canvas = setup();
+      timeline.setSize(1000, 80);
+      session.goToFrame(25);
+      flushRaf();
+      (timeline as unknown as { draw(): void }).draw();
+
+      expect(canvas.tabIndex).toBe(0);
+      expect(canvas.getAttribute('role')).toBe('slider');
+      expect(canvas.getAttribute('aria-valuemax')).toBe('100');
+      expect(canvas.getAttribute('aria-valuenow')).toBe('25');
+      expect(canvas.getAttribute('aria-valuetext')).toContain('Frame 25 of 100');
+    });
+
+    it('TL-U14-002: arrow keys step frames and do not propagate', () => {
+      const canvas = setup();
+      session.goToFrame(10);
+      const docListener = vi.fn();
+      document.addEventListener('keydown', docListener);
+
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      expect(session.currentFrame).toBe(11);
+      canvas.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowLeft', shiftKey: true, bubbles: true, cancelable: true }),
+      );
+      expect(session.currentFrame).toBe(1);
+      expect(docListener).not.toHaveBeenCalled();
+      document.removeEventListener('keydown', docListener);
+    });
+
+    it('TL-U14-003: Home/End jump to in and out points', () => {
+      const canvas = setup();
+      session.setInPoint(20);
+      session.setOutPoint(80);
+      session.goToFrame(50);
+
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      expect(session.currentFrame).toBe(80);
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      expect(session.currentFrame).toBe(20);
+    });
+
+    it('TL-U14-004: hovering shows the frame readout; leaving hides it', () => {
+      const canvas = setup();
+      const tooltip = timeline.render().querySelector('[data-testid="timeline-hover-tooltip"]') as HTMLElement;
+
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: xOf(50), clientY: 20, bubbles: true }));
+      expect(tooltip.style.display).toBe('flex');
+      expect(tooltip.textContent).toContain('50');
+
+      canvas.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      expect(tooltip.style.display).toBe('none');
+    });
+
+    it('TL-U14-005: dragging the in bracket moves the in point, not the playhead', () => {
+      const canvas = setup();
+      session.setInPoint(20);
+      session.setOutPoint(80);
+      session.goToFrame(50);
+      const scrubSpy = vi.spyOn(session, 'onScrubStart');
+
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', { clientX: xOf(20), clientY: 20, pointerId: 1, bubbles: true }),
+      );
+      canvas.dispatchEvent(
+        new PointerEvent('pointermove', { clientX: xOf(30), clientY: 20, pointerId: 1, bubbles: true }),
+      );
+      canvas.dispatchEvent(
+        new PointerEvent('pointerup', { clientX: xOf(30), clientY: 20, pointerId: 1, bubbles: true }),
+      );
+
+      expect(session.inPoint).toBe(30);
+      expect(session.outPoint).toBe(80);
+      expect(session.currentFrame).toBe(50);
+      expect(scrubSpy).not.toHaveBeenCalled();
+    });
+
+    it('TL-U14-006: dragging the out bracket cannot cross the in point', () => {
+      const canvas = setup();
+      session.setInPoint(20);
+      session.setOutPoint(80);
+
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', { clientX: xOf(80), clientY: 20, pointerId: 1, bubbles: true }),
+      );
+      canvas.dispatchEvent(
+        new PointerEvent('pointermove', { clientX: xOf(5), clientY: 20, pointerId: 1, bubbles: true }),
+      );
+
+      expect(session.outPoint).toBe(20);
+    });
+
+    it('TL-U14-007: with the full range, clicking the track end still seeks', () => {
+      const canvas = setup();
+      session.goToFrame(50);
+
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', { clientX: xOf(1), clientY: 20, pointerId: 1, bubbles: true }),
+      );
+
+      expect(session.currentFrame).toBe(1);
+      expect(session.inPoint).toBe(1);
     });
   });
 });
