@@ -283,6 +283,30 @@ test.describe('Waveform Internal Button Controls', () => {
     await expect(modeButton).toHaveText('Luma');
   });
 
+  test('WF-E053: clicking the scale button cycles IRE, cd/m² and PQ scales', async ({ page }) => {
+    const waveformContainer = page.locator('.waveform-container');
+    await expect(waveformContainer).toBeVisible();
+
+    const scaleButton = page.locator('[data-testid="waveform-scale-button"]');
+    const unit = page.locator('[data-testid="waveform-scale-unit"]');
+    const top = page.locator('[data-testid="waveform-scale-top"]');
+    await expect(scaleButton).toHaveText('IRE');
+    await expect(unit).toHaveText('IRE %');
+    await expect(top).toHaveText('100');
+
+    await scaleButton.click();
+    await expect(scaleButton).toHaveText('Nits');
+    await expect(unit).toHaveText('cd/m²');
+
+    await scaleButton.click();
+    await expect(scaleButton).toHaveText('PQ');
+    await expect(unit).toHaveText('cd/m² (PQ)');
+    await expect(top).toHaveText('10k');
+
+    await scaleButton.click();
+    await expect(scaleButton).toHaveText('IRE');
+  });
+
   test('WF-E052: clicking close button inside waveform hides waveform', async ({ page }) => {
     const waveformContainer = page.locator('.waveform-container');
     await expect(waveformContainer).toBeVisible();
