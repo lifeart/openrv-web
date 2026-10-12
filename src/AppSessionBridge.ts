@@ -318,23 +318,24 @@ export class AppSessionBridge {
 
   /**
    * Run version auto-detection on all currently loaded sources.
-   * Clears existing auto-detected groups first to avoid duplicates,
-   * then re-detects from the full source list.
+   * Re-detects auto-detected groups from the full source list (avoiding
+   * duplicates when sources are added incrementally) and keeps groups the
+   * user built by hand, along with the sources they claim.
    */
   private runVersionAutoDetection(session: Session): void {
     const sources = session.allSources;
     if (sources.length < 2) return;
 
-    // Build the input array for autoDetectGroups
-    const sourceEntries = sources.map((s, i) => ({ name: s.name, index: i }));
-
-    // Clear existing groups and re-detect to avoid duplicates
-    // when new sources are added incrementally
-    const existing = session.versionManager.getGroups();
-    for (const group of existing) {
-      session.versionManager.removeGroup(group.id);
+    const claimed = new Set<number>();
+    for (const group of session.versionManager.getGroups()) {
+      if (group.autoDetected) {
+        session.versionManager.removeGroup(group.id);
+      } else {
+        for (const version of group.versions) claimed.add(version.sourceIndex);
+      }
     }
 
+    const sourceEntries = sources.map((s, i) => ({ name: s.name, index: i })).filter((e) => !claimed.has(e.index));
     session.versionManager.autoDetectGroups(sourceEntries);
   }
 

@@ -63,6 +63,7 @@ function createMockSession() {
     setCurrentSource: vi.fn(),
     setInPoint: vi.fn(),
     setOutPoint: vi.fn(),
+    setInOutRange: vi.fn(),
     getSourceByIndex: vi.fn().mockImplementation((index: number) => {
       const sources = [{ name: 'Source A' }, { name: 'Source B' }];
       return sources[index] ?? null;
@@ -420,8 +421,7 @@ describe('TimelineEditorService', () => {
       service.applyEditsToPlaylist(edl);
 
       expect(deps.playlistManager.setEnabled).toHaveBeenCalledWith(false);
-      expect(deps.session.setInPoint).toHaveBeenCalledWith(5);
-      expect(deps.session.setOutPoint).toHaveBeenCalledWith(25);
+      expect(deps.session.setInOutRange).toHaveBeenCalledWith(5, 25);
     });
 
     it('TLE-027: single-cut edit navigates to inPoint when currentFrame is out of range', () => {
@@ -498,8 +498,7 @@ describe('TimelineEditorService', () => {
       service.applyEdits();
 
       expect(seqNode.setEDL).toHaveBeenCalled();
-      expect(deps.session.setInPoint).toHaveBeenCalledWith(1);
-      expect(deps.session.setOutPoint).toHaveBeenCalledWith(60); // getTotalDurationFromEDL returns 60
+      expect(deps.session.setInOutRange).toHaveBeenCalledWith(1, 60); // getTotalDurationFromEDL returns 60
       expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalled();
       expect(deps.timeline.refresh).toHaveBeenCalled();
       expect(deps.persistenceManager.syncGTOStore).toHaveBeenCalled();

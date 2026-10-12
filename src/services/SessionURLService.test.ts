@@ -307,8 +307,21 @@ describe('SessionURLService', () => {
 
       await service.applySessionURLState(state);
 
-      expect(deps.session.setInPoint).toHaveBeenCalledWith(10);
-      expect(deps.session.setOutPoint).toHaveBeenCalledWith(90);
+      expect(deps.session.setInOutRange).toHaveBeenCalledWith(10, 90);
+    });
+
+    it('SU-012b: applies in/out after every source switch so the switch cannot undo it', async () => {
+      const calls: string[] = [];
+      deps.session.setCurrentSource = vi.fn(() => calls.push('setCurrentSource'));
+      deps.session.setCurrentAB = vi.fn(() => calls.push('setCurrentAB'));
+      deps.session.setInOutRange = vi.fn(() => calls.push('setInOutRange'));
+      deps.session.goToFrame = vi.fn(() => calls.push('goToFrame'));
+
+      await service.applySessionURLState({ frame: 50, fps: 24, sourceIndex: 0, inPoint: 10, outPoint: 90 });
+
+      expect(calls.indexOf('setInOutRange')).toBeGreaterThan(calls.lastIndexOf('setCurrentAB'));
+      expect(calls.indexOf('setInOutRange')).toBeGreaterThan(calls.lastIndexOf('setCurrentSource'));
+      expect(calls.indexOf('goToFrame')).toBeGreaterThan(calls.indexOf('setInOutRange'));
     });
 
     it('SU-013: always calls endApplyRemote even if an error occurs', async () => {

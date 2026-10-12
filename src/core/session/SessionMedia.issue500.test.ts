@@ -101,6 +101,8 @@ function createMockHost(): SessionMediaHost {
     setFps: vi.fn(),
     setInPoint: vi.fn(),
     setOutPoint: vi.fn(),
+    getInPoint: vi.fn().mockReturnValue(1),
+    getOutPoint: vi.fn().mockReturnValue(1),
     setCurrentFrame: vi.fn(),
     pause: vi.fn(),
     play: vi.fn(),

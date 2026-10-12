@@ -72,6 +72,12 @@ const STORE_NAME = 'sessions';
 const META_STORE_NAME = 'metadata';
 /** Key for shutdown flag */
 const SHUTDOWN_KEY = 'cleanShutdown';
+/**
+ * Web Lock every live tab holds (shared) for its lifetime. The clean-shutdown
+ * flag is global across tabs, so a missing flag only means "crashed" when no
+ * other tab is still running.
+ */
+const ACTIVE_LOCK_NAME = 'openrv-web-autosave-active';
 /** Storage warning threshold (percentage) */
 const STORAGE_WARNING_THRESHOLD = 80;
 
@@ -95,6 +101,7 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
   private stateGetter: (() => SessionState) | null = null;
   private isSaving = false;
   private isDisposing = false;
+  private releaseActiveLock: (() => void) | null = null;
   constructor(config: Partial<AutoSaveConfig> = {}) {
     super();
     this.config = { ...DEFAULT_AUTO_SAVE_CONFIG, ...config };
@@ -112,7 +119,11 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       // Check for crash recovery
       let hasRecovery = false;
       const wasCleanShutdown = await this.checkCleanShutdown();
-      if (!wasCleanShutdown) {
+      // Another open tab leaves the flag unset while it runs; that is a live
+      // session, not a crash, so don't offer to recover (or discard) it.
+      const anotherTabActive = await this.isAnotherTabActive();
+      this.holdActiveLock();
+      if (!wasCleanShutdown && !anotherTabActive) {
         const entries = await this.listAutoSaves();
         if (entries.length > 0) {
           this.emit('recoveryAvailable', { entries });
@@ -131,6 +142,33 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       log.error('AutoSaveManager initialization failed:', err);
       return false;
     }
+  }
+
+  /** Whether another tab currently holds the active-session lock. */
+  private async isAnotherTabActive(): Promise<boolean> {
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    if (!locks?.query) return false;
+    try {
+      const snapshot = await locks.query();
+      return (snapshot.held ?? []).some((lock) => lock.name === ACTIVE_LOCK_NAME);
+    } catch (error) {
+      log.debug('isAnotherTabActive: lock query failed', { error });
+      return false;
+    }
+  }
+
+  /** Hold the shared active-session lock until dispose (or the tab closes). */
+  private holdActiveLock(): void {
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    if (!locks?.request || this.releaseActiveLock) return;
+    const held = new Promise<void>((resolve) => {
+      this.releaseActiveLock = resolve;
+    });
+    locks
+      .request(ACTIVE_LOCK_NAME, { mode: 'shared' }, () => held)
+      .catch((error: unknown) => {
+        log.debug('holdActiveLock: lock request failed', { error });
+      });
   }
 
   /**
@@ -340,6 +378,10 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
 
       // Clean up old versions
       await this.pruneOldVersions();
+
+      // Re-assert "running" in case another tab closed cleanly and set the
+      // shared flag while this tab is still live.
+      await this.setCleanShutdown(false);
 
       this.isDirty = false;
       this.lastSaveTime = now;
@@ -630,6 +672,9 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
         log.debug('dispose: setCleanShutdown failed', { error });
       }
     }
+
+    this.releaseActiveLock?.();
+    this.releaseActiveLock = null;
 
     // Close database
     if (this.db) {

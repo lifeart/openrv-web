@@ -235,7 +235,7 @@ describe('Issue #360 – recoveryAvailable event is wired in production', () => 
     expect(autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('autosave-crash-1');
   });
 
-  it('ISS-360-004: clears auto-saves when user declines recovery', async () => {
+  it('ISS-360-004: discards only the prompted auto-save when user declines recovery (#396)', async () => {
     autoSaveManager.initialize.mockImplementation(async () => {
       autoSaveManager._emit('recoveryAvailable', { entries: [recoveryEntry] });
       return true;
@@ -244,7 +244,8 @@ describe('Issue #360 – recoveryAvailable event is wired in production', () => 
 
     await manager.init();
 
-    expect(autoSaveManager.clearAll).toHaveBeenCalledTimes(1);
+    expect(autoSaveManager.clearAll).not.toHaveBeenCalled();
+    expect(autoSaveManager.deleteAutoSave).toHaveBeenCalledWith(recoveryEntry.id);
     expect(autoSaveManager.getAutoSave).not.toHaveBeenCalled();
     expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
   });

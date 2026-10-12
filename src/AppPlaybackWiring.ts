@@ -787,8 +787,7 @@ function jumpToPlaylistClip(
 
   // In playlist mode, lock playback range to the selected clip's in/out.
   if (controls.playlistManager.isEnabled()) {
-    session.setInPoint(mapping.clip.inPoint);
-    session.setOutPoint(mapping.clip.outPoint);
+    session.setInOutRange(mapping.clip.inPoint, mapping.clip.outPoint);
   }
 
   controls.playlistManager.setCurrentFrame(frame);
@@ -1059,8 +1058,7 @@ function syncSessionToPlaylistFrame(
   if (session.currentSourceIndex !== mapping.sourceIndex) {
     session.setCurrentSource(mapping.sourceIndex);
   }
-  session.setInPoint(mapping.clip.inPoint);
-  session.setOutPoint(mapping.clip.outPoint);
+  session.setInOutRange(mapping.clip.inPoint, mapping.clip.outPoint);
   session.goToFrame(mapping.localFrame);
 
   controls.playlistManager.setCurrentFrame(globalFrame);

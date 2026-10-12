@@ -228,8 +228,7 @@ export class FrameNavigationService {
     if (this.session.currentSourceIndex !== mapping.sourceIndex) {
       this.session.setCurrentSource(mapping.sourceIndex);
     }
-    this.session.setInPoint(mapping.clip.inPoint);
-    this.session.setOutPoint(mapping.clip.outPoint);
+    this.session.setInOutRange(mapping.clip.inPoint, mapping.clip.outPoint);
     this.playlistManager.setCurrentFrame(globalFrame);
     this.playlistPanel.setActiveClip(mapping.clip.id);
     this.session.goToFrame(mapping.localFrame);

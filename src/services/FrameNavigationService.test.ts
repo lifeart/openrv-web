@@ -413,8 +413,7 @@ describe('FrameNavigationService', () => {
       service.jumpToPlaylistGlobalFrame(40);
 
       expect(deps.session.setCurrentSource).toHaveBeenCalledWith(2);
-      expect(deps.session.setInPoint).toHaveBeenCalledWith(1);
-      expect(deps.session.setOutPoint).toHaveBeenCalledWith(30);
+      expect(deps.session.setInOutRange).toHaveBeenCalledWith(1, 30);
       expect(deps.playlistManager.setCurrentFrame).toHaveBeenCalledWith(40);
       expect(deps.playlistPanel.setActiveClip).toHaveBeenCalledWith('c2');
       expect(deps.session.goToFrame).toHaveBeenCalledWith(10);

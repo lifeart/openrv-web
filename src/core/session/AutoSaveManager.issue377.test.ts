@@ -242,4 +242,75 @@ describe('AutoSaveManager issue #377 — auto-save armed after recovery', () => 
       removeSpy.mockRestore();
     }
   });
+  describe('multiple tabs (review L9)', () => {
+    /** Minimal in-process Web Locks stand-in shared by every manager in the test. */
+    function installFakeLocks(): { held: { name: string }[]; restore: () => void } {
+      const held: { name: string }[] = [];
+      const fake = {
+        query: async () => ({ held: [...held], pending: [] }),
+        request: (name: string, _opts: unknown, cb: () => Promise<void>) => {
+          const lock = { name };
+          held.push(lock);
+          return cb().finally(() => held.splice(held.indexOf(lock), 1));
+        },
+      };
+      const original = Object.getOwnPropertyDescriptor(navigator, 'locks');
+      Object.defineProperty(navigator, 'locks', { value: fake, configurable: true });
+      return {
+        held,
+        restore: () => {
+          if (original) Object.defineProperty(navigator, 'locks', original);
+          else delete (navigator as { locks?: unknown }).locks;
+        },
+      };
+    }
+
+    it("AUTOSAVE-L9-001: a second tab does not offer to recover the first tab's live session", async () => {
+      const locks = installFakeLocks();
+      try {
+        const firstTab = createManager();
+        await firstTab.initialize();
+        await firstTab.save(createMockSessionState('Live Session'));
+        expect(locks.held).toHaveLength(1);
+
+        const secondTab = createManager();
+        const recovery = vi.fn();
+        secondTab.on('recoveryAvailable', recovery);
+        const hasRecovery = await secondTab.initialize();
+
+        expect(hasRecovery).toBe(false);
+        expect(recovery).not.toHaveBeenCalled();
+      } finally {
+        locks.restore();
+      }
+    });
+
+    it('AUTOSAVE-L9-002: recovery is still offered after a crash when no other tab is live', async () => {
+      const locks = installFakeLocks();
+      try {
+        await simulateCrash();
+        // The crashed tab's lock goes away with the tab.
+        locks.held.length = 0;
+
+        manager = createManager();
+        expect(await manager.initialize()).toBe(true);
+      } finally {
+        locks.restore();
+      }
+    });
+
+    it('AUTOSAVE-L9-003: dispose releases the active-session lock', async () => {
+      const locks = installFakeLocks();
+      try {
+        manager = createManager();
+        await manager.initialize();
+        expect(locks.held).toHaveLength(1);
+        await manager.dispose();
+        await Promise.resolve();
+        expect(locks.held).toHaveLength(0);
+      } finally {
+        locks.restore();
+      }
+    });
+  });
 });

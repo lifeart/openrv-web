@@ -439,6 +439,10 @@ export class AppPersistenceManager {
           cacheManager: this.ctx.cacheManager,
         });
 
+        // Update UI controls with restored state, as snapshot and auto-save
+        // restore do; otherwise the next slider nudge overwrites the restored grade.
+        this.syncControlsFromState(state);
+
         if (result.warnings.length > 0) {
           showAlert(`Project loaded with warnings:\n${result.warnings.join('\n')}`, {
             type: 'warning',
@@ -513,7 +517,9 @@ export class AppPersistenceManager {
         if (recover) {
           await this.recoverAutoSave(mostRecent.id);
         } else {
-          await autoSaveManager.clearAll();
+          // Only discard the entry the user was asked about (#396); older
+          // auto-saves stay available.
+          await autoSaveManager.deleteAutoSave(mostRecent.id);
         }
       });
 
@@ -557,10 +563,19 @@ export class AppPersistenceManager {
           });
         } else if (loadedMedia > 0) {
           showToast(`Session recovered successfully with ${loadedMedia} media file(s).`, { type: 'success' });
+        } else {
+          // State-only recovery still gets feedback (#397).
+          showToast('Session recovered (no media files - state only)', { type: 'info' });
         }
 
         // Clear the recovered entry
         await autoSaveManager.deleteAutoSave(id);
+      } else {
+        // The entry vanished between listing and loading (#399).
+        showAlert('Auto-save entry not found. Recovery data may have been lost.', {
+          title: 'Recovery Error',
+          type: 'error',
+        });
       }
     } catch (err) {
       showAlert(`Failed to recover session: ${err}`, {

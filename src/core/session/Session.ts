@@ -376,6 +376,8 @@ export class Session extends EventEmitter<SessionEvents> {
       setOutPoint: (v) => {
         this._outPoint = v;
       },
+      getInPoint: () => this._inPoint,
+      getOutPoint: () => this._outPoint,
       setCurrentFrame: (v) => {
         this._currentFrame = v;
       },
@@ -1427,23 +1429,9 @@ export class Session extends EventEmitter<SessionEvents> {
       currentAB: 'A' | 'B';
     }>,
   ): void {
-    if (state.fps !== undefined) this.fps = state.fps;
-    if (state.loopMode !== undefined) {
-      this._loopMode = state.loopMode;
-      // Emits via PlaybackEngine.loopMode setter → SessionPlayback → Session event forwarding.
-    }
-    if (state.playbackMode !== undefined) this.playbackMode = state.playbackMode;
-    if (state.volume !== undefined) this.volume = state.volume;
-    if (state.muted !== undefined) this.muted = state.muted;
-    if (state.preservesPitch !== undefined) this.preservesPitch = state.preservesPitch;
-    if (state.audioScrubEnabled !== undefined) this.audioScrubEnabled = state.audioScrubEnabled;
-    if (state.inPoint !== undefined) this.setInPoint(state.inPoint);
-    if (state.outPoint !== undefined) this.setOutPoint(state.outPoint);
-    if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;
-    if (state.marks) {
-      this._annotations.markerManager.setFromArray(state.marks);
-    }
-    // Restore current source selection after media is loaded.
+    // Select the source (and A/B assignment) first: switching source adapts
+    // the range and fps to that source, so the saved range, fps and frame
+    // must be applied after it or they get undone.
     if (state.currentSourceIndex !== undefined && state.currentSourceIndex >= 0) {
       this.setCurrentSource(state.currentSourceIndex);
     }
@@ -1459,6 +1447,24 @@ export class Session extends EventEmitter<SessionEvents> {
     }
     if (state.currentAB === 'A' || state.currentAB === 'B') {
       this.setCurrentAB(state.currentAB);
+    }
+    if (state.fps !== undefined) this.fps = state.fps;
+    if (state.loopMode !== undefined) {
+      this._loopMode = state.loopMode;
+      // Emits via PlaybackEngine.loopMode setter → SessionPlayback → Session event forwarding.
+    }
+    if (state.playbackMode !== undefined) this.playbackMode = state.playbackMode;
+    if (state.volume !== undefined) this.volume = state.volume;
+    if (state.muted !== undefined) this.muted = state.muted;
+    if (state.preservesPitch !== undefined) this.preservesPitch = state.preservesPitch;
+    if (state.audioScrubEnabled !== undefined) this.audioScrubEnabled = state.audioScrubEnabled;
+    if (state.inPoint !== undefined || state.outPoint !== undefined) {
+      // Atomic set: sequential setInPoint/setOutPoint cross-clamp.
+      this.setInOutRange(state.inPoint ?? this.inPoint, state.outPoint ?? this.outPoint);
+    }
+    if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;
+    if (state.marks) {
+      this._annotations.markerManager.setFromArray(state.marks);
     }
   }
 

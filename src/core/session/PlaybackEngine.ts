@@ -808,6 +808,11 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     this._inPoint = clamp(newIn, 1, duration);
     this._outPoint = clamp(newOut, this._inPoint, duration);
     this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
+    if (this._currentFrame < this._inPoint) {
+      this.currentFrame = this._inPoint;
+    } else if (this._currentFrame > this._outPoint) {
+      this.currentFrame = this._outPoint;
+    }
   }
 
   // ---------------------------------------------------------------

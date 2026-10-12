@@ -18,6 +18,7 @@ import { SequenceSourceNodeWrapper } from './loaders/SequenceRepresentationLoade
 import type { PatternName, ProceduralSourceOptions } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
+import { resolveRangeOnSourceSwitch, sourceDrivesFps } from './sourceActivation';
 import type { IPImage } from '../../core/image/Image';
 import type { GTOParseResult } from './GTOGraphLoader';
 import { Logger } from '../../utils/Logger';
@@ -74,6 +75,10 @@ export interface SessionMediaHost {
   setInPoint(value: number): void;
   /** Set out-point on playback */
   setOutPoint(value: number): void;
+  /** Get current in-point from playback */
+  getInPoint(): number;
+  /** Get current out-point from playback */
+  getOutPoint(): number;
   /** Set current frame on playback */
   setCurrentFrame(value: number): void;
   /** Pause playback (when adding source) */
@@ -301,26 +306,58 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   }
 
   setCurrentSource(index: number): void {
-    if (index >= 0 && index < this._sources.length) {
-      // Cleanup current source
-      const currentSource = this.currentSource;
-      if (currentSource?.type === 'video' && currentSource.element instanceof HTMLVideoElement) {
-        currentSource.element.pause();
-      }
+    if (index < 0 || index >= this._sources.length) return;
+    // Re-selecting the active source is a no-op: it must not wipe the
+    // restored in/out range or frame.
+    if (index === this._currentSourceIndex) return;
 
-      const previousIndex = this._currentSourceIndex;
-      this._currentSourceIndex = index;
-      const newSource = this.currentSource;
-      if (newSource) {
-        this._host!.setOutPoint(newSource.duration);
-        this._host!.setInPoint(1);
-        this._host!.setCurrentFrame(1);
-        this.emit('durationChanged', newSource.duration);
-      }
-      if (index !== previousIndex) {
-        this.emit('currentSourceChanged', index);
-      }
+    const host = this._host!;
+    const previousSource = this.currentSource;
+    if (previousSource?.type === 'video' && previousSource.element instanceof HTMLVideoElement) {
+      previousSource.element.pause();
     }
+    const previousState = {
+      inPoint: host.getInPoint(),
+      outPoint: host.getOutPoint(),
+      currentFrame: host.getCurrentFrame(),
+    };
+
+    this._currentSourceIndex = index;
+    const newSource = this.currentSource!;
+    const next = resolveRangeOnSourceSwitch(
+      previousState,
+      previousSource?.duration ?? newSource.duration,
+      newSource.duration,
+    );
+    if (sourceDrivesFps(newSource) && newSource.fps !== host.getFps()) {
+      host.setFps(newSource.fps);
+      host.emitFpsChanged(newSource.fps);
+    }
+    host.setOutPoint(next.outPoint);
+    host.setInPoint(next.inPoint);
+    host.setCurrentFrame(next.currentFrame);
+    this.emit('durationChanged', newSource.duration);
+    host.emitInOutChanged(next.inPoint, next.outPoint);
+    this.emit('currentSourceChanged', index);
+  }
+
+  /**
+   * Apply a freshly added source's range (and optionally fps) to playback,
+   * but only when that source is the one now being shown. Adding source B
+   * while A stays current must leave A's in/out, frame and fps alone.
+   * Returns whether the range was applied.
+   */
+  private applyAddedSourceRange(source: MediaSource, duration: number, fps?: number): boolean {
+    if (this.currentSource !== source) return false;
+    const host = this._host!;
+    if (fps !== undefined) {
+      host.setFps(fps);
+      host.emitFpsChanged(fps);
+    }
+    host.setInPoint(1);
+    host.setOutPoint(duration);
+    host.setCurrentFrame(1);
+    return true;
   }
 
   // --- Procedural source loading ---
@@ -371,12 +408,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       this.addSource(source);
-      this._host!.setInPoint(1);
-      this._host!.setOutPoint(duration);
-      this._host!.setCurrentFrame(1);
+      const isCurrent = this.applyAddedSourceRange(source, duration);
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', duration);
+      if (isCurrent) this.emit('durationChanged', duration);
     } catch (err) {
       this.emit('sourceLoadFailed', { name: pattern });
       throw err;
@@ -410,12 +445,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       this.addSource(source);
-      this._host!.setInPoint(1);
-      this._host!.setOutPoint(metadata.duration);
-      this._host!.setCurrentFrame(1);
+      const isCurrent = this.applyAddedSourceRange(source, metadata.duration);
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', metadata.duration);
+      if (isCurrent) this.emit('durationChanged', metadata.duration);
     } catch (err) {
       this.emit('sourceLoadFailed', { name: url });
       throw err;
@@ -474,12 +507,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         };
 
         this.addSource(source);
-        this._host!.setInPoint(1);
-        this._host!.setOutPoint(1);
-        this._host!.setCurrentFrame(1);
+        const isCurrent = this.applyAddedSourceRange(source, 1);
 
         this.emit('sourceLoaded', source);
-        this.emit('durationChanged', 1);
+        if (isCurrent) this.emit('durationChanged', 1);
         resolve();
       };
 
@@ -516,12 +547,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       this.addSource(source);
-      this._host!.setInPoint(1);
-      this._host!.setOutPoint(1);
-      this._host!.setCurrentFrame(1);
+      const isCurrent = this.applyAddedSourceRange(source, 1);
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', 1);
+      if (isCurrent) this.emit('durationChanged', 1);
 
       // Cache file in OPFS for fast reload across sessions
       this.cacheFileInBackground(file, source);
@@ -573,12 +602,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       this.addSource(source);
-      this._host!.setInPoint(1);
-      this._host!.setOutPoint(1);
-      this._host!.setCurrentFrame(1);
+      const isCurrent = this.applyAddedSourceRange(source, 1);
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', 1);
+      if (isCurrent) this.emit('durationChanged', 1);
 
       // Cache file in OPFS for fast reload across sessions
       this.cacheFileInBackground(file, source);
@@ -622,12 +649,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
 
         this.addSource(source);
-        this._host!.setInPoint(1);
-        this._host!.setOutPoint(duration);
-        this._host!.setCurrentFrame(1);
+        const isCurrent = this.applyAddedSourceRange(source, duration);
 
         this.emit('sourceLoaded', source);
-        this.emit('durationChanged', duration);
+        if (isCurrent) this.emit('durationChanged', duration);
         resolve();
       };
 
@@ -701,9 +726,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
 
       this.addSource(source);
-      this._host!.setInPoint(1);
-      this._host!.setOutPoint(duration);
-      this._host!.setCurrentFrame(1);
+      const isCurrent = this.applyAddedSourceRange(source, duration);
 
       if (videoSourceNode.isUsingMediabunny()) {
         videoSourceNode.preloadFrames(1).catch((err) => {
@@ -714,7 +737,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       }
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', duration);
+      if (isCurrent) this.emit('durationChanged', duration);
 
       // Cache file in OPFS for fast reload across sessions
       this.cacheFileInBackground(file, source);
@@ -739,6 +762,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         log.debug(`Video FPS detected: ${detectedFps}`);
       }
 
+      const estimatedDuration = source.duration;
       if (actualFrameCount > 0) {
         source.duration = actualFrameCount;
         log.debug(`Video frame count: ${actualFrameCount}`);
@@ -753,9 +777,14 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         }
 
         if (actualFrameCount > 0) {
-          this._host!.setOutPoint(actualFrameCount);
           this.emit('durationChanged', actualFrameCount);
-          this._host!.emitInOutChanged(1, actualFrameCount);
+          // Only extend/shrink an out point that still sits at the estimated
+          // end; a range the user or a restored project set is kept.
+          const outPoint = this._host!.getOutPoint();
+          if (outPoint === estimatedDuration || outPoint > actualFrameCount) {
+            this._host!.setOutPoint(actualFrameCount);
+            this._host!.emitInOutChanged(this._host!.getInPoint(), actualFrameCount);
+          }
         }
       }
     } catch (err) {
@@ -790,14 +819,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       this.addSource(source);
-      this._host!.setFps(sequenceInfo.fps);
-      this._host!.emitFpsChanged(sequenceInfo.fps);
-      this._host!.setInPoint(1);
-      this._host!.setOutPoint(frameRange);
-      this._host!.setCurrentFrame(1);
+      const isCurrent = this.applyAddedSourceRange(source, frameRange, sequenceInfo.fps);
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', frameRange);
+      if (isCurrent) this.emit('durationChanged', frameRange);
 
       preloadFrames(sequenceInfo.frames, 0, 10);
     } catch (err) {
@@ -851,14 +876,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       this.addSource(source);
-      this._host!.setFps(sequenceInfo.fps);
-      this._host!.emitFpsChanged(sequenceInfo.fps);
-      this._host!.setInPoint(1);
-      this._host!.setOutPoint(frameRange);
-      this._host!.setCurrentFrame(1);
+      const isCurrent = this.applyAddedSourceRange(source, frameRange, sequenceInfo.fps);
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', frameRange);
+      if (isCurrent) this.emit('durationChanged', frameRange);
 
       log.info(
         `Sequence loaded from pattern: ${pattern} [${startFrame}-${endFrame}], ${frameRange} frames @ ${effectiveFps}fps`,
@@ -968,21 +989,16 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
             this.addSource(source);
 
-            // Set in/out points for the first source or when we have valid duration.
-            // Skip if this is an additional source being added (currentFrame > 1 means
-            // we already have content loaded and shouldn't reset playback range).
-            const isFirstSource = this._host!.getCurrentFrame() <= 1;
-            if (isFirstSource || duration > 0) {
-              this._host!.setInPoint(1);
-              this._host!.setOutPoint(duration);
-            }
+            // Only the source being shown sets the playback range; an added
+            // B source must not overwrite A's in/out.
+            const isCurrent = duration > 0 && this.applyAddedSourceRange(source, duration);
 
             if (node.isUsingMediabunny()) {
               this.detectVideoFpsAndDuration(source, node);
             }
 
             this.emit('sourceLoaded', source);
-            this.emit('durationChanged', duration);
+            if (isCurrent) this.emit('durationChanged', duration);
           } catch (err) {
             this.emit('sourceLoadFailed', { name: node.name });
             throw err;
@@ -1032,13 +1048,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
             this.addSource(source);
 
-            if (duration > 0) {
-              this._host!.setInPoint(1);
-              this._host!.setOutPoint(duration);
-            }
+            const isCurrent = duration > 0 && this.applyAddedSourceRange(source, duration);
 
             this.emit('sourceLoaded', source);
-            this.emit('durationChanged', duration);
+            if (isCurrent) this.emit('durationChanged', duration);
           } catch (err) {
             this.emit('sourceLoadFailed', { name: node.name });
             throw err;
