@@ -16,6 +16,7 @@ import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import { WebGPUHDRBlit } from '../../render/WebGPUHDRBlit';
 import { Canvas2DHDRBlit } from '../../render/Canvas2DHDRBlit';
 import type { RenderState } from '../../render/RenderState';
+import { OUTPUT_ENCODING_EXTENDED_SRGB, outputEncodingForCanvasColorSpace } from '../../config/RenderConfig';
 import type { IPImage } from '../../core/image/Image';
 import type { TextureFilterMode } from '../../core/types/filter';
 import {
@@ -345,9 +346,9 @@ export class ViewerGLRenderer {
   }
 
   private applyHDRDisplayOverrides(state: RenderState): void {
-    // HDR output/compositors expect linear-light scene values from the shader.
-    // Neutralize the display transfer function to avoid double-encoding (the
-    // compositor applies HLG/PQ OETF after the shader).
+    // HDR surfaces get their encoding from the renderer's output-encoding
+    // stage, which replaces the SDR display transfer. Neutralize the display
+    // transfer here as well so no path can double-encode the signal.
     // Preserve displayGamma and displayBrightness — these are user-facing
     // calibration knobs that should take effect on all output paths.
     state.displayColor = { ...state.displayColor, transferFunction: 0 };
@@ -410,24 +411,37 @@ export class ViewerGLRenderer {
     }
   }
 
-  private applyAutomaticColorPrimaries(renderer: Renderer, image: IPImage): void {
+  private applyAutomaticColorPrimaries(
+    renderer: Renderer,
+    image: IPImage,
+    targetColorSpace?: 'srgb' | 'display-p3' | 'rec2020',
+  ): void {
     // Skip when OCIO is active — OCIO handles its own color space transforms.
     if (renderer.isOCIOWasmActive()) {
       renderer.setColorPrimaries(undefined, 'srgb');
       return;
     }
 
-    // Determine output gamut from HDR output mode and display capabilities.
-    const hdrMode = renderer.getHDROutputMode();
-    let outputColorSpace: 'srgb' | 'display-p3' | 'rec2020' = 'srgb';
-    if (hdrMode === 'hlg' || hdrMode === 'pq') {
-      outputColorSpace = 'rec2020';
-    } else if (this._capabilities?.displayGamut === 'p3') {
-      outputColorSpace = 'display-p3';
-    } else if (this._capabilities?.displayGamut === 'rec2020') {
-      outputColorSpace = 'rec2020';
-    }
+    // Output primaries follow the color space of the surface the pixels are
+    // written to (drawing buffer or blit canvas), not the display gamut: the
+    // browser converts that color space to the display itself.
+    const outputColorSpace = targetColorSpace ?? this.getDrawingBufferColorSpace(renderer);
     renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
+  }
+
+  /**
+   * Color space of the GL drawing buffer. Uses the renderer's own report when
+   * available and otherwise mirrors Renderer.initialize(): rec2100 buffers for
+   * HLG/PQ, display-p3 whenever WebGL accepts it, sRGB otherwise.
+   */
+  private getDrawingBufferColorSpace(renderer: Renderer): 'srgb' | 'display-p3' | 'rec2020' {
+    const reporter = renderer as Partial<Pick<Renderer, 'getOutputColorSpace'>>;
+    if (typeof reporter.getOutputColorSpace === 'function') {
+      return reporter.getOutputColorSpace();
+    }
+    const hdrMode = renderer.getHDROutputMode();
+    if (hdrMode === 'hlg' || hdrMode === 'pq') return 'rec2020';
+    return this._capabilities?.webglP3 ? 'display-p3' : 'srgb';
   }
 
   /**
@@ -796,10 +810,10 @@ export class ViewerGLRenderer {
     PerfTrace.begin('buildRenderState');
     const state = this.buildRenderState();
     if (isHDROutput) {
-      // NOTE: Native WebGL2 HDR output (drawingBufferColorSpace = rec2100-hlg/pq).
-      // The browser compositor applies the HLG/PQ OETF after the shader, so we
-      // must output linear light. Applying the user's display transfer (sRGB,
-      // Rec.709, gamma, etc.) would double-encode the signal.
+      // NOTE: Native WebGL2 HDR output (rec2100-hlg/pq or extended float16).
+      // The renderer encodes for the drawing buffer itself (u_outputEncoding:
+      // HLG, PQ or extended sRGB). Applying the user's SDR display transfer
+      // (sRGB, Rec.709, gamma, etc.) as well would double-encode the signal.
       // displayGamma and displayBrightness are preserved as user-facing
       // calibration knobs that apply as relative adjustments on all paths.
       this.applyHDRDisplayOverrides(state);
@@ -960,10 +974,9 @@ export class ViewerGLRenderer {
       renderer.resize(displayWidth, displayHeight);
     }
 
-    // Build render state with minimal HDR overrides for linear-light output.
-    // The WebGPU HDR canvas receives linear-light float pixels and performs its
-    // own display-referred encoding (tone mapping, OETF). Applying the user's
-    // display transfer (sRGB, Rec.709, gamma) in the shader would double-encode.
+    // Build render state with minimal HDR overrides. The shader encodes for
+    // the WebGPU canvas itself (extended-range sRGB, see the readback below);
+    // the user's SDR display transfer (sRGB, Rec.709, gamma) is not applied.
     // displayGamma and displayBrightness are preserved as user-facing
     // calibration knobs that apply as relative adjustments on all paths.
     PerfTrace.begin('blit.buildRenderState');
@@ -978,6 +991,10 @@ export class ViewerGLRenderer {
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
       state.gamutMapping = this.detectGamutMapping(image);
     }
+
+    // Primaries follow the blit canvas color space ('srgb' or 'display-p3').
+    const blit = this._webgpuBlit;
+    this.applyAutomaticColorPrimaries(renderer, image, blit?.colorSpace === 'display-p3' ? 'display-p3' : 'srgb');
 
     // Debug: log blit render state (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -1015,8 +1032,8 @@ export class ViewerGLRenderer {
     const hasAsyncReadback = typeof renderer.renderImageToFloatAsync === 'function';
     const useAsync = hasAsyncReadback && !hasPending;
     const pixels = useAsync
-      ? renderer.renderImageToFloatAsync!(image, displayWidth, displayHeight)
-      : renderer.renderImageToFloat!(image, displayWidth, displayHeight);
+      ? renderer.renderImageToFloatAsync!(image, displayWidth, displayHeight, OUTPUT_ENCODING_EXTENDED_SRGB)
+      : renderer.renderImageToFloat!(image, displayWidth, displayHeight, OUTPUT_ENCODING_EXTENDED_SRGB);
     PerfTrace.end('blit.FBO+readPixels');
     if (!pixels) return false;
 
@@ -1064,10 +1081,9 @@ export class ViewerGLRenderer {
       renderer.resize(displayWidth, displayHeight);
     }
 
-    // Build render state with minimal HDR overrides for linear-light output.
-    // The Canvas2D HDR canvas receives linear-light float pixels and handles
-    // display-referred encoding itself. Same rationale as the WebGPU blit path:
-    // applying display transfer in the shader would double-encode the signal.
+    // Build render state with minimal HDR overrides. The shader encodes for
+    // the Canvas2D color space (see the readback below); the user's SDR display
+    // transfer is not applied.
     // displayGamma and displayBrightness are preserved as user-facing
     // calibration knobs that apply as relative adjustments on all paths.
     PerfTrace.begin('canvas2dBlit.buildRenderState');
@@ -1082,6 +1098,13 @@ export class ViewerGLRenderer {
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
       state.gamutMapping = this.detectGamutMapping(image);
     }
+
+    // Encoding and primaries follow the Canvas2D color space: 'srgb-linear'
+    // takes linear sRGB-primaries light, 'rec2100-hlg' takes an HLG signal on
+    // BT.2020 primaries.
+    const canvas2dColorSpace = this._canvas2dBlit?.colorSpace ?? 'srgb-linear';
+    const canvas2dEncoding = outputEncodingForCanvasColorSpace(canvas2dColorSpace);
+    this.applyAutomaticColorPrimaries(renderer, image, canvas2dColorSpace.startsWith('rec2100') ? 'rec2020' : 'srgb');
 
     // Debug: log canvas2d blit render state (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -1119,8 +1142,8 @@ export class ViewerGLRenderer {
     const hasAsyncReadback = typeof renderer.renderImageToFloatAsync === 'function';
     const useAsync = hasAsyncReadback && !hasPending;
     const pixels = useAsync
-      ? renderer.renderImageToFloatAsync!(image, displayWidth, displayHeight)
-      : renderer.renderImageToFloat!(image, displayWidth, displayHeight);
+      ? renderer.renderImageToFloatAsync!(image, displayWidth, displayHeight, canvas2dEncoding)
+      : renderer.renderImageToFloat!(image, displayWidth, displayHeight, canvas2dEncoding);
     PerfTrace.end('canvas2dBlit.FBO+readPixels');
     if (!pixels) return false;
 
@@ -1202,7 +1225,10 @@ export class ViewerGLRenderer {
 
     try {
       const blit = new WebGPUHDRBlit();
-      await blit.initialize();
+      // Present in display-p3 on wide-gamut displays so P3/2020 content is not
+      // clipped to sRGB primaries; the shader matches primaries to blit.colorSpace.
+      const wideGamut = this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020';
+      await blit.initialize({ colorSpace: wideGamut ? 'display-p3' : 'srgb' });
       this._webgpuBlit = blit;
 
       // Insert WebGPU canvas before the paint canvas so annotations overlay it
@@ -1468,6 +1494,13 @@ export class ViewerGLRenderer {
 
     // Sync all render state (SDR: use as configured, no overrides)
     renderer.applyRenderState(this.buildRenderState());
+
+    // SDR frames are display-encoded sRGB: the primaries matrices left over
+    // from an HDR source (e.g. BT.2020 -> 709, 709 -> P3) must not touch them.
+    // Gamut conversion for a P3 drawing buffer happens at texture upload.
+    if (typeof (renderer as Partial<Renderer>).setColorPrimaries === 'function') {
+      renderer.setColorPrimaries(undefined, 'srgb');
+    }
 
     // Apply user rotation/flip via shader uniforms (replaces CSS transform)
     this.applyUserTransformToRenderer();

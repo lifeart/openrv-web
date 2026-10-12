@@ -4,7 +4,7 @@
  */
 
 import type { SessionBridgeContext } from '../AppSessionBridge';
-import type { EXRChannelRemapping } from '../formats/EXRDecoder';
+import type { EXRBox2i, EXRChannelRemapping } from '../formats/EXRDecoder';
 import { setScopesHDRAutoFit, setScopesHDRMode } from '../scopes/WebGLScopes';
 import { queryHDRHeadroom } from '../color/DisplayCapabilities';
 import { getCorePreferencesManager } from '../core/PreferencesManager';
@@ -18,15 +18,11 @@ type AutoToneMappingPreset = { enabled: boolean; operator: 'off' | 'aces' };
 interface HDRAutoConfigState {
   toneMappingAutoApplied: boolean;
   toneMappingAutoPreset: AutoToneMappingPreset | null;
-  gammaAutoApplied: boolean;
-  gammaAutoValue: number | null;
 }
 
 const DEFAULT_HDR_AUTOCONFIG_STATE: HDRAutoConfigState = {
   toneMappingAutoApplied: false,
   toneMappingAutoPreset: null,
-  gammaAutoApplied: false,
-  gammaAutoValue: null,
 };
 
 const hdrAutoConfigStateByContext = new WeakMap<SessionBridgeContext, HDRAutoConfigState>();
@@ -86,12 +82,6 @@ function applyAutoToneMappingPreset(
   autoState.toneMappingAutoPreset = preset;
 }
 
-function applyAutoGamma(context: SessionBridgeContext, autoState: HDRAutoConfigState, gamma: number): void {
-  context.getColorControls().setAdjustments({ gamma });
-  autoState.gammaAutoApplied = true;
-  autoState.gammaAutoValue = gamma;
-}
-
 function maybeResetAutoHDROverridesForSDR(context: SessionBridgeContext, autoState: HDRAutoConfigState): void {
   if (autoState.toneMappingAutoApplied && autoState.toneMappingAutoPreset) {
     const toneMappingControl = context.getToneMappingControl();
@@ -103,17 +93,6 @@ function maybeResetAutoHDROverridesForSDR(context: SessionBridgeContext, autoSta
     }
     autoState.toneMappingAutoApplied = false;
     autoState.toneMappingAutoPreset = null;
-  }
-
-  if (autoState.gammaAutoApplied && autoState.gammaAutoValue !== null) {
-    const colorControls = context.getColorControls();
-    const currentGamma = colorControls.getAdjustments().gamma;
-    // Reset only when the auto-applied value is still in place.
-    if (currentGamma === autoState.gammaAutoValue && currentGamma !== 1) {
-      colorControls.setAdjustments({ gamma: 1 });
-    }
-    autoState.gammaAutoApplied = false;
-    autoState.gammaAutoValue = null;
   }
 }
 
@@ -202,8 +181,9 @@ export function handleSourceLoaded(
 
     if (!persistedColorSpace) {
       // No persisted color space — detect from file extension
-      const lastDot = source.name ? source.name.lastIndexOf('.') : -1;
-      const ext = lastDot >= 0 ? source.name!.substring(lastDot).toLowerCase() : '';
+      const sourceName = source.name ?? '';
+      const lastDot = sourceName.lastIndexOf('.');
+      const ext = lastDot >= 0 ? sourceName.substring(lastDot).toLowerCase() : '';
       const detectedFromExt = processor.detectColorSpaceFromExtension(ext);
       if (detectedFromExt) {
         processor.setSourceInputColorSpace(sourceId, detectedFromExt);
@@ -271,11 +251,13 @@ export function handleSourceLoaded(
       setScopesHDRAutoFit(true);
       syncScopesHeadroomAsync(context, source, histogram);
     } else {
-      // SDR display: apply ACES tone mapping + gamma 2.2 to compress HDR to displayable range.
+      // SDR display: apply ACES tone mapping to compress HDR into the displayable range.
+      // No extra creative gamma: the display transfer (sRGB by default) already
+      // encodes the linear result, so an additional 2.2 would double-encode it
+      // and wash the picture out.
       // Scopes still analyze HDR source data (float readback) to show full dynamic range.
-      console.log(`[HDR] Detected HDR content (format: ${formatName}), SDR display — applying ACES + gamma 2.2`);
+      console.log(`[HDR] Detected HDR content (format: ${formatName}), SDR display — applying ACES tone mapping`);
       applyAutoToneMappingPreset(context, hdrAutoState, { enabled: true, operator: 'aces' });
-      applyAutoGamma(context, hdrAutoState, 2.2);
       // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
       const defaultHeadroom = 4.0;
       histogram.setHDRMode(true, defaultHeadroom);
@@ -305,8 +287,10 @@ export function handleSourceLoaded(
   // Wire EXR window overlay: extract dataWindow/displayWindow from IPImage attributes
   const exrOverlay = context.getViewer().getEXRWindowOverlay();
   const fileSource = source?.fileSourceNode;
-  const ipImage =
-    fileSource && typeof (fileSource as any).getIPImage === 'function' ? (fileSource as any).getIPImage() : null;
+  const ipImageSource = fileSource as
+    | { getIPImage?: () => { metadata?: { attributes?: { dataWindow?: EXRBox2i; displayWindow?: EXRBox2i } } } | null }
+    | undefined;
+  const ipImage = typeof ipImageSource?.getIPImage === 'function' ? ipImageSource.getIPImage() : null;
   const attrs = ipImage?.metadata?.attributes;
   if (attrs && attrs.dataWindow && attrs.displayWindow) {
     exrOverlay.setWindows(attrs.dataWindow, attrs.displayWindow);

@@ -11,6 +11,7 @@ import { readPixelsGLFloat, expectPixel } from './helpers/pixels';
 import { createSolidTexture } from './helpers/textures';
 import { EPSILON } from './helpers/tolerance';
 import { setupIdentityPipeline } from './helpers/pipeline';
+import { hlgToLinear } from '../__tests__/shaderMathReference';
 
 import viewerVertSrc from '../shaders/viewer.vert.glsl?raw';
 import viewerFragSrc from '../shaders/viewer.frag.glsl?raw';
@@ -46,32 +47,9 @@ function srgbEOTFRef(x: number): number {
   return Math.pow((x + 0.055) / 1.055, 2.4);
 }
 
-// Reference math: HLG inverse OETF + OOTF
-function hlgOETFInverseRef(e: number): number {
-  const a = 0.17883277;
-  const b = 0.28466892;
-  const c = 0.55991073;
-  if (e <= 0.5) return (e * e) / 3.0;
-  return (Math.exp((e - c) / a) + b) / 12.0;
-}
-
-// HLG OOTF near-black threshold and linear-ramp slope.
-// Below OOTF_THRESH the power curve ys^0.2 is replaced by a linear ramp
-// (ys * OOTF_SLOPE) to avoid extreme gain amplification of shadow noise.
-const OOTF_THRESH = 0.01;
-const OOTF_SLOPE = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
-
-function hlgToLinearRef(r: number, g: number, b: number): [number, number, number] {
-  const LUMA_R = 0.2126,
-    LUMA_G = 0.7152,
-    LUMA_B = 0.0722;
-  const sr = hlgOETFInverseRef(r);
-  const sg = hlgOETFInverseRef(g);
-  const sb = hlgOETFInverseRef(b);
-  const ys = sr * LUMA_R + sg * LUMA_G + sb * LUMA_B;
-  const ootfGain = ys < OOTF_THRESH ? ys * OOTF_SLOPE : Math.pow(ys, 0.2);
-  return [sr * ootfGain, sg * ootfGain, sb * ootfGain];
-}
+// Reference math: HLG inverse OETF + OOTF, normalized to 1.0 = 203 cd/m²
+// (shared with the cross-ecosystem reference so CPU and GPU agree).
+const hlgToLinearRef = hlgToLinear;
 
 // Reference math: PQ EOTF
 function pqEOTFRef(n: number): number {

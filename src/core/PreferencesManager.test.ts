@@ -9,6 +9,7 @@ import {
   getCorePreferencesManager,
   resetCorePreferencesManagerForTests,
   type ColorDefaults,
+  hdrHeadroomFromColorDefaults,
   type FPSIndicatorPrefs,
   type PluginSettingsProvider,
   type PreferencesExportPayload,
@@ -1651,5 +1652,31 @@ describe('Issue #277: importAll/resetAll apply live subsystems', () => {
     manager.resetAll();
 
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PreferencesManager HDR display settings', () => {
+  it('PREF-HDR-001: defaults to automatic peak and BT.2408 reference white', () => {
+    const { manager } = createManager();
+    const defaults = manager.getColorDefaults();
+    expect(defaults.hdrPeakNits).toBeNull();
+    expect(defaults.hdrReferenceWhiteNits).toBe(203);
+    expect(hdrHeadroomFromColorDefaults(defaults)).toBeNull();
+  });
+
+  it('PREF-HDR-002: stores, clamps and converts the peak to headroom', () => {
+    const { manager } = createManager();
+    manager.setColorDefaults({ hdrPeakNits: 1000 });
+    expect(hdrHeadroomFromColorDefaults(manager.getColorDefaults())).toBeCloseTo(1000 / 203, 6);
+    manager.setColorDefaults({ hdrPeakNits: 50000, hdrReferenceWhiteNits: 5 });
+    const clamped = manager.getColorDefaults();
+    expect(clamped.hdrPeakNits).toBe(10000);
+    expect(clamped.hdrReferenceWhiteNits).toBe(48);
+    manager.setColorDefaults({ hdrPeakNits: null });
+    expect(manager.getColorDefaults().hdrPeakNits).toBeNull();
+  });
+
+  it('PREF-HDR-003: headroom never drops below 1.0', () => {
+    expect(hdrHeadroomFromColorDefaults({ ...DEFAULT_COLOR_DEFAULTS, hdrPeakNits: 100 })).toBe(1);
   });
 });

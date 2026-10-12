@@ -15,7 +15,8 @@ import type { StackLayer } from './StackControl';
 import type { MediaSource } from '../../core/session/Session';
 import type { CropRegion, CropState } from './CropControl';
 import type { PixelProbe } from './PixelProbe';
-import { queryHDRHeadroom } from '../../color/DisplayCapabilities';
+import { DEFAULT_CAPABILITIES, queryHDRHeadroom } from '../../color/DisplayCapabilities';
+import { getCorePreferencesManager } from '../../core/PreferencesManager';
 
 vi.mock('../../color/DisplayCapabilities', async (importOriginal) => {
   const orig = await importOriginal<typeof import('../../color/DisplayCapabilities')>();
@@ -128,6 +129,7 @@ interface TestableViewer {
 
   // HDR headroom tracking
   lastSystemHDRHeadroom: number;
+  systemReportedHDRHeadroom: number | null;
   capabilities: { displayHDR: boolean } | undefined;
   syncHDRHeadroomFromSystem(): void;
   scheduleRender(): void;
@@ -2059,6 +2061,7 @@ describe('Viewer', () => {
       const t = testable(viewer);
       t.capabilities = { displayHDR: true };
       t.lastSystemHDRHeadroom = 2.5;
+      t.systemReportedHDRHeadroom = 2.5;
 
       mockedQueryHDRHeadroom.mockResolvedValue(2.5);
 
@@ -2075,7 +2078,7 @@ describe('Viewer', () => {
       expect(scheduleRenderSpy).not.toHaveBeenCalled();
     });
 
-    it('VWR-HDRHROOM-003: does NOT scheduleRender when headroom query returns null', async () => {
+    it('VWR-HDRHROOM-003: falls back to 1000/203 headroom when the query returns null', async () => {
       const t = testable(viewer);
       t.capabilities = { displayHDR: true };
 
@@ -2089,8 +2092,11 @@ describe('Viewer', () => {
 
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
-      expect(scheduleRenderSpy).not.toHaveBeenCalled();
+      // An HDR display must not stay at headroom 1.0 (no HDR) just because
+      // the Screen Details API is unavailable.
+      expect(setHDRHeadroomSpy).toHaveBeenCalledTimes(1);
+      expect(setHDRHeadroomSpy).toHaveBeenCalledWith(1000 / 203);
+      expect(scheduleRenderSpy).toHaveBeenCalledTimes(1);
     });
 
     it('VWR-HDRHROOM-004: does NOT scheduleRender when displayHDR capability is missing', async () => {
@@ -2108,7 +2114,7 @@ describe('Viewer', () => {
       expect(scheduleRenderSpy).not.toHaveBeenCalled();
     });
 
-    it('VWR-HDRHROOM-005: does NOT scheduleRender when headroom query rejects', async () => {
+    it('VWR-HDRHROOM-005: keeps the fallback headroom when the query rejects', async () => {
       const t = testable(viewer);
       t.capabilities = { displayHDR: true };
 
@@ -2122,8 +2128,79 @@ describe('Viewer', () => {
 
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
-      expect(scheduleRenderSpy).not.toHaveBeenCalled();
+      expect(setHDRHeadroomSpy).toHaveBeenCalledTimes(1);
+      expect(setHDRHeadroomSpy).toHaveBeenCalledWith(1000 / 203);
+      expect(scheduleRenderSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('VWR-HDRHROOM-007: SDR display resets headroom to 1.0', () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: false };
+      t.lastSystemHDRHeadroom = 4;
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+
+      t.syncHDRHeadroomFromSystem();
+
+      expect(setHDRHeadroomSpy).toHaveBeenCalledWith(1.0);
+      expect(mockedQueryHDRHeadroom).not.toHaveBeenCalled();
+    });
+
+    it('VWR-HDRHROOM-008: user peak-nits setting overrides the system headroom', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+      const prefs = getCorePreferencesManager();
+      prefs.setColorDefaults({ hdrPeakNits: 600 });
+      try {
+        mockedQueryHDRHeadroom.mockResolvedValue(8);
+        const setHDRHeadroomSpy = vi.fn();
+        t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+
+        t.syncHDRHeadroomFromSystem();
+        await new Promise((r) => setTimeout(r, 10));
+
+        expect(setHDRHeadroomSpy).toHaveBeenCalledTimes(1);
+        expect(setHDRHeadroomSpy).toHaveBeenCalledWith(600 / 203);
+      } finally {
+        prefs.setColorDefaults({ hdrPeakNits: null });
+      }
+    });
+
+    it('VWR-HDRHROOM-009: moving to an HDR display switches the renderer out of SDR', () => {
+      const t = testable(viewer);
+      const renderer = {
+        getHDROutputMode: vi.fn(() => 'sdr'),
+        setHDROutputMode: vi.fn(() => true),
+        dispose: vi.fn(),
+      };
+      t.glRendererManager._glRenderer = renderer;
+      t.glRendererManager.setHDRHeadroom = vi.fn();
+      mockedQueryHDRHeadroom.mockResolvedValue(null);
+
+      viewer.updateDisplayCapabilities({
+        ...DEFAULT_CAPABILITIES,
+        displayHDR: true,
+        activeHDRMode: 'extended',
+        webglDrawingBufferStorage: true,
+        canvasExtendedHDR: true,
+      });
+
+      expect(renderer.setHDROutputMode).toHaveBeenCalledWith('extended', expect.anything());
+    });
+
+    it('VWR-HDRHROOM-010: moving to an SDR display switches the renderer back to SDR', () => {
+      const t = testable(viewer);
+      const renderer = {
+        getHDROutputMode: vi.fn(() => 'extended'),
+        setHDROutputMode: vi.fn(() => true),
+        dispose: vi.fn(),
+      };
+      t.glRendererManager._glRenderer = renderer;
+      t.glRendererManager.setHDRHeadroom = vi.fn();
+
+      viewer.updateDisplayCapabilities({ ...DEFAULT_CAPABILITIES, displayHDR: false, activeHDRMode: 'extended' });
+
+      expect(renderer.setHDROutputMode).toHaveBeenCalledWith('sdr', expect.anything());
     });
 
     it('VWR-HDRHROOM-006: updates lastSystemHDRHeadroom and schedules render on changed headroom', async () => {
@@ -2142,7 +2219,8 @@ describe('Viewer', () => {
         expect(setHDRHeadroomSpy).toHaveBeenCalledWith(2.0);
       });
       expect(t.lastSystemHDRHeadroom).toBe(2.0);
-      expect(scheduleRenderSpy).toHaveBeenCalledTimes(1);
+      // Default headroom applied immediately, then the system value
+      expect(scheduleRenderSpy).toHaveBeenCalledTimes(2);
 
       setHDRHeadroomSpy.mockClear();
       scheduleRenderSpy.mockClear();

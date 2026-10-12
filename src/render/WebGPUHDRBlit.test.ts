@@ -294,6 +294,63 @@ describe('WebGPUHDRBlit', () => {
       );
     });
 
+    it('WGPU-BLIT-011b: configures an explicit color space and reports it', async () => {
+      const { adapter } = createMockGPUDevice();
+      const gpuCtx = createMockGPUCanvasContext();
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(adapter) },
+        configurable: true,
+        writable: true,
+      });
+
+      const blit = new WebGPUHDRBlit();
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
+      await blit.initialize({ colorSpace: 'display-p3' });
+
+      expect(gpuCtx.configure).toHaveBeenCalledWith(expect.objectContaining({ colorSpace: 'display-p3' }));
+      expect(blit.colorSpace).toBe('display-p3');
+    });
+
+    it('WGPU-BLIT-011c: fails when the browser drops extended tone mapping', async () => {
+      const { adapter } = createMockGPUDevice();
+      const gpuCtx = {
+        ...createMockGPUCanvasContext(),
+        getConfiguration: vi.fn(() => ({ colorSpace: 'srgb', toneMapping: { mode: 'standard' } })),
+      };
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(adapter) },
+        configurable: true,
+        writable: true,
+      });
+
+      const blit = new WebGPUHDRBlit();
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
+
+      await expect(blit.initialize()).rejects.toThrow(/extended tone mapping/);
+      expect(blit.initialized).toBe(false);
+      expect(gpuCtx.unconfigure).toHaveBeenCalled();
+    });
+
+    it('WGPU-BLIT-011d: takes the color space the browser actually applied', async () => {
+      const { adapter } = createMockGPUDevice();
+      const gpuCtx = {
+        ...createMockGPUCanvasContext(),
+        getConfiguration: vi.fn(() => ({ colorSpace: 'srgb', toneMapping: { mode: 'extended' } })),
+      };
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(adapter) },
+        configurable: true,
+        writable: true,
+      });
+
+      const blit = new WebGPUHDRBlit();
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
+      await blit.initialize({ colorSpace: 'display-p3' });
+
+      expect(blit.initialized).toBe(true);
+      expect(blit.colorSpace).toBe('srgb');
+    });
+
     it('WGPU-BLIT-012: sets initialized to true on success', async () => {
       const { adapter } = createMockGPUDevice();
       const gpuCtx = createMockGPUCanvasContext();

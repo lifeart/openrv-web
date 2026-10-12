@@ -38,6 +38,11 @@
       // HDR headroom: 1.0 for SDR, >1.0 for HDR (e.g. 3.0 = display peak is 3x SDR white)
       uniform float u_hdrHeadroom;
 
+      // Output encoding for the surface the pixels land on (see RenderConfig OUTPUT_ENCODING_*):
+      // 0=display transfer (SDR, user-selected u_displayTransfer), 1=linear (srgb-linear canvas),
+      // 2=extended sRGB (float16 srgb/display-p3 canvas), 3=PQ (rec2100-pq), 4=HLG (rec2100-hlg)
+      uniform int u_outputEncoding;
+
       // --- Phase 3: Effect uniforms ---
 
       // CDL (Color Decision List)
@@ -675,25 +680,35 @@
         }
       }
 
+      // HDR reference levels shared by the HLG/PQ input decode and the output
+      // encode stages. Linear working values use 1.0 = HDR reference white
+      // (203 cd/m², ITU-R BT.2408), so HLG and PQ sources land on the same scale.
+      const float HDR_REFERENCE_WHITE_NITS = 203.0;
+      // BT.2100 HLG nominal display peak used for the OOTF (gamma 1.2 at 1000 cd/m²).
+      const float HLG_NOMINAL_PEAK_NITS = 1000.0;
+      // BT.2100 luminance coefficients (HLG signals are defined on BT.2020 primaries).
+      const vec3 LUMA_BT2020 = vec3(0.2627, 0.6780, 0.0593);
+      // Near-black OOTF linear ramp: below OOTF_THRESH, ys^0.2 is replaced by
+      // ys * OOTF_SLOPE so shadow noise is not amplified. C0-continuous at the
+      // threshold (OOTF_THRESH^(-0.8) = 10^1.6).
+      const float HLG_OOTF_THRESH = 0.01;
+      const float HLG_OOTF_SLOPE  = 39.810717;
+
       vec3 hlgToLinear(vec3 signal) {
-        // Apply inverse OETF per channel, then OOTF (gamma 1.2 for 1000 cd/m²)
+        // Apply inverse OETF per channel, then the OOTF (gamma 1.2 for a
+        // 1000 cd/m² display), then scale so HLG reference white (signal 0.75,
+        // ~203 cd/m² on a 1000 cd/m² display) maps to 1.0 like PQ does.
         vec3 scene = vec3(
           hlgOETFInverse(signal.r),
           hlgOETFInverse(signal.g),
           hlgOETFInverse(signal.b)
         );
-        // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ≈ 1.2
-        // Below OOTF_THRESH, use a linear ramp to avoid extreme gain for
-        // near-black values (BT.2100 does not define special handling, but
-        // pow(ys, 0.2) amplifies noise in shadows; a linear extension from
-        // the origin to the threshold keeps the curve C0-continuous).
-        const float OOTF_THRESH = 0.01;
-        const float OOTF_SLOPE  = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
-        float ys = dot(scene, LUMA);
-        float ootfGain = (ys < OOTF_THRESH)
-          ? ys * OOTF_SLOPE   // linear ramp: ys * T^(0.2-1)
-          : pow(ys, 0.2);     // normal power curve
-        return scene * ootfGain;
+        // HLG OOTF: Fd = Lw * Ys^(gamma-1) * scene, where gamma = 1.2
+        float ys = dot(scene, LUMA_BT2020);
+        float ootfGain = (ys < HLG_OOTF_THRESH)
+          ? ys * HLG_OOTF_SLOPE   // linear ramp: ys * T^(0.2-1)
+          : pow(ys, 0.2);         // normal power curve
+        return scene * ootfGain * (HLG_NOMINAL_PEAK_NITS / HDR_REFERENCE_WHITE_NITS);
       }
 
       // PQ EOTF (SMPTE ST 2084, signal -> linear cd/m² normalized to 1.0 = 10000 cd/m²)
@@ -713,13 +728,86 @@
 
       vec3 pqToLinear(vec3 signal) {
         // PQ encodes absolute luminance; 1.0 = 10000 cd/m²
-        // Normalize so SDR white (203 cd/m²) → 1.0
-        const float pqNormFactor = 10000.0 / 203.0;
+        // Normalize so HDR reference white (203 cd/m²) → 1.0
+        const float pqNormFactor = 10000.0 / HDR_REFERENCE_WHITE_NITS;
         return vec3(
           pqEOTF(signal.r),
           pqEOTF(signal.g),
           pqEOTF(signal.b)
         ) * pqNormFactor;
+      }
+
+      // --- Output encoding functions (display linear -> output signal) ---
+      // Inputs use the working scale (1.0 = HDR reference white, 203 cd/m²)
+      // and must already be on BT.2020 primaries for PQ/HLG outputs.
+
+      // PQ inverse EOTF (SMPTE ST 2084, absolute linear normalized to 10000 cd/m² -> signal)
+      float pqInverseEOTF(float l) {
+        const float m1 = 0.1593017578125;
+        const float m2 = 78.84375;
+        const float c1 = 0.8359375;
+        const float c2 = 18.8515625;
+        const float c3 = 18.6875;
+        float lm1 = pow(clamp(l, 0.0, 1.0), m1);
+        return pow((c1 + c2 * lm1) / (1.0 + c3 * lm1), m2);
+      }
+
+      vec3 linearToPQ(vec3 color) {
+        vec3 l = max(color, 0.0) * (HDR_REFERENCE_WHITE_NITS / 10000.0);
+        return vec3(pqInverseEOTF(l.r), pqInverseEOTF(l.g), pqInverseEOTF(l.b));
+      }
+
+      // HLG OETF (Rec. 2100 HLG, relative scene light -> signal)
+      float hlgOETF(float e) {
+        const float a = 0.17883277;
+        const float b = 0.28466892;
+        const float c = 0.55991073;
+        if (e <= 1.0 / 12.0) {
+          return sqrt(3.0 * max(e, 0.0));
+        }
+        return a * log(12.0 * e - b) + c;
+      }
+
+      // Exact inverse of hlgToLinear(): display linear -> HLG signal.
+      // Undo the 203 cd/m² scaling, invert the OOTF (gamma 1.2 at 1000 cd/m²,
+      // with the same near-black ramp), then apply the HLG OETF.
+      vec3 linearToHLG(vec3 color) {
+        vec3 fd = max(color, 0.0) * (HDR_REFERENCE_WHITE_NITS / HLG_NOMINAL_PEAK_NITS);
+        float yd = dot(fd, LUMA_BT2020);
+        // Display luminance at the ramp threshold: T * (T * SLOPE) = T^1.2
+        const float YD_THRESH = HLG_OOTF_THRESH * HLG_OOTF_THRESH * HLG_OOTF_SLOPE;
+        vec3 scene;
+        if (yd <= 0.0) {
+          scene = vec3(0.0);
+        } else if (yd < YD_THRESH) {
+          // Ramp branch: yd = ys^2 * SLOPE  ->  gain = ys * SLOPE = sqrt(yd * SLOPE)
+          scene = fd / sqrt(yd * HLG_OOTF_SLOPE);
+        } else {
+          // Power branch: yd = ys^1.2  ->  gain = ys^0.2 = yd^(1/6)
+          scene = fd / pow(yd, 1.0 / 6.0);
+        }
+        scene = clamp(scene, 0.0, 1.0);
+        return vec3(hlgOETF(scene.r), hlgOETF(scene.g), hlgOETF(scene.b));
+      }
+
+      // Extended-range sRGB encode (sign-preserving, no clamp above 1.0) for
+      // float16 'srgb' / 'display-p3' canvases in extended tone-mapping mode.
+      float extendedSRGBEncode(float c) {
+        float a = abs(c);
+        float e = (a <= 0.0031308) ? a * 12.92 : 1.055 * pow(a, 1.0 / 2.4) - 0.055;
+        return sign(c) * e;
+      }
+
+      vec3 linearToExtendedSRGB(vec3 color) {
+        return vec3(extendedSRGBEncode(color.r), extendedSRGBEncode(color.g), extendedSRGBEncode(color.b));
+      }
+
+      // Extended-range sRGB EOTF (sign-preserving, no clamp above 1.0)
+      vec3 extendedSRGBToLinear(vec3 c) {
+        vec3 a = abs(c);
+        vec3 lo = a / 12.92;
+        vec3 hi = pow((a + 0.055) / 1.055, vec3(2.4));
+        return sign(c) * mix(lo, hi, step(vec3(0.04045), a));
       }
 
       // SMPTE 240M EOTF (inverse OETF, signal -> linear)
@@ -1189,6 +1277,9 @@
             color.rgb = pqToLinear(color.rgb);
           } else if (u_inputTransfer == 7) {
             color.rgb = smpte240mToLinear(color.rgb);
+          } else if (u_inputTransfer == 5) {
+            // Extended-range sRGB curve (float16 display-p3 resize of HDR video)
+            color.rgb = extendedSRGBToLinear(color.rgb);
           }
         }
 
@@ -1571,10 +1662,21 @@
         //   if (linear2Rec709) shaderExpr = newColorLinearToRec709(shaderExpr);
         //   if (displayGamma != 1.0) shaderExpr = newColorGamma(shaderExpr, 1.0/displayGamma);
 
-        // 8a. Display transfer function (linear to display-encoded, per-channel)
-        if (u_displayTransfer > 0) {
-          color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
+        // 8a. Display transfer function (linear to display-encoded, per-channel).
+        // HDR surfaces replace it with the encoding the surface expects; the
+        // user's SDR display transfer would otherwise double-encode the signal.
+        if (u_outputEncoding == 0) {
+          if (u_displayTransfer > 0) {
+            color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
+          }
+        } else if (u_outputEncoding == 2) {
+          color.rgb = linearToExtendedSRGB(color.rgb);
+        } else if (u_outputEncoding == 3) {
+          color.rgb = linearToPQ(color.rgb);
+        } else if (u_outputEncoding == 4) {
+          color.rgb = linearToHLG(color.rgb);
         }
+        // u_outputEncoding == 1 (linear): pass through
 
         // 8b. Creative per-channel gamma (always applied independently of display transfer).
         // pow(x, 1.0) == x, so the identity case is a no-op but we apply it

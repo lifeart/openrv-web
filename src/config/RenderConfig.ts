@@ -133,6 +133,66 @@ export const OUTPUT_MODE_SDR = 0;
 export const OUTPUT_MODE_HDR = 1;
 
 // ---------------------------------------------------------------------------
+// Render Pipeline — Output Encoding Shader Codes (u_outputEncoding)
+//
+// One contract for every surface the viewer shader writes to. Linear working
+// values use 1.0 = HDR reference white (203 cd/m², ITU-R BT.2408).
+// ---------------------------------------------------------------------------
+
+/** SDR: apply the user's display transfer (u_displayTransfer) */
+export const OUTPUT_ENCODING_DISPLAY = 0;
+
+/** Linear light, for 'srgb-linear' canvases and float readbacks that stay linear */
+export const OUTPUT_ENCODING_LINEAR = 1;
+
+/** Extended-range sRGB encoding, for float16 'srgb' / 'display-p3' canvases in extended mode */
+export const OUTPUT_ENCODING_EXTENDED_SRGB = 2;
+
+/** SMPTE ST 2084 (PQ), for 'rec2100-pq' surfaces */
+export const OUTPUT_ENCODING_PQ = 3;
+
+/** BT.2100 HLG, for 'rec2100-hlg' surfaces */
+export const OUTPUT_ENCODING_HLG = 4;
+
+export type OutputEncodingCode =
+  | typeof OUTPUT_ENCODING_DISPLAY
+  | typeof OUTPUT_ENCODING_LINEAR
+  | typeof OUTPUT_ENCODING_EXTENDED_SRGB
+  | typeof OUTPUT_ENCODING_PQ
+  | typeof OUTPUT_ENCODING_HLG;
+
+/** Output encoding the shader must produce for a WebGL drawing-buffer HDR mode. */
+export function outputEncodingForHDRMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended'): OutputEncodingCode {
+  switch (mode) {
+    case 'hlg':
+      return OUTPUT_ENCODING_HLG;
+    case 'pq':
+      return OUTPUT_ENCODING_PQ;
+    case 'extended':
+      return OUTPUT_ENCODING_EXTENDED_SRGB;
+    default:
+      return OUTPUT_ENCODING_DISPLAY;
+  }
+}
+
+/** Output encoding the shader must produce for a canvas of the given color space. */
+export function outputEncodingForCanvasColorSpace(colorSpace: string): OutputEncodingCode {
+  switch (colorSpace) {
+    case 'srgb-linear':
+    case 'rec2100-linear':
+      return OUTPUT_ENCODING_LINEAR;
+    case 'rec2100-hlg':
+      return OUTPUT_ENCODING_HLG;
+    case 'rec2100-pq':
+      return OUTPUT_ENCODING_PQ;
+    default:
+      // 'srgb' and 'display-p3' carry the sRGB transfer curve, extended above 1.0
+      // on float16 canvases.
+      return OUTPUT_ENCODING_EXTENDED_SRGB;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Render Pipeline — Display Transfer Function Shader Codes
 // ---------------------------------------------------------------------------
 

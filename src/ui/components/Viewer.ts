@@ -87,6 +87,11 @@ import { PixelSamplingManager } from './PixelSamplingManager';
 import { ViewerGLRenderer } from './ViewerGLRenderer';
 import type { GLRendererContext } from './ViewerGLRenderer';
 import { detectWebGPUHDR, isHDROutputAvailableWithLog, queryHDRHeadroom } from '../../color/DisplayCapabilities';
+import {
+  DEFAULT_HDR_PEAK_NITS,
+  getCorePreferencesManager,
+  hdrHeadroomFromColorDefaults,
+} from '../../core/PreferencesManager';
 import { VideoFrameFetchTracker } from './VideoFrameFetchTracker';
 import { type ToneMappingState } from './ToneMappingControl';
 import {
@@ -404,6 +409,8 @@ export class Viewer implements ViewerAccessor {
   private canvasColorSpace: 'display-p3' | undefined;
   private lastSystemHDRHeadroom = 1.0;
   private scopeDataReadyCallback: (() => void) | null = null;
+  // Last headroom reported by the Screen Details API (null until one arrives).
+  private systemReportedHDRHeadroom: number | null = null;
 
   // WebGL/HDR rendering manager (owns GL canvas, Renderer, worker proxy)
   private glRendererManager!: ViewerGLRenderer;
@@ -727,41 +734,7 @@ export class Viewer implements ViewerAccessor {
     this.glRendererManager = new ViewerGLRenderer(this.asGLRendererContext(), this.capabilities);
     this.canvasContainer.appendChild(this.glRendererManager.createGLCanvas());
 
-    // Async WebGPU HDR detection: when the display supports HDR but WebGL2 has no
-    // native HDR output (no HLG/PQ/extended), probe WebGPU for HDR blit fallback.
-    // If WebGPU fails, try Canvas2D HDR blit as last resort.
-    if (
-      this.capabilities?.displayHDR &&
-      !this.capabilities?.webglHLG &&
-      !this.capabilities?.webglPQ &&
-      !(this.capabilities?.webglDrawingBufferStorage && this.capabilities?.canvasExtendedHDR)
-    ) {
-      const tryCanvas2DFallback = () => {
-        if (this.capabilities && (this.capabilities.canvasHLG || this.capabilities.canvasFloat16)) {
-          console.log('[Viewer] Trying Canvas2D HDR blit as last resort');
-          this.glRendererManager.initCanvas2DHDRBlit();
-        }
-      };
-
-      if (this.capabilities?.webgpuAvailable) {
-        detectWebGPUHDR()
-          .then((available) => {
-            if (available && this.capabilities) {
-              this.capabilities.webgpuHDR = available;
-              console.log('[Viewer] WebGPU HDR available, initializing blit');
-              this.glRendererManager.initWebGPUHDRBlit();
-            } else {
-              tryCanvas2DFallback();
-            }
-          })
-          .catch((err) => {
-            log.warn('WebGPU HDR check failed, falling back to Canvas2D:', err);
-            tryCanvas2DFallback();
-          });
-      } else {
-        tryCanvas2DFallback();
-      }
-    }
+    this.initHDRBlitFallbacks();
 
     // Query system HDR headroom asynchronously and propagate it to the renderer.
     // This lets shader tone mapping scale to the actual display capability.
@@ -1014,26 +987,104 @@ export class Viewer implements ViewerAccessor {
   }
 
   /**
-   * Query system HDR headroom and apply it to the GL renderer manager.
-   * Safe no-op when the API is unavailable or permission is denied.
+   * Resolve the HDR headroom (display peak / SDR white) and apply it to the
+   * GL renderer manager. Order: the user's peak-nits setting, then the
+   * system-reported headroom, then a BT.2408-style default (1000 / 203 nits)
+   * so HDR displays never fall back to an SDR headroom of 1.0 just because
+   * the Screen Details API is unavailable or not permitted. SDR displays get 1.0.
    */
   private syncHDRHeadroomFromSystem(): void {
-    if (!this.capabilities?.displayHDR) return;
+    if (!this.capabilities?.displayHDR) {
+      this.applyHDRHeadroom(1.0);
+      return;
+    }
+
+    const colorDefaults = getCorePreferencesManager().getColorDefaults();
+    const userHeadroom = hdrHeadroomFromColorDefaults(colorDefaults);
+    if (userHeadroom !== null) {
+      this.applyHDRHeadroom(userHeadroom);
+      return;
+    }
+
+    // Usable immediately (last system value, else the default); refined below
+    // when the system reports a value.
+    this.applyHDRHeadroom(
+      this.systemReportedHDRHeadroom ?? DEFAULT_HDR_PEAK_NITS / colorDefaults.hdrReferenceWhiteNits,
+    );
 
     void queryHDRHeadroom()
       .then((headroom) => {
         if (typeof headroom !== 'number' || !Number.isFinite(headroom) || headroom <= 0) {
           return;
         }
-        if (headroom === this.lastSystemHDRHeadroom) return;
-        this.lastSystemHDRHeadroom = headroom;
-        this.glRendererManager.setHDRHeadroom(headroom);
+        this.systemReportedHDRHeadroom = headroom;
+        // Display or settings may have changed while the query was in flight.
+        if (!this.capabilities?.displayHDR) return;
+        if (hdrHeadroomFromColorDefaults(getCorePreferencesManager().getColorDefaults()) !== null) return;
+        this.applyHDRHeadroom(headroom);
         log.info(`System HDR headroom detected: ${headroom.toFixed(2)}x`);
-        this.scheduleRender();
       })
       .catch((err) => {
         log.debug('HDR headroom query unavailable:', err);
       });
+  }
+
+  private applyHDRHeadroom(headroom: number): void {
+    if (headroom === this.lastSystemHDRHeadroom) return;
+    this.lastSystemHDRHeadroom = headroom;
+    this.glRendererManager.setHDRHeadroom(headroom);
+    this.scheduleRender();
+  }
+
+  /** Current HDR headroom applied to the renderer (1.0 on SDR displays). */
+  getHDRHeadroom(): number {
+    return this.lastSystemHDRHeadroom;
+  }
+
+  /** Re-resolve the HDR headroom after the user changed the HDR display settings. */
+  refreshHDRHeadroom(): void {
+    this.syncHDRHeadroomFromSystem();
+  }
+
+  /**
+   * Async WebGPU HDR detection: when the display supports HDR but WebGL2 has no
+   * native HDR output (no HLG/PQ/extended), probe WebGPU for HDR blit fallback.
+   * If WebGPU fails, try Canvas2D HDR blit as last resort. Safe to call again
+   * after a display change; the blit initializers are idempotent.
+   */
+  private initHDRBlitFallbacks(): void {
+    if (
+      this.capabilities?.displayHDR &&
+      !this.capabilities?.webglHLG &&
+      !this.capabilities?.webglPQ &&
+      !(this.capabilities?.webglDrawingBufferStorage && this.capabilities?.canvasExtendedHDR)
+    ) {
+      const tryCanvas2DFallback = () => {
+        if (this.capabilities && (this.capabilities.canvasHLG || this.capabilities.canvasFloat16)) {
+          console.log('[Viewer] Trying Canvas2D HDR blit as last resort');
+          this.glRendererManager.initCanvas2DHDRBlit();
+        }
+      };
+
+      if (this.capabilities?.webgpuAvailable) {
+        detectWebGPUHDR()
+          .then((available) => {
+            if (available && this.capabilities) {
+              this.capabilities.webgpuHDR = available;
+              console.log('[Viewer] WebGPU HDR available, initializing blit');
+              this.glRendererManager.initWebGPUHDRBlit();
+            } else {
+              tryCanvas2DFallback();
+            }
+          })
+          .catch((err) => {
+            log.warn('WebGPU HDR check failed, falling back to Canvas2D:', err);
+            tryCanvas2DFallback();
+          });
+      } else {
+        tryCanvas2DFallback();
+      }
+    }
   }
 
   private bindEvents(): void {
@@ -4065,8 +4116,30 @@ export class Viewer implements ViewerAccessor {
    */
   updateDisplayCapabilities(caps: DisplayCapabilities): void {
     this.capabilities = caps;
+
+    // Follow the display's dynamic range: switch the drawing buffer into the
+    // best HDR mode when the window lands on an HDR display, and back to SDR
+    // when it leaves one (an extended buffer on an SDR display would still
+    // tone-map for a headroom the display cannot show).
+    const renderer = this.glRendererManager.glRenderer;
+    if (renderer) {
+      const current = renderer.getHDROutputMode();
+      const target = caps.displayHDR && caps.activeHDRMode !== 'none' ? caps.activeHDRMode : 'sdr';
+      if (current !== target) {
+        renderer.setHDROutputMode(target, caps);
+      }
+    }
+    if (caps.displayHDR) {
+      this.initHDRBlitFallbacks();
+    }
+
     this.syncHDRHeadroomFromSystem();
     this.scheduleRender();
+  }
+
+  /** Current HDR output mode of the renderer ('sdr' before the renderer exists). */
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended' {
+    return this.glRendererManager.glRenderer?.getHDROutputMode() ?? 'sdr';
   }
 
   /**

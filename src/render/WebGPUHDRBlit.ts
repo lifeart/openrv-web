@@ -115,8 +115,18 @@ interface WGPUCommandBuffer {}
 
 interface WGPUSampler {}
 
+interface WGPUCanvasConfiguration {
+  device: WGPUDevice;
+  format: string;
+  colorSpace?: 'srgb' | 'display-p3';
+  toneMapping?: { mode: string };
+  alphaMode?: string;
+}
+
 interface WGPUCanvasContext {
-  configure(config: { device: WGPUDevice; format: string; toneMapping?: { mode: string }; alphaMode?: string }): void;
+  configure(config: WGPUCanvasConfiguration): void;
+  /** Chrome 131+: the configuration actually in effect (unsupported members dropped). */
+  getConfiguration?(): Partial<WGPUCanvasConfiguration> | null;
   getCurrentTexture(): WGPUTexture;
   unconfigure(): void;
 }
@@ -178,6 +188,7 @@ export class WebGPUHDRBlit {
   private bindGroup: WGPUBindGroup | null = null;
 
   private _initialized = false;
+  private _colorSpace: 'srgb' | 'display-p3' = 'srgb';
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -196,10 +207,20 @@ export class WebGPUHDRBlit {
   }
 
   /**
-   * Async initialization: request adapter/device, configure context, create pipeline.
-   * Throws if WebGPU is not available or HDR configuration fails.
+   * Color space the canvas presents in. Pixels must be extended-range
+   * sRGB-encoded values on these primaries (1.0 = SDR white).
    */
-  async initialize(): Promise<void> {
+  get colorSpace(): 'srgb' | 'display-p3' {
+    return this._colorSpace;
+  }
+
+  /**
+   * Async initialization: request adapter/device, configure context, create pipeline.
+   * Throws if WebGPU is not available or HDR configuration fails, including when
+   * the browser drops the extended tone-mapping mode (the canvas would clip at
+   * SDR white, so callers should fall back to another HDR path).
+   */
+  async initialize(options: { colorSpace?: 'srgb' | 'display-p3' } = {}): Promise<void> {
     if (this._initialized) return;
 
     if (typeof navigator === 'undefined' || !('gpu' in navigator)) {
@@ -236,13 +257,33 @@ export class WebGPUHDRBlit {
     }
     this.gpuContext = ctx as unknown as WGPUCanvasContext;
 
-    // Configure for HDR: rgba16float + extended tone mapping
+    // Configure for HDR: rgba16float + extended tone mapping, with an explicit
+    // color space so the encoding contract does not depend on browser defaults.
+    const requestedColorSpace = options.colorSpace ?? 'srgb';
     this.gpuContext.configure({
       device,
       format: 'rgba16float',
+      colorSpace: requestedColorSpace,
       toneMapping: { mode: 'extended' },
       alphaMode: 'opaque',
     });
+
+    // Verify what the browser actually applied. Browsers without HDR canvas
+    // support silently drop `toneMapping`, which would clip everything above
+    // SDR white while still reporting a working blit.
+    const applied = this.gpuContext.getConfiguration?.() ?? null;
+    if (applied) {
+      if (applied.toneMapping?.mode !== 'extended') {
+        this.gpuContext.unconfigure();
+        device.destroy();
+        this.device = null;
+        this.gpuContext = null;
+        throw new Error('WebGPU canvas does not support extended tone mapping');
+      }
+      this._colorSpace = applied.colorSpace === 'display-p3' ? 'display-p3' : 'srgb';
+    } else {
+      this._colorSpace = requestedColorSpace;
+    }
 
     // Create shader module and render pipeline
     const shaderModule = device.createShaderModule({ code: BLIT_WGSL });

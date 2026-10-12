@@ -20,6 +20,7 @@ import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionMan
 import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
 import { Logger } from './utils/Logger';
+import { getCorePreferencesManager } from './core/PreferencesManager';
 
 const logger = new Logger('AppViewWiring');
 /**
@@ -230,6 +231,16 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
         logger.warn(`HDR output mode '${mode}' was rejected by the renderer`);
         controls.toneMappingControl.syncHDROutputMode(previousMode);
       }
+    }),
+  );
+  // The renderer picks its HDR mode on its own (startup, display changes);
+  // let the control read it so its buttons match the drawing buffer.
+  controls.toneMappingControl.setHDROutputModeSource(() => viewer.getHDROutputMode());
+  controls.toneMappingControl.setHDRPeakNits(getCorePreferencesManager().getColorDefaults().hdrPeakNits);
+  subs.add(
+    controls.toneMappingControl.on('hdrPeakNitsChanged', ({ peakNits }) => {
+      getCorePreferencesManager().setColorDefaults({ hdrPeakNits: peakNits });
+      viewer.refreshHDRHeadroom();
     }),
   );
 

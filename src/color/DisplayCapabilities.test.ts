@@ -18,6 +18,7 @@ import {
   queryHDRHeadroom,
   resolveActiveColorSpace,
   watchDisplayChanges,
+  contextHonorsSettings,
 } from './DisplayCapabilities';
 
 describe('DisplayCapabilities', () => {
@@ -888,5 +889,44 @@ describe('DisplayCapabilities', () => {
 
       cleanup();
     });
+  });
+});
+
+describe('contextHonorsSettings (float16 probe, H8)', () => {
+  const ctxWith = (attrs: Record<string, unknown> | null) =>
+    ({ getContextAttributes: () => attrs }) as unknown as CanvasRenderingContext2D;
+
+  it('DC-F16-001: false when the context is null', () => {
+    expect(contextHonorsSettings(null, 'srgb-linear', 'colorType')).toBe(false);
+  });
+
+  it('DC-F16-002: false when the browser ignored the float16 key (non-null context is not proof)', () => {
+    expect(
+      contextHonorsSettings(ctxWith({ colorSpace: 'display-p3', colorType: 'unorm8' }), 'display-p3', 'colorType'),
+    ).toBe(false);
+    expect(contextHonorsSettings(ctxWith({ colorSpace: 'display-p3' }), 'display-p3', 'colorType')).toBe(false);
+  });
+
+  it('DC-F16-003: false when the color space was not applied', () => {
+    expect(
+      contextHonorsSettings(ctxWith({ colorSpace: 'srgb', colorType: 'float16' }), 'srgb-linear', 'colorType'),
+    ).toBe(false);
+  });
+
+  it('DC-F16-004: true when color space and float16 storage are both reported', () => {
+    expect(
+      contextHonorsSettings(ctxWith({ colorSpace: 'srgb-linear', colorType: 'float16' }), 'srgb-linear', 'colorType'),
+    ).toBe(true);
+    expect(
+      contextHonorsSettings(
+        ctxWith({ colorSpace: 'rec2100-hlg', pixelFormat: 'float16' }),
+        'rec2100-hlg',
+        'pixelFormat',
+      ),
+    ).toBe(true);
+  });
+
+  it('DC-F16-005: false without getContextAttributes', () => {
+    expect(contextHonorsSettings({} as CanvasRenderingContext2D, 'srgb-linear', 'colorType')).toBe(false);
   });
 });

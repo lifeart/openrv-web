@@ -55,12 +55,32 @@ export type ThemeMode = 'dark' | 'light' | 'auto';
  * - `defaultExposure`: applied when current exposure is at identity (0).
  * - `defaultGamma`: applied when current gamma is at identity (1).
  * - `defaultCDLPreset`: deferred — no CDL preset system exists yet.
+ * - `hdrPeakNits`: HDR display peak luminance in cd/m². `null` = automatic
+ *   (system-reported headroom, else `DEFAULT_HDR_PEAK_NITS`).
+ * - `hdrReferenceWhiteNits`: luminance of SDR/graphics white on the HDR
+ *   display in cd/m² (BT.2408 default 203). HDR headroom = peak / reference white.
  */
 export interface ColorDefaults {
   defaultInputColorSpace: string;
   defaultExposure: number;
   defaultGamma: number;
   defaultCDLPreset: string | null;
+  hdrPeakNits: number | null;
+  hdrReferenceWhiteNits: number;
+}
+
+/** Peak luminance assumed for an HDR display that does not report its headroom. */
+export const DEFAULT_HDR_PEAK_NITS = 1000;
+/** BT.2408 HDR reference white (cd/m²). */
+export const DEFAULT_HDR_REFERENCE_WHITE_NITS = 203;
+
+/**
+ * HDR headroom (display peak / reference white) from the user's HDR display
+ * settings, or null when the peak is automatic.
+ */
+export function hdrHeadroomFromColorDefaults(defaults: ColorDefaults): number | null {
+  if (defaults.hdrPeakNits === null) return null;
+  return Math.max(1, defaults.hdrPeakNits / defaults.hdrReferenceWhiteNits);
 }
 
 /**
@@ -128,6 +148,8 @@ export const DEFAULT_COLOR_DEFAULTS: ColorDefaults = {
   defaultExposure: 0,
   defaultGamma: 1,
   defaultCDLPreset: null,
+  hdrPeakNits: null,
+  hdrReferenceWhiteNits: DEFAULT_HDR_REFERENCE_WHITE_NITS,
 };
 
 export const DEFAULT_EXPORT_DEFAULTS: ExportDefaults = {
@@ -199,6 +221,14 @@ function sanitizeColorDefaults(value: unknown): ColorDefaults {
     out.defaultCDLPreset = normalized.length > 0 ? normalized : null;
   } else if (value.defaultCDLPreset === null) {
     out.defaultCDLPreset = null;
+  }
+  if (typeof value.hdrPeakNits === 'number' && Number.isFinite(value.hdrPeakNits)) {
+    out.hdrPeakNits = clamp(value.hdrPeakNits, 80, 10000);
+  } else if (value.hdrPeakNits === null) {
+    out.hdrPeakNits = null;
+  }
+  if (typeof value.hdrReferenceWhiteNits === 'number' && Number.isFinite(value.hdrReferenceWhiteNits)) {
+    out.hdrReferenceWhiteNits = clamp(value.hdrReferenceWhiteNits, 48, 1000);
   }
 
   return out;

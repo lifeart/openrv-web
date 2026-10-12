@@ -80,6 +80,17 @@ describe('ShaderStateManager', () => {
       expect(mgr.hasPendingStateChanges()).toBe(false);
     });
 
+    it('SSM-003b: setColorPrimaries only marks dirty when the matrices change', () => {
+      mgr.setColorPrimaries('bt2020', 'display-p3');
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+      // Same primaries every frame: no pending changes (keeps render-skip / async readback paths)
+      mgr.setColorPrimaries('bt2020', 'display-p3');
+      expect(mgr.hasPendingStateChanges()).toBe(false);
+      mgr.setColorPrimaries('bt2020', 'srgb');
+      expect(mgr.hasPendingStateChanges()).toBe(true);
+    });
+
     it('SSM-003: returns true after a setter marks a flag dirty', () => {
       const flags = mgr.getDirtyFlags() as Set<string>;
       flags.clear();

@@ -41,8 +41,13 @@ import {
   INPUT_TRANSFER_HLG,
   INPUT_TRANSFER_PQ,
   INPUT_TRANSFER_SMPTE240M,
+  INPUT_TRANSFER_SRGB_TO_LINEAR,
   OUTPUT_MODE_SDR,
   OUTPUT_MODE_HDR,
+  OUTPUT_ENCODING_DISPLAY,
+  OUTPUT_ENCODING_LINEAR,
+  outputEncodingForHDRMode,
+  type OutputEncodingCode,
   DISPLAY_TRANSFER_LINEAR,
   LUT_1D_SIZE,
   RGBA_CHANNELS,
@@ -102,6 +107,13 @@ export class Renderer implements RendererBackend {
 
   // Whether a half-float (RGBA16F) drawing buffer is active via drawingBufferStorage
   private usingHalfFloatBackbuffer = false;
+
+  // Output encoding forced while rendering into an offscreen FBO for readback
+  // (scopes, HDR blits). null = derive from hdrOutputMode for the drawing buffer.
+  private _readbackEncoding: OutputEncodingCode | null = null;
+
+  // Last `u_outputEncoding` code bound during a render call (test-only).
+  private _lastOutputEncodingCode: OutputEncodingCode = OUTPUT_ENCODING_DISPLAY;
 
   // Context loss tracking — when true, all GL calls are skipped until restored
   private _contextLost = false;
@@ -620,6 +632,12 @@ export class Renderer implements RendererBackend {
     // Set HDR output mode uniform
     this.displayShader.setUniformInt('u_outputMode', this.hdrOutputMode === 'sdr' ? OUTPUT_MODE_SDR : OUTPUT_MODE_HDR);
 
+    // Encode for the surface the pixels land on: the drawing buffer's HDR mode,
+    // or the encoding a readback caller asked for.
+    const outputEncoding = this._readbackEncoding ?? outputEncodingForHDRMode(this.hdrOutputMode);
+    this.displayShader.setUniformInt('u_outputEncoding', outputEncoding);
+    this._lastOutputEncodingCode = outputEncoding;
+
     // Set HDR headroom for tone mapping (1.0 for SDR, >1.0 for HDR displays)
     this.displayShader.setUniform('u_hdrHeadroom', this.hdrOutputMode === 'sdr' ? 1.0 : this.hdrHeadroom);
 
@@ -631,6 +649,10 @@ export class Renderer implements RendererBackend {
       inputTransferCode = INPUT_TRANSFER_PQ;
     } else if (image.metadata.transferFunction === 'smpte240m') {
       inputTransferCode = INPUT_TRANSFER_SMPTE240M;
+    } else if (image.videoFrame && image.metadata.transferFunction === 'srgb') {
+      // HDR VideoFrames resized through a display-p3 float16 canvas carry
+      // extended-range sRGB-curve values; decode them to linear like HLG/PQ.
+      inputTransferCode = INPUT_TRANSFER_SRGB_TO_LINEAR;
     } else if (image.metadata.transferFunction === 'linear') {
       // Linear-light data — no EOTF curve. Maps to INPUT_TRANSFER_SRGB
       // (which the shader treats as identity per RenderConfig comment).
@@ -993,17 +1015,12 @@ export class Renderer implements RendererBackend {
       gl.bindTexture(gl.TEXTURE_2D, this._videoFrameTexture);
 
       try {
-        // Set unpackColorSpace for best color fidelity — only when not already set.
-        // During HDR playback every frame is a VideoFrame, so this avoids
-        // redundant try/catch toggles (~0.5ms saved per frame).
-        if (this._currentUnpackColorSpace !== 'display-p3') {
-          try {
-            gl.unpackColorSpace = 'display-p3';
-            this._currentUnpackColorSpace = 'display-p3';
-          } catch (e) {
-            log.warn('Browser does not support unpackColorSpace:', e);
-          }
-        }
+        // Upload the frame's signal values untouched. The shader decodes the
+        // transfer (PQ/HLG/sRGB curve) and converts primaries from the frame
+        // metadata; letting the browser color-convert the frame first (the
+        // default UNPACK_COLORSPACE_CONVERSION_WEBGL) would apply the EOTF a
+        // second time.
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
 
         PerfTrace.begin('texImage2D(VideoFrame)');
         gl.texImage2D(
@@ -1015,20 +1032,18 @@ export class Renderer implements RendererBackend {
           image.videoFrame, // VideoFrame is a valid TexImageSource
         );
         PerfTrace.end('texImage2D(VideoFrame)');
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
 
         // Do NOT close the VideoFrame here — the IPImage may be held in an
         // LRU cache (e.g. VideoSourceNode.hdrFrameCache) and could be re-uploaded
         // after a WebGL context loss.  The cache's eviction callback owns the
         // VideoFrame lifecycle.
 
-        // Do NOT reset unpackColorSpace here — during HDR playback the next
-        // frame will also be a VideoFrame needing 'display-p3'. The SDR path
-        // (renderSDRFrame) resets to 'srgb' when needed.
-
         // Do NOT set textureNeedsUpdate = false — since the texture is shared,
         // the next frame's IPImage must re-upload its own VideoFrame data.
         return;
       } catch (e) {
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
         // VideoFrame texImage2D not supported — attempt SDR fallback by extracting
         // sRGB pixel data through a 2D canvas before releasing the VideoFrame.
         log.warn('VideoFrame texImage2D failed, attempting SDR fallback:', e);
@@ -1490,6 +1505,27 @@ export class Renderer implements RendererBackend {
   }
 
   /**
+   * Returns the last `u_outputEncoding` code bound during a render call
+   * (`OUTPUT_ENCODING_*` in RenderConfig).
+   *
+   * @internal Test-only. Not part of the public API.
+   */
+  getLastOutputEncodingCodeForTest(): OutputEncodingCode {
+    return this._lastOutputEncodingCode;
+  }
+
+  /**
+   * Color space of the pixels this renderer writes to its drawing buffer.
+   * Output primaries must be chosen from this, not from the display gamut:
+   * a P3 display behind an 'srgb' drawing buffer still needs sRGB primaries.
+   */
+  getOutputColorSpace(): 'srgb' | 'display-p3' | 'rec2020' {
+    if (this.hdrOutputMode === 'hlg' || this.hdrOutputMode === 'pq') return 'rec2020';
+    const cs = this.gl && 'drawingBufferColorSpace' in this.gl ? this.gl.drawingBufferColorSpace : 'srgb';
+    return cs === 'display-p3' ? 'display-p3' : 'srgb';
+  }
+
+  /**
    * Render the current image through the full shader pipeline at reduced
    * resolution for scope analysis (histogram, waveform, vectorscope).
    *
@@ -1623,6 +1659,8 @@ export class Renderer implements RendererBackend {
     }
     // SDR: clamp output to [0,1] for RGBA8 FBO; HDR: preserve >1.0 values
     this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
+    // Scopes measure linear data, independent of the drawing buffer's encoding.
+    this._readbackEncoding = OUTPUT_ENCODING_LINEAR;
 
     const readType = isSDR ? gl.UNSIGNED_BYTE : gl.FLOAT;
     const readBuf = isSDR ? this.scopePBOCachedPixelsUint8! : this.scopePBOCachedPixels!;
@@ -1666,6 +1704,7 @@ export class Renderer implements RendererBackend {
       }
     } finally {
       this.hdrOutputMode = prevHdrMode;
+      this._readbackEncoding = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
       this.stateManager.setDisplayColorState(prevDisplayState);
@@ -1703,6 +1742,8 @@ export class Renderer implements RendererBackend {
       this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
     }
     this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
+    // Scopes measure linear data, independent of the drawing buffer's encoding.
+    this._readbackEncoding = OUTPUT_ENCODING_LINEAR;
 
     const pixelCount = width * height * RGBA_CHANNELS;
     const pixels: Float32Array | Uint8Array = isSDR ? new Uint8Array(pixelCount) : new Float32Array(pixelCount);
@@ -1716,6 +1757,7 @@ export class Renderer implements RendererBackend {
       gl.readPixels(0, 0, width, height, gl.RGBA, readType, pixels);
     } finally {
       this.hdrOutputMode = prevHdrMode;
+      this._readbackEncoding = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
       this.stateManager.setDisplayColorState(prevDisplayState);
@@ -1912,9 +1954,17 @@ export class Renderer implements RendererBackend {
    * Row order: bottom-to-top (WebGL convention). The caller (WGSL shader) flips
    * via UV coordinates, so no CPU row-flip is performed here.
    *
+   * `encoding` is the signal the destination canvas expects (see
+   * `outputEncodingForCanvasColorSpace`); it defaults to linear light.
+   *
    * Returns null if EXT_color_buffer_float is unavailable or rendering fails.
    */
-  renderImageToFloat(image: IPImage, width: number, height: number): Float32Array | null {
+  renderImageToFloat(
+    image: IPImage,
+    width: number,
+    height: number,
+    encoding: OutputEncodingCode = OUTPUT_ENCODING_LINEAR,
+  ): Float32Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader || this._contextLost) return null;
 
@@ -1941,6 +1991,7 @@ export class Renderer implements RendererBackend {
     // distinction matters. Without this, values > 1.0 are clamped,
     // defeating the purpose of the RGBA16F FBO.
     this.hdrOutputMode = 'hlg';
+    this._readbackEncoding = encoding;
 
     // Bind FBO and render
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdrFBO);
@@ -1953,6 +2004,7 @@ export class Renderer implements RendererBackend {
 
     // Restore HDR output mode immediately after rendering
     this.hdrOutputMode = prevHdrMode;
+    this._readbackEncoding = null;
 
     // Read float pixels (reuse buffer across frames when dimensions match)
     const pixelCount = width * height * RGBA_CHANNELS;
@@ -1998,7 +2050,12 @@ export class Renderer implements RendererBackend {
    * Trade-off: 1 frame of latency (imperceptible at 30-60fps) in exchange
    * for eliminating the 8-25ms GPU sync stall per frame.
    */
-  renderImageToFloatAsync(image: IPImage, width: number, height: number): Float32Array | null {
+  renderImageToFloatAsync(
+    image: IPImage,
+    width: number,
+    height: number,
+    encoding: OutputEncodingCode = OUTPUT_ENCODING_LINEAR,
+  ): Float32Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader || this._contextLost) return null;
 
@@ -2022,7 +2079,7 @@ export class Renderer implements RendererBackend {
 
     // If PBO allocation failed, fall back to sync path
     if (!this.hdrPBOs[0] || !this.hdrPBOs[1]) {
-      return this.renderImageToFloat(image, width, height);
+      return this.renderImageToFloat(image, width, height, encoding);
     }
 
     const pixelCount = width * height * RGBA_CHANNELS;
@@ -2034,6 +2091,7 @@ export class Renderer implements RendererBackend {
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const prevHdrMode = this.hdrOutputMode;
     this.hdrOutputMode = 'hlg';
+    this._readbackEncoding = encoding;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdrFBO);
     gl.viewport(0, 0, width, height);
@@ -2041,6 +2099,7 @@ export class Renderer implements RendererBackend {
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.renderImage(image, 0, 0, 1, 1);
     this.hdrOutputMode = prevHdrMode;
+    this._readbackEncoding = null;
 
     // Step 2: Consume any PBO whose GPU fence has signaled.
     // Only reads when getSyncParameter confirms SIGNALED — avoids the
@@ -2599,15 +2658,18 @@ export class Renderer implements RendererBackend {
     // Upload the SDR source to the texture
     gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
 
-    // Ensure unpackColorSpace is 'srgb' for SDR sources.
-    // The HDR VideoFrame path sets it to 'display-p3' and leaves it there
-    // for performance; reset here when switching back to SDR.
-    if (this._currentUnpackColorSpace !== 'srgb') {
+    // Upload SDR sources in the drawing buffer's color space. SDR frames skip
+    // the primaries matrices (their values are display-encoded), so on a
+    // display-p3 buffer the browser must convert sRGB sources to P3 on upload;
+    // otherwise sRGB colors are shown as P3 and look oversaturated.
+    const sdrUnpackColorSpace: PredefinedColorSpace =
+      this.getOutputColorSpace() === 'display-p3' ? 'display-p3' : 'srgb';
+    if (this._currentUnpackColorSpace !== sdrUnpackColorSpace) {
       try {
-        gl.unpackColorSpace = 'srgb';
-        this._currentUnpackColorSpace = 'srgb';
+        gl.unpackColorSpace = sdrUnpackColorSpace;
+        this._currentUnpackColorSpace = sdrUnpackColorSpace;
       } catch (e) {
-        log.debug('gl.unpackColorSpace reset to srgb not supported:', e);
+        log.debug(`gl.unpackColorSpace='${sdrUnpackColorSpace}' not supported:`, e);
       }
     }
 
@@ -2643,8 +2705,12 @@ export class Renderer implements RendererBackend {
     this.scaleBuffer[1] = 1;
     this.displayShader.setUniform('u_scale', this.scaleBuffer);
 
-    // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
+    // SDR output: always clamp to [0,1], sRGB input (no special EOTF).
+    // SDR sources are already display-encoded, so they keep the display
+    // encoding path (with u_displayTransfer forced to linear below).
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
+    this.displayShader.setUniformInt('u_outputEncoding', OUTPUT_ENCODING_DISPLAY);
+    this._lastOutputEncodingCode = OUTPUT_ENCODING_DISPLAY;
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
     this._lastInputTransferCode = INPUT_TRANSFER_SRGB;
     // Apply user rotation/flip (SDR has no video rotation metadata)

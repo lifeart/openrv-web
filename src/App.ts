@@ -23,7 +23,7 @@ import { AppNetworkBridge } from './AppNetworkBridge';
 import { AppPersistenceManager } from './AppPersistenceManager';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { AppSessionBridge } from './AppSessionBridge';
-import { detectDisplayCapabilities, type DisplayCapabilities } from './color/DisplayCapabilities';
+import { detectDisplayCapabilities, watchDisplayChanges, type DisplayCapabilities } from './color/DisplayCapabilities';
 import { Session } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
@@ -704,6 +704,15 @@ export class App {
       viewerQuery: { isInteracting: () => this.viewer.isInteracting() },
     });
     this.wiringSubscriptions.add(() => this.virtualSliderController?.dispose());
+
+    // Follow the display when the window moves between SDR and HDR (or sRGB
+    // and P3) displays: re-pick the HDR output mode, headroom and controls.
+    this.wiringSubscriptions.add(
+      watchDisplayChanges(this.displayCapabilities, (caps) => {
+        this.viewer.updateDisplayCapabilities(caps);
+        this.controls.toneMappingControl.refreshCapabilities(caps);
+      }),
+    );
 
     // Timeline editor wiring (EDL/SequenceGroup integration)
     this.timelineEditorService.bindEvents();

@@ -3672,3 +3672,106 @@ describe('Renderer last-input-transfer accessor (MED-51)', () => {
     expect(renderer.getLastInputTransferCodeForTest()).toBe(1);
   });
 });
+
+describe('Renderer HDR output encoding contract', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  function hdrImage(tf: 'pq' | 'hlg' = 'pq'): IPImage {
+    const img = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'float32' });
+    img.metadata.transferFunction = tf;
+    return img;
+  }
+
+  it('REN-ENC-001: SDR drawing buffer keeps the display-transfer encoding', () => {
+    const gl = initRendererWithMockGL(renderer);
+    renderer.renderImage(hdrImage());
+    expect(renderer.getLastOutputEncodingCodeForTest()).toBe(0);
+    expect(getLastUniform1i(gl, 'u_outputEncoding')).toBe(0);
+  });
+
+  it('REN-ENC-002: extended float16 buffer encodes extended sRGB', () => {
+    initRendererWithMockGL(renderer, { supportP3: true, supportDrawingBufferStorage: true });
+    renderer.setHDROutputMode(
+      'extended',
+      makeCaps({ displayHDR: true, webglP3: true, webglDrawingBufferStorage: true, canvasExtendedHDR: true }),
+    );
+    renderer.renderImage(hdrImage());
+    expect(renderer.getLastOutputEncodingCodeForTest()).toBe(2);
+  });
+
+  it('REN-ENC-003: rec2100-hlg buffer encodes HLG, rec2100-pq encodes PQ', () => {
+    initRendererWithMockGL(renderer, { supportHLG: true, supportPQ: true });
+    const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
+    renderer.setHDROutputMode('hlg', caps);
+    renderer.renderImage(hdrImage());
+    expect(renderer.getLastOutputEncodingCodeForTest()).toBe(4);
+    renderer.setHDROutputMode('pq', caps);
+    renderer.renderImage(hdrImage());
+    expect(renderer.getLastOutputEncodingCodeForTest()).toBe(3);
+  });
+
+  it('REN-ENC-004: float readback uses the requested encoding and restores the buffer encoding', () => {
+    initRendererWithMockGL(renderer);
+    const gl = renderer.getGL() as unknown as Record<string, unknown>;
+    gl.getExtension = vi.fn(() => ({}));
+    gl.readPixels = vi.fn();
+    gl.getError = vi.fn(() => 0);
+    gl.bindFramebuffer = vi.fn();
+    gl.NO_ERROR = 0;
+    const internals = renderer as unknown as { ensureHDRFBO: () => void; hdrFBO: unknown };
+    internals.ensureHDRFBO = vi.fn(() => {
+      internals.hdrFBO = {};
+    });
+
+    renderer.renderImageToFloat(hdrImage(), 4, 4, 2);
+    expect(renderer.getLastOutputEncodingCodeForTest()).toBe(2);
+    renderer.renderImageToFloat(hdrImage(), 4, 4);
+    expect(renderer.getLastOutputEncodingCodeForTest()).toBe(1); // linear by default
+
+    // Back on the (SDR) drawing buffer
+    renderer.renderImage(hdrImage());
+    expect(renderer.getLastOutputEncodingCodeForTest()).toBe(0);
+  });
+
+  it('REN-ENC-005: output color space follows the drawing buffer, not the display gamut', () => {
+    initRendererWithMockGL(renderer);
+    expect(renderer.getOutputColorSpace()).toBe('srgb');
+
+    const p3 = new Renderer();
+    initRendererWithMockGL(p3, { supportP3: true });
+    p3.setHDROutputMode('sdr', makeCaps({ webglP3: true }));
+    (p3.getGL() as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace = 'display-p3';
+    expect(p3.getOutputColorSpace()).toBe('display-p3');
+
+    const hlg = new Renderer();
+    initRendererWithMockGL(hlg, { supportHLG: true });
+    hlg.setHDROutputMode('hlg', makeCaps({ displayHDR: true, webglHLG: true }));
+    expect(hlg.getOutputColorSpace()).toBe('rec2020');
+  });
+
+  it('REN-ENC-006: HDR VideoFrames upload raw signal values (no browser color conversion)', () => {
+    const gl = initRendererWithMockGL(renderer, { supportHLG: true });
+    const img = hdrImage('pq');
+    img.managedVideoFrame = { frame: { close: vi.fn() }, release: vi.fn() } as unknown as IPImage['managedVideoFrame'];
+    (renderer as unknown as { updateTexture: (i: IPImage) => void }).updateTexture(img);
+
+    const calls = (gl.pixelStorei as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0]).toEqual([gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE]);
+    // Restored for every other upload path
+    expect(calls[calls.length - 1]).toEqual([gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL]);
+  });
+
+  it('REN-ENC-007: resized VideoFrames labelled sRGB-curve decode with the sRGB EOTF', () => {
+    initRendererWithMockGL(renderer, { supportHLG: true });
+    const img = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'float32' });
+    img.metadata.transferFunction = 'srgb';
+    img.metadata.colorPrimaries = 'p3';
+    img.managedVideoFrame = { frame: { close: vi.fn() }, release: vi.fn() } as unknown as IPImage['managedVideoFrame'];
+    renderer.renderImage(img);
+    expect(renderer.getLastInputTransferCodeForTest()).toBe(5);
+  });
+});

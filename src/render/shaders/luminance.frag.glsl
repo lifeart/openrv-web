@@ -10,6 +10,15 @@
       // Rec. 709 luminance coefficients
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
+      // Input decodes mirror viewer.frag.glsl so the statistics describe the
+      // same linear values the viewer pipeline works on (1.0 = 203 cd/m² for
+      // both HLG and PQ). Keep in sync with hlgToLinear / pqToLinear there.
+      const float HDR_REFERENCE_WHITE_NITS = 203.0;
+      const float HLG_NOMINAL_PEAK_NITS = 1000.0;
+      const vec3 LUMA_BT2020 = vec3(0.2627, 0.6780, 0.0593);
+      const float HLG_OOTF_THRESH = 0.01;
+      const float HLG_OOTF_SLOPE = 39.810717;
+
       // HLG OETF^-1 (signal -> scene linear)
       float hlgOETFInverse(float e) {
         const float a = 0.17883277;
@@ -22,7 +31,14 @@
         }
       }
 
-      // PQ EOTF (signal -> display linear, normalized to [0,1])
+      vec3 hlgToLinear(vec3 signal) {
+        vec3 scene = vec3(hlgOETFInverse(signal.r), hlgOETFInverse(signal.g), hlgOETFInverse(signal.b));
+        float ys = dot(scene, LUMA_BT2020);
+        float ootfGain = (ys < HLG_OOTF_THRESH) ? ys * HLG_OOTF_SLOPE : pow(ys, 0.2);
+        return scene * ootfGain * (HLG_NOMINAL_PEAK_NITS / HDR_REFERENCE_WHITE_NITS);
+      }
+
+      // PQ EOTF (signal -> absolute linear, 1.0 = 10000 cd/m²)
       float pqEOTF(float e) {
         const float m1 = 0.1593017578125;
         const float m2 = 78.84375;
@@ -41,9 +57,9 @@
 
         // Apply input EOTF to get linear light
         if (u_inputTransfer == 1) {
-          color = vec3(hlgOETFInverse(color.r), hlgOETFInverse(color.g), hlgOETFInverse(color.b));
+          color = hlgToLinear(color);
         } else if (u_inputTransfer == 2) {
-          color = vec3(pqEOTF(color.r), pqEOTF(color.g), pqEOTF(color.b));
+          color = vec3(pqEOTF(color.r), pqEOTF(color.g), pqEOTF(color.b)) * (10000.0 / HDR_REFERENCE_WHITE_NITS);
         }
 
         float luminance = dot(color, LUMA);

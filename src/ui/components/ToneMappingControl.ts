@@ -37,6 +37,8 @@ import { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/t
 export interface ToneMappingControlEvents extends EventMap {
   stateChanged: ToneMappingState;
   hdrModeChanged: { mode: HDROutputMode; previousMode: HDROutputMode };
+  /** Display peak luminance in cd/m², or null for automatic. */
+  hdrPeakNitsChanged: { peakNits: number | null };
 }
 
 /**
@@ -62,6 +64,9 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private hdrOutputMode: HDROutputMode = 'sdr';
   private hdrSection: HTMLElement | null = null;
   private hdrModeButtons: Map<HDROutputMode, HTMLButtonElement> = new Map();
+  private hdrModeSource: (() => HDROutputMode) | null = null;
+  private hdrPeakInput: HTMLInputElement | null = null;
+  private hdrPeakNits: number | null = null;
 
   constructor(capabilities?: DisplayCapabilities) {
     super();
@@ -247,8 +252,9 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
   private createHDRSection(): void {
     const caps = this.capabilities;
-    // Only show when displayHDR is true AND at least one of webglHLG/webglPQ is true
-    if (!caps || !caps.displayHDR || (!caps.webglHLG && !caps.webglPQ)) return;
+    // Only show on an HDR display with at least one native WebGL HDR output.
+    const extendedAvailable = !!caps?.webglDrawingBufferStorage && !!caps?.canvasExtendedHDR;
+    if (!caps || !caps.displayHDR || (!caps.webglHLG && !caps.webglPQ && !extendedAvailable)) return;
 
     this.hdrSection = document.createElement('div');
     this.hdrSection.dataset.testid = 'hdr-output-section';
@@ -279,6 +285,12 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       { key: 'sdr', label: 'SDR', description: 'Standard dynamic range', available: true },
       { key: 'hlg', label: 'HLG', description: 'Hybrid Log-Gamma (rec2100-hlg)', available: caps.webglHLG },
       { key: 'pq', label: 'PQ', description: 'Perceptual Quantizer (rec2100-pq)', available: caps.webglPQ },
+      {
+        key: 'extended',
+        label: 'Extended',
+        description: 'Extended-range sRGB / P3 (float16 canvas)',
+        available: extendedAvailable,
+      },
     ];
 
     for (const mode of hdrModes) {
@@ -337,8 +349,101 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     }
 
     this.hdrSection.appendChild(hdrList);
+    this.hdrSection.appendChild(this.createHDRPeakRow());
     this.dropdown.appendChild(this.hdrSection);
     this.updateHDRModeButtons();
+  }
+
+  /**
+   * Display peak brightness input. Empty = automatic (system-reported
+   * headroom, else a 1000 cd/m² default). Headroom = peak / 203 cd/m².
+   */
+  private createHDRPeakRow(): HTMLElement {
+    const row = document.createElement('label');
+    row.dataset.testid = 'hdr-peak-nits-row';
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    `;
+    row.title = 'Peak brightness of this HDR display in nits. Leave empty to use the system value or 1000.';
+
+    const label = document.createElement('span');
+    label.textContent = 'Display peak (nits)';
+    row.appendChild(label);
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '80';
+    input.max = '10000';
+    input.step = '50';
+    input.placeholder = 'Auto';
+    input.dataset.testid = 'hdr-peak-nits-input';
+    input.setAttribute('aria-label', 'HDR display peak brightness in nits (empty for automatic)');
+    input.style.cssText = `
+      width: 70px;
+      padding: 2px 4px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-secondary);
+      border-radius: 3px;
+      color: var(--text-primary);
+      font-size: 11px;
+    `;
+    input.value = this.hdrPeakNits === null ? '' : String(this.hdrPeakNits);
+    input.addEventListener('change', () => {
+      const raw = input.value.trim();
+      const parsed = raw === '' ? null : Number(raw);
+      const peakNits = parsed === null || !Number.isFinite(parsed) ? null : Math.min(10000, Math.max(80, parsed));
+      input.value = peakNits === null ? '' : String(peakNits);
+      if (peakNits === this.hdrPeakNits) return;
+      this.hdrPeakNits = peakNits;
+      this.emit('hdrPeakNitsChanged', { peakNits });
+    });
+    this.hdrPeakInput = input;
+    row.appendChild(input);
+    return row;
+  }
+
+  /** Set the displayed peak-nits value without emitting (null = automatic). */
+  setHDRPeakNits(peakNits: number | null): void {
+    this.hdrPeakNits = peakNits;
+    if (this.hdrPeakInput) {
+      this.hdrPeakInput.value = peakNits === null ? '' : String(peakNits);
+    }
+  }
+
+  /**
+   * Read the renderer's actual HDR output mode on demand so the buttons never
+   * disagree with the drawing buffer (the renderer can pick a mode on its own
+   * at startup or after a display change).
+   */
+  setHDROutputModeSource(source: () => HDROutputMode): void {
+    this.hdrModeSource = source;
+    this.syncHDROutputModeFromSource();
+  }
+
+  private syncHDROutputModeFromSource(): void {
+    if (this.hdrModeSource) {
+      this.syncHDROutputMode(this.hdrModeSource());
+    }
+  }
+
+  /**
+   * Rebuild the HDR section after display capabilities changed (e.g. the
+   * window moved between an SDR and an HDR display).
+   */
+  refreshCapabilities(capabilities?: DisplayCapabilities): void {
+    if (capabilities) this.capabilities = capabilities;
+    this.hdrSection?.remove();
+    this.hdrSection = null;
+    this.hdrModeButtons.clear();
+    this.hdrPeakInput = null;
+    this.createHDRSection();
+    this.syncHDROutputModeFromSource();
   }
 
   private createParameterSection(): HTMLElement {
@@ -550,6 +655,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
    * Set HDR output mode
    */
   setHDROutputMode(mode: HDROutputMode): void {
+    this.syncHDROutputModeFromSource();
     if (this.hdrOutputMode === mode) return;
     const previousMode = this.hdrOutputMode;
     this.hdrOutputMode = mode;
@@ -625,6 +731,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     this.isDropdownOpen = !this.isDropdownOpen;
     this.toggleButton.setAttribute('aria-expanded', this.isDropdownOpen ? 'true' : 'false');
     if (this.isDropdownOpen) {
+      this.syncHDROutputModeFromSource();
       if (!document.body.contains(this.dropdown)) {
         document.body.appendChild(this.dropdown);
       }

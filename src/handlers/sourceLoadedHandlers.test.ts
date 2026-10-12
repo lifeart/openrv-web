@@ -316,7 +316,8 @@ describe('handleSourceLoaded', () => {
     );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
-    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+    // No creative gamma on top of the sRGB display transfer (double gamma).
+    expect(context.getColorControls().setAdjustments).not.toHaveBeenCalledWith({ gamma: 2.2 });
   });
 
   it('SLH-U008: auto-configures tone mapping for HDR content from videoSourceNode', () => {
@@ -375,7 +376,7 @@ describe('handleSourceLoaded', () => {
       },
     });
 
-    // First load: HDR on SDR display -> auto ACES + gamma 2.2
+    // First load: HDR on SDR display -> auto ACES (no extra gamma)
     handleSourceLoaded(
       context,
       updateInfoPanel,
@@ -386,7 +387,8 @@ describe('handleSourceLoaded', () => {
       updateVectorscope,
     );
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
-    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+    // No creative gamma on top of the sRGB display transfer (double gamma).
+    expect(context.getColorControls().setAdjustments).not.toHaveBeenCalledWith({ gamma: 2.2 });
 
     // Switch to SDR source
     (context.getSession() as any).currentSource = {
@@ -406,7 +408,7 @@ describe('handleSourceLoaded', () => {
     );
 
     expect(context.getToneMappingControl().setState).toHaveBeenLastCalledWith({ enabled: false, operator: 'off' });
-    expect(context.getColorControls().setAdjustments).toHaveBeenLastCalledWith({ gamma: 1 });
+    expect(context.getColorControls().setAdjustments).not.toHaveBeenCalled();
   });
 
   it('SLH-U030: manual tone mapping/gamma changes are preserved when switching to SDR', () => {
@@ -585,7 +587,8 @@ describe('handleSourceLoaded', () => {
 
     // SDR display: tone mapping enabled to compress HDR for display
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
-    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+    // No creative gamma on top of the sRGB display transfer (double gamma).
+    expect(context.getColorControls().setAdjustments).not.toHaveBeenCalledWith({ gamma: 2.2 });
     // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, 4.0);
   });
@@ -895,7 +898,7 @@ describe('handleSourceLoaded', () => {
     spy.mockRestore();
   });
 
-  it('SLH-U021c: SDR display + JPEG gainmap → ACES + gamma 2.2 (unchanged)', () => {
+  it('SLH-U021c: SDR display + JPEG gainmap → ACES, no extra gamma', () => {
     const context = createMockContext({
       currentSource: {
         name: 'photo.jpg',
@@ -917,7 +920,8 @@ describe('handleSourceLoaded', () => {
     );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
-    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+    // No creative gamma on top of the sRGB display transfer (double gamma).
+    expect(context.getColorControls().setAdjustments).not.toHaveBeenCalledWith({ gamma: 2.2 });
     // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, 4.0);
   });
