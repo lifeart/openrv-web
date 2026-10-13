@@ -22,6 +22,7 @@ declare global {
       getPixelProbeState: () => PixelProbeState;
       getFalseColorState: () => FalseColorState;
       getToneMappingState: () => ToneMappingTestState;
+      getHDROutputState: () => HDROutputTestState;
       getSafeAreasState: () => SafeAreasState;
       getTimecodeOverlayState: () => TimecodeOverlayState;
       getZebraStripesState: () => ZebraStripesState;
@@ -371,6 +372,22 @@ export interface FalseColorState {
 export interface ToneMappingTestState {
   enabled: boolean;
   operator: 'off' | 'reinhard' | 'filmic' | 'aces';
+}
+
+/** HDR output path as the viewer and renderer see it (for HDR output E2E checks). */
+export interface HDROutputTestState {
+  displayHDR: boolean;
+  displayGamut: 'srgb' | 'p3' | 'rec2020' | null;
+  activeHDRMode: string | null;
+  hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended';
+  headroom: number;
+  isWorker: boolean;
+  /** Drawing-buffer color space reported by the main-thread Renderer (null on the worker). */
+  outputColorSpace: 'srgb' | 'display-p3' | 'rec2020' | null;
+  /** u_outputEncoding of the last main-thread render (null on the worker or before a render). */
+  lastOutputEncoding: number | null;
+  webgpuBlitReady: boolean;
+  canvas2dBlitReady: boolean;
 }
 
 export interface SafeAreasState {
@@ -853,6 +870,26 @@ export function exposeForTesting(app: App): void {
       },
       resolveComponent,
     ),
+
+    getHDROutputState: (): HDROutputTestState => {
+      const viewer = resolveComponent('app.viewer', () => appAny.viewer);
+      const manager = viewer?.glRendererManager;
+      const renderer = viewer?.getGLRenderer?.();
+      const caps = manager?.capabilities;
+      const isWorker = renderer?.isAsync === true;
+      return {
+        displayHDR: caps?.displayHDR ?? false,
+        displayGamut: caps?.displayGamut ?? null,
+        activeHDRMode: caps?.activeHDRMode ?? null,
+        hdrOutputMode: viewer?.getHDROutputMode?.() ?? 'sdr',
+        headroom: viewer?.getHDRHeadroom?.() ?? 1,
+        isWorker,
+        outputColorSpace: isWorker ? null : (renderer?.getOutputColorSpace?.() ?? null),
+        lastOutputEncoding: isWorker ? null : (renderer?.getLastOutputEncodingCodeForTest?.() ?? null),
+        webgpuBlitReady: manager?.isWebGPUBlitReady ?? false,
+        canvas2dBlitReady: manager?.isCanvas2DBlitReady ?? false,
+      };
+    },
 
     getSafeAreasState: createStateGetter<SafeAreasState>(
       'app.viewer.getSafeAreasOverlay',

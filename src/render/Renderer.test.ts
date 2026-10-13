@@ -3774,4 +3774,34 @@ describe('Renderer HDR output encoding contract', () => {
     renderer.renderImage(img);
     expect(renderer.getLastInputTransferCodeForTest()).toBe(5);
   });
+
+  it('REN-ENC-008: switching the output mode (HLG to PQ) asks for a redraw of a still image', () => {
+    initRendererWithMockGL(renderer, { supportHLG: true, supportPQ: true });
+    const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
+    renderer.setHDROutputMode('hlg', caps);
+    renderer.renderImage(hdrImage());
+    expect(renderer.hasPendingStateChanges()).toBe(false);
+
+    // No shader state changes between HLG and PQ, but the frame is encoded for HLG.
+    renderer.setHDROutputMode('pq', caps);
+    expect(renderer.hasPendingStateChanges()).toBe(true);
+    renderer.renderImage(hdrImage());
+    expect(renderer.hasPendingStateChanges()).toBe(false);
+
+    // Re-selecting the same mode is not a change.
+    renderer.setHDROutputMode('pq', caps);
+    expect(renderer.hasPendingStateChanges()).toBe(false);
+  });
+
+  it('REN-ENC-009: a new headroom asks for a redraw; the same headroom does not', () => {
+    initRendererWithMockGL(renderer);
+    renderer.renderImage(hdrImage());
+    renderer.setHDRHeadroom(1);
+    expect(renderer.hasPendingStateChanges()).toBe(false);
+    renderer.setHDRHeadroom(600 / 203);
+    expect(renderer.hasPendingStateChanges()).toBe(true);
+    renderer.renderImage(hdrImage());
+    renderer.setHDRHeadroom(600 / 203);
+    expect(renderer.hasPendingStateChanges()).toBe(false);
+  });
 });
