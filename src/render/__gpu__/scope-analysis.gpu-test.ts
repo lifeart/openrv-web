@@ -169,7 +169,11 @@ describe('Scope analysis and scene-referred diagnostics (real GPU)', () => {
         gl.uniform1f(gl.getUniformLocation(program, 'u_displayBrightness'), 2.0);
         u1i('u_outputPrimariesEnabled', 1);
         // Swap R and B (column-major)
-        gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_outputPrimariesMatrix'), false, [0, 0, 1, 0, 1, 0, 1, 0, 0]);
+        gl.uniformMatrix3fv(
+          gl.getUniformLocation(program, 'u_outputPrimariesMatrix'),
+          false,
+          [0, 0, 1, 0, 1, 0, 1, 0, 0],
+        );
         u1i('u_channelMode', 1);
       });
       expectPixel(scope, W, 0, 0, { r: 0.2, g: 0.4, b: 0.6, a: 1 }, EPSILON.HDR_HALF);
