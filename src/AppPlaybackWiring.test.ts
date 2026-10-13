@@ -169,7 +169,8 @@ function createMockSession() {
 
 function createMockViewer() {
   return {
-    exportFrame: vi.fn(),
+    exportFrame: vi.fn().mockResolvedValue(undefined),
+    exportFrameEXR: vi.fn().mockResolvedValue(true),
     exportSourceFrame: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     renderFrameToCanvas: vi.fn(),
@@ -341,6 +342,42 @@ describe('wirePlaybackControls', () => {
       quality: 0.9,
     });
     expect(viewer.exportFrame).toHaveBeenCalledWith('png', false, 0.9);
+  });
+
+  it('PW-005b: exrExportRequested calls viewer.exportFrameEXR()', async () => {
+    const exportControl = headerBar.getExportControl();
+    showAlertSpy.mockClear();
+    exportControl.emit('exrExportRequested', undefined);
+    expect(viewer.exportFrameEXR).toHaveBeenCalled();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(showAlertSpy).not.toHaveBeenCalled();
+  });
+
+  it('PW-005c: EXR export the GL pipeline cannot render shows a warning', async () => {
+    const exportControl = headerBar.getExportControl();
+    showAlertSpy.mockClear();
+    viewer.exportFrameEXR.mockResolvedValueOnce(false);
+    exportControl.emit('exrExportRequested', undefined);
+    await vi.waitFor(() =>
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('EXR export'),
+        expect.objectContaining({ type: 'warning' }),
+      ),
+    );
+  });
+
+  it('PW-005d: a failed frame export is reported', async () => {
+    const exportControl = headerBar.getExportControl();
+    showAlertSpy.mockClear();
+    viewer.exportFrame.mockRejectedValueOnce(new Error('boom'));
+    exportControl.emit('exportRequested', { format: 'png', includeAnnotations: false, quality: 0.9 });
+    await vi.waitFor(() =>
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('boom'),
+        expect.objectContaining({ type: 'error' }),
+      ),
+    );
   });
 
   it('PW-006: copyRequested calls viewer.copyFrameToClipboard(true)', () => {

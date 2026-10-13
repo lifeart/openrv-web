@@ -1110,6 +1110,32 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Decode an HDR frame at the full source resolution for export.
+   *
+   * Unlike fetchHDRFrame(), the frame is not resized to the display size and
+   * not cached: the caller owns the returned IPImage (and its VideoFrame) and
+   * must close() it. Returns null for non-HDR sources or on decode failure.
+   */
+  async fetchHDRFrameForExport(frame: number): Promise<IPImage | null> {
+    if (!this.isHDRVideo || !this.useMediabunny || !this.frameExtractor) return null;
+    let sample: { toVideoFrame(): VideoFrame; close(): void } | null = null;
+    try {
+      sample = await this.frameExtractor.getFrameHDR(frame);
+      if (!sample || !this.frameExtractor) return null;
+      return this.hdrSampleToIPImage(sample, frame, undefined);
+    } catch (e) {
+      log.warn('HDR frame decode for export failed:', e);
+      return null;
+    } finally {
+      // The VideoFrame now belongs to the IPImage; release the sample wrapper.
+      const owned = sample;
+      if (owned) {
+        probe('VideoSourceNode.exportSample.close', () => owned.close());
+      }
+    }
+  }
+
+  /**
    * Preload HDR frames around the current position.
    * Extracts and caches nearby frames sequentially (decoder is serialized).
    * Skips frames already in the LRU cache.

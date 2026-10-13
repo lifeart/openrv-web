@@ -164,7 +164,33 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   const exportControl = headerBar.getExportControl();
   subs.add(
     exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
-      viewer.exportFrame(format, includeAnnotations, quality);
+      viewer.exportFrame(format, includeAnnotations, quality).catch((err: unknown) => {
+        showAlert(`Frame export failed: ${err instanceof Error ? err.message : String(err)}`, {
+          type: 'error',
+          title: 'Export Failed',
+        });
+      });
+    }),
+  );
+  subs.add(
+    exportControl.on('exrExportRequested', () => {
+      viewer
+        .exportFrameEXR()
+        .then((exported) => {
+          if (!exported) {
+            showAlert(
+              'EXR export renders the frame through the WebGL2 pipeline, which could not render it here ' +
+                '(float render targets unavailable, or OCIO display or blur/noise reduction is active).',
+              { type: 'warning', title: 'EXR Export Unavailable' },
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          showAlert(`EXR export failed: ${err instanceof Error ? err.message : String(err)}`, {
+            type: 'error',
+            title: 'Export Failed',
+          });
+        });
     }),
   );
   subs.add(

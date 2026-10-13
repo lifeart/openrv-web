@@ -65,6 +65,25 @@ export function isHDRContent(image: IPImage): boolean {
   return false;
 }
 
+/** Display-encoded sources the SDR render path accepts. */
+export type SDRFrameSource = HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap;
+
+/**
+ * Target of an export render (see Renderer.renderFrameForExport).
+ *
+ * - `outputMode: 'sdr'` matches the SDR viewer: values are clamped to [0,1]
+ *   and tone mapping targets a headroom of 1.0.
+ * - `outputMode: 'hdr'` keeps values above 1.0 and uses the renderer's HDR
+ *   headroom, as the HDR viewer and float readbacks do.
+ */
+export interface ExportRenderTarget {
+  /** Final encode (`OUTPUT_ENCODING_*`), e.g. DISPLAY for 8-bit files, LINEAR for EXR. */
+  encoding: OutputEncodingCode;
+  outputMode: 'sdr' | 'hdr';
+  /** Color space of the exported pixels; selects the output primaries. */
+  outputColorSpace: 'srgb' | 'display-p3' | 'rec2020';
+}
+
 // Re-export TONE_MAPPING_OPERATOR_CODES for backward compatibility
 export { TONE_MAPPING_OPERATOR_CODES } from './ShaderStateManager';
 
@@ -608,6 +627,22 @@ export class Renderer implements RendererBackend {
       this.updateTexture(image);
     }
     return image.texture ?? null;
+  }
+
+  /**
+   * Delete the texture this renderer uploaded for `image` and clear the
+   * image's handle. Used when an image was drawn by a renderer other than the
+   * one that normally owns its texture (e.g. a main-thread export renderer).
+   * The shared VideoFrame texture stays alive; it belongs to the renderer.
+   */
+  releaseImageTexture(image: IPImage): void {
+    const gl = this.gl;
+    if (gl && image.texture && image.texture !== this._videoFrameTexture && gl.isTexture(image.texture)) {
+      this._mipmappedTextures.delete(image.texture);
+      gl.deleteTexture(image.texture);
+    }
+    image.texture = null;
+    image.textureNeedsUpdate = true;
   }
 
   renderImage(image: IPImage, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1): void {
@@ -2044,6 +2079,113 @@ export class Renderer implements RendererBackend {
   }
 
   /**
+   * Render one frame through the full viewer shader pipeline into a private
+   * RGBA16F framebuffer of `width` x `height` and read it back, for still and
+   * sequence export.
+   *
+   * `source` is either an IPImage (the HDR/float path of renderImage) or a
+   * display-encoded SDR source (the path of renderSDRFrame); the caller picks
+   * the one the viewer uses for the frame so the export matches the screen.
+   * The current render state (applyRenderState, user transform, texture
+   * filter) is used as is; output primaries are set here from `target`.
+   *
+   * Nothing is drawn to the drawing buffer and the shared FBOs and readback
+   * buffers of the scope and HDR-blit paths are not touched. The returned
+   * array is newly allocated, RGBA, rows top-to-bottom.
+   *
+   * Returns null when the context is unavailable, float color buffers are not
+   * supported, the framebuffer cannot be created, or a GL error occurs.
+   */
+  renderFrameForExport(
+    source: IPImage | SDRFrameSource,
+    width: number,
+    height: number,
+    target: ExportRenderTarget,
+  ): Float32Array | null {
+    const gl = this.gl;
+    if (!gl || !this.displayShader || this._contextLost || !this.displayShader.isReady()) return null;
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return null;
+
+    if (this.hasColorBufferFloat === null) {
+      this.hasColorBufferFloat = gl.getExtension('EXT_color_buffer_float') !== null;
+    }
+    if (!this.hasColorBufferFloat) {
+      log.warn('EXT_color_buffer_float not available; export render disabled');
+      return null;
+    }
+
+    const texture = gl.createTexture();
+    const fbo = gl.createFramebuffer();
+    if (!texture || !fbo) {
+      if (texture) gl.deleteTexture(texture);
+      if (fbo) gl.deleteFramebuffer(fbo);
+      return null;
+    }
+
+    const [vx = 0, vy = 0, vw = 0, vh = 0] = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    const prevHdrMode = this.hdrOutputMode;
+    const prevOutputConfigChanged = this.outputConfigChanged;
+
+    try {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      if (status !== gl.FRAMEBUFFER_COMPLETE) {
+        log.warn('Export FBO not complete, status:', status);
+        return null;
+      }
+
+      gl.viewport(0, 0, width, height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      // Any non-SDR mode makes renderImage() emit u_outputMode=HDR and the
+      // renderer's headroom; 'sdr' gives the SDR clamp and a headroom of 1.
+      this.hdrOutputMode = target.outputMode === 'sdr' ? 'sdr' : 'hlg';
+
+      let drawn: boolean;
+      if (isIPImageSource(source)) {
+        this.setColorPrimaries(
+          this.ocioWasmActive ? undefined : source.metadata.colorPrimaries,
+          this.ocioWasmActive ? 'srgb' : target.outputColorSpace,
+        );
+        this._readbackEncoding = target.encoding;
+        this.renderImage(source, 0, 0, 1, 1);
+        drawn = true;
+      } else {
+        // SDR sources are display-encoded and skip the primaries matrices;
+        // the browser converts them to the target gamut on upload.
+        this.setColorPrimaries(undefined, 'srgb');
+        drawn = this.drawSDRFrame(source, target.outputColorSpace === 'display-p3' ? 'display-p3' : 'srgb');
+      }
+      if (!drawn) return null;
+
+      const out = new Float32Array(width * height * RGBA_CHANNELS);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, out);
+      const err = gl.getError();
+      if (err !== gl.NO_ERROR) {
+        log.warn('Export readPixels(FLOAT) failed with GL error:', err);
+        return null;
+      }
+      flipRowsInPlace(out, width, height, RGBA_CHANNELS);
+      return out;
+    } finally {
+      this.hdrOutputMode = prevHdrMode;
+      this.outputConfigChanged = prevOutputConfigChanged;
+      this._readbackEncoding = null;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(vx, vy, vw, vh);
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(texture);
+    }
+  }
+
+  /**
    * Async PBO readback: renders to RGBA16F FBO, starts a non-blocking
    * readPixels into a PBO, and returns the PREVIOUS frame's data immediately.
    *
@@ -2716,13 +2858,25 @@ export class Renderer implements RendererBackend {
    * Returns the WebGL canvas element so the Viewer can position / composite it.
    * Returns null if the WebGL context is unavailable.
    */
-  renderSDRFrame(
-    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
-  ): HTMLCanvasElement | null {
-    if (!this.gl || !this.displayShader || !this.canvas || this._contextLost) return null;
+  renderSDRFrame(source: SDRFrameSource): HTMLCanvasElement | null {
+    // Upload SDR sources in the drawing buffer's color space. SDR frames skip
+    // the primaries matrices (their values are display-encoded), so on a
+    // display-p3 buffer the browser must convert sRGB sources to P3 on upload;
+    // otherwise sRGB colors are shown as P3 and look oversaturated.
+    const unpackColorSpace: PredefinedColorSpace = this.getOutputColorSpace() === 'display-p3' ? 'display-p3' : 'srgb';
+    return this.drawSDRFrame(source, unpackColorSpace) ? this.getCanvasElement() : null;
+  }
+
+  /**
+   * Draw an SDR source through the display shader into the currently bound
+   * framebuffer. `unpackColorSpace` is the color space of the target surface.
+   * Returns false when nothing was drawn.
+   */
+  private drawSDRFrame(source: SDRFrameSource, unpackColorSpace: PredefinedColorSpace): boolean {
+    if (!this.gl || !this.displayShader || !this.canvas || this._contextLost) return false;
 
     // Skip rendering if the shader is still compiling (parallel compile path).
-    if (!this.displayShader.isReady()) return null;
+    if (!this.displayShader.isReady()) return false;
 
     // Guard against detached ImageBitmaps (closed before render)
     if (
@@ -2730,7 +2884,7 @@ export class Renderer implements RendererBackend {
       source instanceof ImageBitmap &&
       (source.width === 0 || source.height === 0)
     ) {
-      return null;
+      return false;
     }
 
     const gl = this.gl;
@@ -2749,18 +2903,12 @@ export class Renderer implements RendererBackend {
     // Upload the SDR source to the texture
     gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
 
-    // Upload SDR sources in the drawing buffer's color space. SDR frames skip
-    // the primaries matrices (their values are display-encoded), so on a
-    // display-p3 buffer the browser must convert sRGB sources to P3 on upload;
-    // otherwise sRGB colors are shown as P3 and look oversaturated.
-    const sdrUnpackColorSpace: PredefinedColorSpace =
-      this.getOutputColorSpace() === 'display-p3' ? 'display-p3' : 'srgb';
-    if (this._currentUnpackColorSpace !== sdrUnpackColorSpace) {
+    if (this._currentUnpackColorSpace !== unpackColorSpace) {
       try {
-        gl.unpackColorSpace = sdrUnpackColorSpace;
-        this._currentUnpackColorSpace = sdrUnpackColorSpace;
+        gl.unpackColorSpace = unpackColorSpace;
+        this._currentUnpackColorSpace = unpackColorSpace;
       } catch (e) {
-        log.debug(`gl.unpackColorSpace='${sdrUnpackColorSpace}' not supported:`, e);
+        log.debug(`gl.unpackColorSpace='${unpackColorSpace}' not supported:`, e);
       }
     }
 
@@ -2769,7 +2917,7 @@ export class Renderer implements RendererBackend {
     } catch (e) {
       // texImage2D can throw for tainted or invalid sources
       log.warn('texImage2D failed for SDR frame (tainted or invalid source):', e);
-      return null;
+      return false;
     }
 
     // Generate mipmaps for HTMLImageElement sources only (static, uploaded once).
@@ -2864,7 +3012,7 @@ export class Renderer implements RendererBackend {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
 
-    return this.getCanvasElement();
+    return true;
   }
 
   /**
@@ -2983,3 +3131,21 @@ export class Renderer implements RendererBackend {
  * used alongside WebGPUBackend.
  */
 export const WebGL2Backend = Renderer;
+
+/** Reverse the row order of an interleaved pixel buffer (GL bottom-up <-> top-down). */
+function flipRowsInPlace(data: Float32Array, width: number, height: number, channels: number): void {
+  const rowLength = width * channels;
+  const tmp = new Float32Array(rowLength);
+  for (let top = 0, bottom = height - 1; top < bottom; top++, bottom--) {
+    const a = top * rowLength;
+    const b = bottom * rowLength;
+    tmp.set(data.subarray(a, a + rowLength));
+    data.copyWithin(a, b, b + rowLength);
+    data.set(tmp, b);
+  }
+}
+
+/** IPImages carry a data type; the DOM and bitmap SDR sources do not. */
+function isIPImageSource(source: IPImage | SDRFrameSource): source is IPImage {
+  return 'dataType' in source;
+}
