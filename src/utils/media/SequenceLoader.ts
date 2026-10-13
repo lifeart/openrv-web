@@ -5,6 +5,7 @@
 
 import { SUPPORTED_IMAGE_EXTENSIONS, isDecoderBackedExtension } from './SupportedMediaFormats';
 import { decoderRegistry } from '../../formats/DecoderRegistry';
+import type { ColorPrimaries } from '../../core/image/Image';
 
 /** Decoded HDR/pro-format frame data preserved as full-precision Float32Array */
 export interface DecodedFrameData {
@@ -14,6 +15,8 @@ export interface DecodedFrameData {
   channels: number;
   colorSpace: string;
   formatName: string;
+  colorPrimaries?: ColorPrimaries;
+  chromaticities?: number[];
 }
 
 export interface SequenceFrame {
@@ -288,6 +291,8 @@ export async function loadFrameImage(frame: SequenceFrame, signal?: AbortSignal)
         channels: result.channels,
         colorSpace: result.colorSpace,
         formatName: result.formatName,
+        ...(result.colorPrimaries ? { colorPrimaries: result.colorPrimaries } : {}),
+        ...(result.chromaticities ? { chromaticities: result.chromaticities } : {}),
       };
 
       // Also generate an ImageBitmap preview for dimension queries and fallback display

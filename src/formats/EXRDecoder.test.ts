@@ -5844,5 +5844,47 @@ describe('EXR Tiled Image Support', () => {
       const image = exrToIPImage(result);
       expect(image.metadata.colorPrimaries).toBeUndefined();
     });
+
+    const imageWithChromaticities = (chromaticities: Float32Array) =>
+      exrToIPImage({
+        width: 1,
+        height: 1,
+        channels: 4,
+        data: new Float32Array(4),
+        header: {
+          channels: [{ name: 'R', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 }] as EXRChannel[],
+          compression: EXRCompression.NONE,
+          dataWindow: { xMin: 0, yMin: 0, xMax: 0, yMax: 0 } as EXRBox2i,
+          displayWindow: { xMin: 0, yMin: 0, xMax: 0, yMax: 0 } as EXRBox2i,
+          chromaticities,
+        } as unknown as EXRHeader,
+        layers: [],
+        decodedLayer: undefined,
+      });
+
+    it.each([
+      ['ACES AP0', [0.7347, 0.2653, 0.0, 1.0, 0.0001, -0.077, 0.32168, 0.33767]],
+      ['ACES AP1', [0.713, 0.293, 0.165, 0.83, 0.128, 0.044, 0.32168, 0.33767]],
+      ['DCI-P3', [0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.314, 0.351]],
+    ])('passes %s through as chromaticities for the generic primaries matrix', (label, values) => {
+      const chrom = new Float32Array(values);
+      const image = imageWithChromaticities(chrom);
+      expect(image.metadata.colorPrimaries).toBeUndefined();
+      expect(image.metadata.chromaticities).toEqual(Array.from(chrom));
+      expect(image.metadata.attributes?.primaries).toBe(label);
+    });
+
+    it('passes arbitrary (unnamed) chromaticities through', () => {
+      const chrom = new Float32Array([0.66, 0.34, 0.25, 0.7, 0.14, 0.05, 0.3127, 0.329]);
+      const image = imageWithChromaticities(chrom);
+      expect(image.metadata.chromaticities).toEqual(Array.from(chrom));
+      expect(image.metadata.attributes?.primaries).toBeUndefined();
+    });
+
+    it('drops degenerate chromaticities', () => {
+      const image = imageWithChromaticities(new Float32Array([0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3127, 0.329]));
+      expect(image.metadata.chromaticities).toBeUndefined();
+      expect(image.metadata.colorPrimaries).toBeUndefined();
+    });
   });
 });

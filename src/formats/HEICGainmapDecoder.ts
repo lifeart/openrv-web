@@ -38,6 +38,7 @@ import {
   extractTmapItemMetadata,
   findItemColor,
 } from './AVIFGainmapDecoder';
+import { colorInfoFromCICP, isHDRTransfer } from '../color/EmbeddedColorInfo';
 import {
   type GainMapMetadata,
   parseGainMapMetadataFromXMP,
@@ -82,7 +83,10 @@ export interface HEICGainmapInfo {
 
 export interface HEICColorInfo {
   transferFunction: 'pq' | 'hlg' | 'srgb';
-  colorPrimaries: 'bt2020' | 'bt709';
+  /** Undefined = BT.709 (or see `chromaticities`). */
+  colorPrimaries?: ColorPrimaries;
+  /** Source chromaticities for primaries without a named value (e.g. DCI-P3). */
+  chromaticities?: number[];
   isHDR: boolean;
 }
 
@@ -465,23 +469,15 @@ export function parseHEICColorInfo(buffer: ArrayBuffer): HEICColorInfo | null {
       if (cStart + 4 <= cEnd) {
         const colourType = readBoxType(view, cStart);
         if (colourType === 'nclx' && cStart + 8 <= cEnd) {
-          const primariesCode = view.getUint16(cStart + 4);
-          const transferCode = view.getUint16(cStart + 6);
-
-          let transferFunction: 'pq' | 'hlg' | 'srgb';
-          if (transferCode === 16) {
-            transferFunction = 'pq';
-          } else if (transferCode === 18) {
-            transferFunction = 'hlg';
-          } else {
-            transferFunction = 'srgb';
-          }
-
-          const colorPrimaries: 'bt2020' | 'bt709' = primariesCode === 9 ? 'bt2020' : 'bt709';
-          const isHDR = transferFunction === 'pq' || transferFunction === 'hlg';
-
-          if (isHDR) {
-            return { transferFunction, colorPrimaries, isHDR: true };
+          const info = colorInfoFromCICP({
+            primaries: view.getUint16(cStart + 4),
+            transfer: view.getUint16(cStart + 6),
+          });
+          if (isHDRTransfer(info.transferFunction)) {
+            const result: HEICColorInfo = { transferFunction: info.transferFunction, isHDR: true };
+            if (info.colorPrimaries) result.colorPrimaries = info.colorPrimaries;
+            if (info.chromaticities) result.chromaticities = info.chromaticities;
+            return result;
           }
         }
       }

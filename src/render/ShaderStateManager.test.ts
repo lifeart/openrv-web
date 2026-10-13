@@ -2146,6 +2146,78 @@ describe('ShaderStateManager', () => {
       const outMat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
       expect(outMat[0]).toBeCloseTo(0.8225, 3);
     });
+
+    const uploadPrimaries = (mgr: ShaderStateManager): Record<string, unknown> => {
+      const uploaded: Record<string, unknown> = {};
+      const record = (name: string, val: unknown) => {
+        uploaded[name] = val;
+      };
+      const shader = { setUniform: record, setUniformInt: record, setUniformMatrix3: record };
+      mgr.applyUniforms(shader as never, {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      });
+      return uploaded;
+    };
+    const AP1 = [0.713, 0.293, 0.165, 0.83, 0.128, 0.044, 0.32168, 0.33767];
+
+    it('CP-SM-008: chromaticities without a named value — derived ACEScg → BT.709 matrix', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'srgb', AP1);
+      const uploaded = uploadPrimaries(mgr);
+      expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
+      const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
+      // Column-major ACEScg → linear sRGB (Bradford): first column 1.70505, -0.13026, -0.02400
+      expect(mat[0]).toBeCloseTo(1.70505, 4);
+      expect(mat[1]).toBeCloseTo(-0.13026, 4);
+      expect(mat[2]).toBeCloseTo(-0.024, 4);
+    });
+
+    it('CP-SM-008b: chromaticities also upload the inverse used by the source-gamut clamp', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'srgb', AP1);
+      const uploaded = uploadPrimaries(mgr);
+      const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
+      const inv = uploaded['u_inputPrimariesInverse'] as Float32Array;
+      // Column-major product M · M⁻¹ is the identity.
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          let sum = 0;
+          for (let k = 0; k < 3; k++) sum += mat[k * 3 + r]! * inv[c * 3 + k]!;
+          expect(sum).toBeCloseTo(r === c ? 1 : 0, 5);
+        }
+      }
+    });
+
+    it('CP-SM-009: a named value wins over chromaticities', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries('bt709', 'srgb', AP1);
+      expect(uploadPrimaries(mgr)['u_inputPrimariesEnabled']).toBe(0);
+    });
+
+    it('CP-SM-010: repeating the same chromaticities does not re-dirty the state', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'srgb', AP1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+      mgr.setColorPrimaries(undefined, 'srgb', [...AP1]);
+      expect(flags.has('colorPrimaries')).toBe(false);
+    });
+
+    it('CP-SM-011: BT.709 or degenerate chromaticities leave input conversion off', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'srgb', [0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]);
+      expect(uploadPrimaries(mgr)['u_inputPrimariesEnabled']).toBe(0);
+      const mgr2 = new ShaderStateManager();
+      mgr2.setColorPrimaries(undefined, 'srgb', [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3127, 0.329]);
+      expect(uploadPrimaries(mgr2)['u_inputPrimariesEnabled']).toBe(0);
+    });
   });
 
   // =================================================================

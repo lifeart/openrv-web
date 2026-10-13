@@ -20,6 +20,13 @@ import type { RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
 import { Logger } from '../../utils/Logger';
 import { probe, probeAsync } from '../../utils/probe';
+import {
+  colorInfoFromCICP,
+  colorInfoFromICC,
+  isHDRTransfer,
+  isWideGamut,
+  parsePNGcICP,
+} from '../../color/EmbeddedColorInfo';
 
 const logger = new Logger('FileSourceNode');
 /**
@@ -125,10 +132,29 @@ function isAVIFFile(buffer: ArrayBuffer): boolean {
   return brand === 'avif' || brand === 'avis' || brand === 'mif1';
 }
 
+/** Bytes read from the start of a PNG to find its cICP chunk. */
+const PNG_HEAD_BYTES = 256 * 1024;
+
 interface AVIFColorInfo {
   transferFunction: TransferFunction;
-  colorPrimaries: ColorPrimaries;
+  /** Undefined = BT.709 (or see `chromaticities`). */
+  colorPrimaries?: ColorPrimaries;
+  /** Source chromaticities for primaries without a named value (e.g. DCI-P3). */
+  chromaticities?: number[];
   isHDR: boolean;
+}
+
+/**
+ * HDR colour info from CICP code points (nclx / cICP), or null when the
+ * transfer is not PQ/HLG (SDR images keep the browser-managed path).
+ */
+function hdrColorInfoFromNCLX(primariesCode: number, transferCode: number): AVIFColorInfo | null {
+  const info = colorInfoFromCICP({ primaries: primariesCode, transfer: transferCode });
+  if (!isHDRTransfer(info.transferFunction)) return null;
+  const result: AVIFColorInfo = { transferFunction: info.transferFunction, isHDR: true };
+  if (info.colorPrimaries) result.colorPrimaries = info.colorPrimaries;
+  if (info.chromaticities) result.chromaticities = info.chromaticities;
+  return result;
 }
 
 /**
@@ -250,21 +276,8 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
       const primariesCode = view.getUint16(colr.contentStart + 4);
       const transferCode = view.getUint16(colr.contentStart + 6);
 
-      let transferFunction: TransferFunction;
-      if (transferCode === 16) {
-        transferFunction = 'pq';
-      } else if (transferCode === 18) {
-        transferFunction = 'hlg';
-      } else {
-        transferFunction = 'srgb';
-      }
-
-      const colorPrimaries: ColorPrimaries = primariesCode === 9 ? 'bt2020' : 'bt709';
-      const isHDR = transferFunction === 'pq' || transferFunction === 'hlg';
-
-      if (isHDR) {
-        return { transferFunction, colorPrimaries, isHDR: true };
-      }
+      const hdr = hdrColorInfoFromNCLX(primariesCode, transferCode);
+      if (hdr) return hdr;
     }
   }
 
@@ -281,163 +294,66 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
 }
 
 /**
- * Detect HDR from an ICC profile embedded in a colr(prof) box.
+ * Detect HDR / wide-gamut colour from an ICC profile embedded in a colr(prof) box.
  *
- * Checks:
- * 1. Profile description tag ('desc') for PQ/HLG/HDR keywords
- * 2. CICP tag ('cicp', ICC v4.4+) for PQ/HLG transfer characteristics
- * 3. TRC curve tag ('rTRC') — parametric PQ curve detection
+ * Primaries come from the profile's 'cicp' tag, colorants or description
+ * (see colorInfoFromICC). The image is HDR when:
+ * 1. the CICP tag ('cicp', ICC v4.4+) signals PQ or HLG,
+ * 2. the profile description ('desc') names PQ/HLG/HDR, or
+ * 3. the red TRC ('rTRC') looks like a PQ curve.
+ * Wide-gamut SDR profiles (Display P3, BT.2020, DCI-P3) also take the
+ * VideoFrame path so the gamut survives; they are labelled with their real
+ * primaries so the renderer converts them (not as BT.709).
  */
 function detectHDRFromICCProfile(view: DataView, start: number, end: number): AVIFColorInfo | null {
-  const profileSize = end - start;
-
   // ICC profile minimum: 128-byte header + 4-byte tag count
-  if (profileSize < 132) return null;
+  if (end - start < 132) return null;
 
-  // Read tag count at offset 128
-  const tagCount = view.getUint32(start + 128);
-  if (tagCount > 100) return null; // sanity
+  const icc = colorInfoFromICC(view.buffer.slice(view.byteOffset + start, view.byteOffset + end) as ArrayBuffer);
+  if (!icc) return null;
+  const primaries: Pick<AVIFColorInfo, 'colorPrimaries' | 'chromaticities'> = {};
+  if (icc.colorPrimaries) primaries.colorPrimaries = icc.colorPrimaries;
+  if (icc.chromaticities) primaries.chromaticities = icc.chromaticities;
 
-  // Scan tag table (starts at offset 132, each entry is 12 bytes: sig(4) + offset(4) + size(4))
-  let descText = '';
-  let cicpTransfer = -1;
-  let cicpPrimaries = -1;
-  let hasPQCurve = false;
-
-  for (let i = 0; i < tagCount; i++) {
-    const tagEntry = start + 132 + i * 12;
-    if (tagEntry + 12 > end) break;
-
-    const sig = String.fromCharCode(
-      view.getUint8(tagEntry),
-      view.getUint8(tagEntry + 1),
-      view.getUint8(tagEntry + 2),
-      view.getUint8(tagEntry + 3),
-    );
-    const tagOffset = view.getUint32(tagEntry + 4);
-    const tagSize = view.getUint32(tagEntry + 8);
-    const tagDataStart = start + tagOffset;
-    const tagDataEnd = Math.min(tagDataStart + tagSize, end);
-
-    if (tagDataStart >= end || tagDataEnd > end) continue;
-
-    // 1. 'desc' tag — profile description
-    if (sig === 'desc' && tagSize > 12) {
-      descText = readICCDescriptionTag(view, tagDataStart, tagDataEnd);
-    }
-
-    // 2. 'cicp' tag (ICC v4.4+) — CICP colour info
-    if (sig === 'cicp' && tagSize >= 12) {
-      // cicp tag: type signature(4) + reserved(4) + primaries(1) + transfer(1) + matrix(1) + range(1)
-      const typeTag = String.fromCharCode(
-        view.getUint8(tagDataStart),
-        view.getUint8(tagDataStart + 1),
-        view.getUint8(tagDataStart + 2),
-        view.getUint8(tagDataStart + 3),
-      );
-      if (typeTag === 'cicp') {
-        cicpPrimaries = view.getUint8(tagDataStart + 8);
-        cicpTransfer = view.getUint8(tagDataStart + 9);
-      }
-    }
-
-    // 3. 'rTRC' tag — check for parametric PQ curve
-    if (sig === 'rTRC' && tagSize >= 12) {
-      hasPQCurve = detectPQParametricCurve(view, tagDataStart, tagDataEnd);
-    }
+  // 1. CICP tag (most reliable)
+  if (isHDRTransfer(icc.transferFunction)) {
+    return { transferFunction: icc.transferFunction, ...primaries, isHDR: true };
   }
 
-  // Check CICP tag first (most reliable)
-  if (cicpTransfer === 16) {
-    const colorPrimaries: ColorPrimaries = cicpPrimaries === 9 ? 'bt2020' : 'bt709';
-    return { transferFunction: 'pq', colorPrimaries, isHDR: true };
-  }
-  if (cicpTransfer === 18) {
-    const colorPrimaries: ColorPrimaries = cicpPrimaries === 9 ? 'bt2020' : 'bt709';
-    return { transferFunction: 'hlg', colorPrimaries, isHDR: true };
-  }
-
-  // Check profile description for HDR keywords
-  const descLower = descText.toLowerCase();
+  // 2. Profile description keywords
+  const descLower = icc.description.toLowerCase();
   if (descLower.includes('pq') || descLower.includes('smpte st 2084') || descLower.includes('st2084')) {
-    return { transferFunction: 'pq', colorPrimaries: descLower.includes('2020') ? 'bt2020' : 'bt709', isHDR: true };
+    return { transferFunction: 'pq', ...primaries, isHDR: true };
   }
   if (descLower.includes('hlg') || descLower.includes('std-b67') || descLower.includes('arib')) {
-    return { transferFunction: 'hlg', colorPrimaries: descLower.includes('2020') ? 'bt2020' : 'bt709', isHDR: true };
+    return { transferFunction: 'hlg', ...primaries, isHDR: true };
   }
   // Generic HDR keyword match (less precise, default to PQ)
   if (descLower.includes('hdr') || descLower.includes('2100')) {
-    return { transferFunction: 'pq', colorPrimaries: descLower.includes('2020') ? 'bt2020' : 'bt709', isHDR: true };
+    return { transferFunction: 'pq', ...primaries, isHDR: true };
   }
 
-  // Check TRC curve
-  if (hasPQCurve) {
-    return { transferFunction: 'pq', colorPrimaries: 'bt709', isHDR: true };
+  // 3. TRC curve
+  const tagCount = Math.min(view.getUint32(start + 128), 100);
+  for (let i = 0; i < tagCount; i++) {
+    const tagEntry = start + 132 + i * 12;
+    if (tagEntry + 12 > end) break;
+    if (view.getUint32(tagEntry) !== 0x72545243) continue; // 'rTRC'
+    const tagDataStart = start + view.getUint32(tagEntry + 4);
+    const tagDataEnd = Math.min(tagDataStart + view.getUint32(tagEntry + 8), end);
+    if (tagDataStart < end && detectPQParametricCurve(view, tagDataStart, tagDataEnd)) {
+      return { transferFunction: 'pq', ...primaries, isHDR: true };
+    }
   }
 
   // Wide gamut detection: Display P3 or BT.2020 ICC profiles benefit from
   // the VideoFrame HDR path — preserves color volume and enables EDR output
   // on HDR displays (brighter whites, more saturated colors).
-  const isP3 = /\bdisplay\s*p3\b/i.test(descText) || /\bp3\b/i.test(descText);
-  const isBT2020 = /\bbt\.?2020\b/i.test(descText) || /\brec\.?2020\b/i.test(descText);
-  if (isP3 || isBT2020) {
-    const colorPrimaries: ColorPrimaries = isBT2020 ? 'bt2020' : 'bt709';
-    return { transferFunction: 'srgb', colorPrimaries, isHDR: true };
+  if (isWideGamut(icc)) {
+    return { transferFunction: 'srgb', ...primaries, isHDR: true };
   }
 
   return null;
-}
-
-/**
- * Read the text from an ICC 'desc' (profileDescriptionTag) or 'mluc' tag.
- */
-function readICCDescriptionTag(view: DataView, start: number, end: number): string {
-  if (start + 8 > end) return '';
-
-  const typeSig = String.fromCharCode(
-    view.getUint8(start),
-    view.getUint8(start + 1),
-    view.getUint8(start + 2),
-    view.getUint8(start + 3),
-  );
-
-  // 'desc' type (ICC v2): type(4) + reserved(4) + length(4) + ASCII string
-  if (typeSig === 'desc') {
-    if (start + 12 > end) return '';
-    const strLen = view.getUint32(start + 8);
-    const strStart = start + 12;
-    const strEnd = Math.min(strStart + strLen, end);
-    const chars: string[] = [];
-    for (let i = strStart; i < strEnd; i++) {
-      const c = view.getUint8(i);
-      if (c === 0) break;
-      chars.push(String.fromCharCode(c));
-    }
-    return chars.join('');
-  }
-
-  // 'mluc' type (ICC v4): multi-localized Unicode
-  if (typeSig === 'mluc') {
-    if (start + 16 > end) return '';
-    const recordCount = view.getUint32(start + 8);
-    if (recordCount === 0) return '';
-    // First record: language(2) + country(2) + length(4) + offset(4) at start+16
-    if (start + 28 > end) return '';
-    const strLength = view.getUint32(start + 20);
-    const strOffset = view.getUint32(start + 24);
-    const strStart = start + strOffset;
-    const strEnd = Math.min(strStart + strLength, end);
-    // mluc stores UTF-16BE strings
-    const chars: string[] = [];
-    for (let i = strStart; i + 1 < strEnd; i += 2) {
-      const code = view.getUint16(i);
-      if (code === 0) break;
-      chars.push(String.fromCharCode(code));
-    }
-    return chars.join('');
-  }
-
-  return '';
 }
 
 /**
@@ -539,21 +455,8 @@ function parseJXLColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
           const primariesCode = view.getUint16(cStart + 4);
           const transferCode = view.getUint16(cStart + 6);
 
-          let transferFunction: TransferFunction;
-          if (transferCode === 16) {
-            transferFunction = 'pq';
-          } else if (transferCode === 18) {
-            transferFunction = 'hlg';
-          } else {
-            transferFunction = 'srgb';
-          }
-
-          const colorPrimaries: ColorPrimaries = primariesCode === 9 ? 'bt2020' : 'bt709';
-          const isHDR = transferFunction === 'pq' || transferFunction === 'hlg';
-
-          if (isHDR) {
-            return { transferFunction, colorPrimaries, isHDR: true };
-          }
+          const hdr = hdrColorInfoFromNCLX(primariesCode, transferCode);
+          if (hdr) return hdr;
         }
       }
     }
@@ -1120,6 +1023,8 @@ export class FileSourceNode extends BaseSourceNode {
         ...decodeResult.metadata,
         formatName,
       },
+      ...(decodeResult.colorPrimaries ? { colorPrimaries: decodeResult.colorPrimaries } : {}),
+      ...(decodeResult.chromaticities ? { chromaticities: decodeResult.chromaticities } : {}),
     };
 
     this.cachedIPImage = new IPImage({
@@ -1301,9 +1206,27 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string,
   ): Promise<void> {
+    await this.loadBitmapHDR(buffer, 'image/avif', 'avif-hdr', colorInfo, name, url, originalUrl);
+  }
+
+  /**
+   * Decode an image with the browser (no colour conversion) into a VideoFrame
+   * for GPU upload, tagged with the file's own transfer and primaries so the
+   * renderer decodes PQ/HLG and converts the gamut. Shared by HDR AVIF, JXL,
+   * HEIC and PNG (cICP) images.
+   */
+  private async loadBitmapHDR(
+    buffer: ArrayBuffer,
+    mimeType: string,
+    formatName: string,
+    colorInfo: AVIFColorInfo | HEICColorInfo,
+    name: string,
+    url: string,
+    originalUrl?: string,
+  ): Promise<void> {
     this.cachedIPImage?.close();
 
-    const blob = new Blob([buffer], { type: 'image/avif' });
+    const blob = new Blob([buffer], { type: mimeType });
     const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
     let videoFrame: VideoFrame | null = null;
     let bitmapClosed = false;
@@ -1322,12 +1245,20 @@ export class FileSourceNode extends BaseSourceNode {
         frameNumber: 1,
         transferFunction: colorInfo.transferFunction,
         colorPrimaries: colorInfo.colorPrimaries,
-        colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+        colorSpace:
+          colorInfo.colorPrimaries === 'bt2020'
+            ? 'rec2020'
+            : colorInfo.colorPrimaries === 'p3'
+              ? 'display-p3'
+              : 'rec709',
         attributes: {
           hdr: true,
-          formatName: 'avif-hdr',
+          formatName,
         },
       };
+      if (!colorInfo.colorPrimaries && colorInfo.chromaticities) {
+        metadata.chromaticities = colorInfo.chromaticities;
+      }
 
       this.cachedIPImage = new IPImage({
         width: frameWidth,
@@ -1345,11 +1276,11 @@ export class FileSourceNode extends BaseSourceNode {
       // mask the original decode error (which we re-throw), but it must remain
       // auditable — probe() logs at debug level rather than swallowing silently.
       if (!bitmapClosed) {
-        probe('avif-hdr-bitmap-cleanup', () => bitmap.close());
+        probe(`${formatName}-bitmap-cleanup`, () => bitmap.close());
       }
       if (videoFrame) {
         const vf = videoFrame;
-        probe('avif-hdr-videoframe-cleanup', () => vf.close());
+        probe(`${formatName}-videoframe-cleanup`, () => vf.close());
       }
       throw e;
     }
@@ -1357,7 +1288,7 @@ export class FileSourceNode extends BaseSourceNode {
     this.url = url;
     this.isEXR = false;
     this._isHDRFormat = true;
-    this._formatName = 'avif-hdr';
+    this._formatName = formatName;
     this.image = null;
 
     this.metadata = {
@@ -1390,81 +1321,7 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string,
   ): Promise<void> {
-    this.cachedIPImage?.close();
-
-    const blob = new Blob([buffer], { type: 'image/jxl' });
-    const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
-    let videoFrame: VideoFrame | null = null;
-    let bitmapClosed = false;
-    let frameWidth: number;
-    let frameHeight: number;
-    try {
-      videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
-      bitmap.close();
-      bitmapClosed = true;
-
-      frameWidth = videoFrame.displayWidth;
-      frameHeight = videoFrame.displayHeight;
-
-      const metadata: ImageMetadata = {
-        sourcePath: originalUrl ?? url,
-        frameNumber: 1,
-        transferFunction: colorInfo.transferFunction,
-        colorPrimaries: colorInfo.colorPrimaries,
-        colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
-        attributes: {
-          hdr: true,
-          formatName: 'jxl-hdr',
-        },
-      };
-
-      this.cachedIPImage = new IPImage({
-        width: frameWidth,
-        height: frameHeight,
-        channels: 4,
-        dataType: 'float32',
-        data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
-        videoFrame,
-        metadata,
-      });
-
-      videoFrame = null; // Ownership transferred to IPImage
-    } catch (e) {
-      // Cleanup-after-error: best-effort close. A throw from .close() must NOT
-      // mask the original decode error (which we re-throw).
-      if (!bitmapClosed) {
-        probe('jxl-hdr-bitmap-cleanup', () => bitmap.close());
-      }
-      if (videoFrame) {
-        const vf = videoFrame;
-        probe('jxl-hdr-videoframe-cleanup', () => vf.close());
-      }
-      throw e;
-    }
-
-    this.url = url;
-    this.isEXR = false;
-    this._isHDRFormat = true;
-    this._formatName = 'jxl-hdr';
-    this.image = null;
-
-    this.metadata = {
-      name,
-      width: frameWidth,
-      height: frameHeight,
-      duration: 1,
-      fps: 24,
-    };
-
-    if (originalUrl) {
-      this.originalUrl = originalUrl;
-    }
-    this.properties.setValue('width', frameWidth);
-    this.properties.setValue('height', frameHeight);
-    this.properties.setValue('isHDR', true);
-
-    this.canvasDirty = true;
-    this.markDirty();
+    await this.loadBitmapHDR(buffer, 'image/jxl', 'jxl-hdr', colorInfo, name, url, originalUrl);
   }
 
   /**
@@ -1545,81 +1402,7 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string,
   ): Promise<void> {
-    this.cachedIPImage?.close();
-
-    const blob = new Blob([buffer], { type: 'image/heic' });
-    const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
-    let videoFrame: VideoFrame | null = null;
-    let bitmapClosed = false;
-    let frameWidth: number;
-    let frameHeight: number;
-    try {
-      videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
-      bitmap.close();
-      bitmapClosed = true;
-
-      frameWidth = videoFrame.displayWidth;
-      frameHeight = videoFrame.displayHeight;
-
-      const metadata: ImageMetadata = {
-        sourcePath: originalUrl ?? url,
-        frameNumber: 1,
-        transferFunction: colorInfo.transferFunction,
-        colorPrimaries: colorInfo.colorPrimaries,
-        colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
-        attributes: {
-          hdr: true,
-          formatName: 'heic-hdr',
-        },
-      };
-
-      this.cachedIPImage = new IPImage({
-        width: frameWidth,
-        height: frameHeight,
-        channels: 4,
-        dataType: 'float32',
-        data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
-        videoFrame,
-        metadata,
-      });
-
-      videoFrame = null; // Ownership transferred to IPImage
-    } catch (e) {
-      // Cleanup-after-error: best-effort close. A throw from .close() must NOT
-      // mask the original decode error (which we re-throw).
-      if (!bitmapClosed) {
-        probe('heic-hdr-bitmap-cleanup', () => bitmap.close());
-      }
-      if (videoFrame) {
-        const vf = videoFrame;
-        probe('heic-hdr-videoframe-cleanup', () => vf.close());
-      }
-      throw e;
-    }
-
-    this.url = url;
-    this.isEXR = false;
-    this._isHDRFormat = true;
-    this._formatName = 'heic-hdr';
-    this.image = null;
-
-    this.metadata = {
-      name,
-      width: frameWidth,
-      height: frameHeight,
-      duration: 1,
-      fps: 24,
-    };
-
-    if (originalUrl) {
-      this.originalUrl = originalUrl;
-    }
-    this.properties.setValue('width', frameWidth);
-    this.properties.setValue('height', frameHeight);
-    this.properties.setValue('isHDR', true);
-
-    this.canvasDirty = true;
-    this.markDirty();
+    await this.loadBitmapHDR(buffer, 'image/heic', 'heic-hdr', colorInfo, name, url, originalUrl);
   }
 
   /**
@@ -2116,16 +1899,27 @@ export class FileSourceNode extends BaseSourceNode {
     if (isPNGExtension(file.name)) {
       let pngBlobUrl: string | null = null;
       try {
-        const header = await file.slice(0, 33).arrayBuffer();
-        if (decoderRegistry.detectFormat(header) === 'png16') {
+        // cICP must precede IDAT, so the head of the file is enough.
+        const head = await file.slice(0, PNG_HEAD_BYTES).arrayBuffer();
+        const cicp = parsePNGcICP(head);
+        const hdrInfo = cicp ? hdrColorInfoFromNCLX(cicp.primaries, cicp.transfer) : null;
+        if (decoderRegistry.detectFormat(head) === 'png16') {
           const buffer = await file.arrayBuffer();
           pngBlobUrl = URL.createObjectURL(file);
-          await this.loadPNG16FromBuffer(buffer, file.name, pngBlobUrl);
+          await this.loadPNG16FromBuffer(buffer, file.name, pngBlobUrl, hdrInfo);
+          return;
+        }
+        if (hdrInfo) {
+          // 8-bit PQ/HLG PNG: decode without colour conversion and let the
+          // renderer apply the transfer and primaries from cICP.
+          const buffer = await file.arrayBuffer();
+          pngBlobUrl = URL.createObjectURL(file);
+          await this.loadBitmapHDR(buffer, 'image/png', 'png-hdr', hdrInfo, file.name, pngBlobUrl);
           return;
         }
       } catch (err) {
         if (pngBlobUrl) URL.revokeObjectURL(pngBlobUrl);
-        logger.warn('[FileSource] 16-bit PNG decode failed, falling back to standard loading:', err);
+        logger.warn('[FileSource] 16-bit / HDR PNG decode failed, falling back to standard loading:', err);
         // Fall through to standard image loading (8-bit via the browser)
       }
     }
@@ -2139,9 +1933,30 @@ export class FileSourceNode extends BaseSourceNode {
    * Load a 16-bit PNG at full precision. The data stays display-referred
    * (like the 8-bit browser path), only the precision differs.
    */
-  private async loadPNG16FromBuffer(buffer: ArrayBuffer, name: string, url: string): Promise<void> {
+  private async loadPNG16FromBuffer(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    hdrInfo: AVIFColorInfo | null = null,
+  ): Promise<void> {
     const { decodePNG16 } = await import('../../formats/PNG16Decoder');
     const result = await decodePNG16(buffer);
+
+    const metadata: ImageMetadata = {
+      sourcePath: url,
+      frameNumber: 1,
+      attributes: {
+        ...result.metadata,
+        formatName: 'png16',
+      },
+    };
+    if (hdrInfo) {
+      // cICP PQ/HLG: the float values are the encoded signal; the renderer
+      // decodes the transfer and converts the primaries.
+      metadata.transferFunction = hdrInfo.transferFunction;
+      if (hdrInfo.colorPrimaries) metadata.colorPrimaries = hdrInfo.colorPrimaries;
+      else if (hdrInfo.chromaticities) metadata.chromaticities = hdrInfo.chromaticities;
+    }
 
     this.cachedIPImage = new IPImage({
       width: result.width,
@@ -2149,21 +1964,14 @@ export class FileSourceNode extends BaseSourceNode {
       channels: 4,
       dataType: 'float32',
       data: result.data.buffer as ArrayBuffer,
-      metadata: {
-        sourcePath: url,
-        frameNumber: 1,
-        attributes: {
-          ...result.metadata,
-          formatName: 'png16',
-        },
-      },
+      metadata,
     });
 
     this.url = url;
     this.isEXR = false;
-    this._isHDRFormat = false;
+    this._isHDRFormat = hdrInfo !== null;
     this._formatName = 'png16';
-    this._isDisplayReferredFloat = true;
+    this._isDisplayReferredFloat = hdrInfo === null;
     this.image = null;
 
     this.metadata = {
@@ -2176,7 +1984,7 @@ export class FileSourceNode extends BaseSourceNode {
 
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
-    this.properties.setValue('isHDR', false);
+    this.properties.setValue('isHDR', hdrInfo !== null);
 
     this.canvasDirty = true;
     this.markDirty();

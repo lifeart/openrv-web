@@ -156,6 +156,7 @@ function reconstructIPImage(msg: RenderHDRMessage): IPImage {
     metadata: {
       transferFunction,
       colorPrimaries,
+      ...(msg.chromaticities ? { chromaticities: msg.chromaticities } : {}),
     },
   });
 }
@@ -240,7 +241,13 @@ function applySyncState(msg: RenderWorkerMessage): void {
   if (state.ditherMode !== undefined) renderer.setDitherMode(state.ditherMode);
   if (state.quantizeBits !== undefined) renderer.setQuantizeBits(state.quantizeBits);
   if (state.hdrHeadroom !== undefined) renderer.setHDRHeadroom(state.hdrHeadroom);
-  if (state.colorPrimaries) renderer.setColorPrimaries(state.colorPrimaries.input, state.colorPrimaries.output);
+  if (state.colorPrimaries) {
+    renderer.setColorPrimaries(
+      state.colorPrimaries.input,
+      state.colorPrimaries.output,
+      state.colorPrimaries.chromaticities,
+    );
+  }
   if (state.linearize) renderer.setLinearize(state.linearize);
   if (state.outOfRange !== undefined) renderer.setOutOfRange(state.outOfRange);
   if (state.channelSwizzle) renderer.setChannelSwizzle(state.channelSwizzle);

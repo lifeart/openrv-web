@@ -869,6 +869,18 @@ describe('ViewerGLRenderer', () => {
       expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith('bt2020', 'srgb');
     });
 
+    it('VGLR-042b: source chromaticities (e.g. ACES AP1) are forwarded to the renderer', () => {
+      const { glRenderer, mockRendererObj, setPendingChanges } = setupBlitRenderer();
+      setPendingChanges(true);
+
+      const ap1 = [0.713, 0.293, 0.165, 0.83, 0.128, 0.044, 0.32168, 0.33767];
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      image.metadata.chromaticities = ap1;
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith(undefined, 'srgb', ap1);
+    });
+
     it('VGLR-041: blit path uses async readback when no pending state changes', () => {
       const { glRenderer, syncReadback, asyncReadback, setPendingChanges } = setupBlitRenderer();
       setPendingChanges(false);

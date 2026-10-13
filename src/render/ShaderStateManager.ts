@@ -40,6 +40,7 @@ import type { BackgroundPatternState } from '../core/types/background';
 import { PATTERN_COLORS } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
+import { getChromaticitiesShaderMatrix, isIdentityMat3 } from '../color/ColorPrimariesMath';
 import type { RenderState, DisplayColorConfig } from './RenderState';
 import { LUT_1D_SIZE, RGBA_CHANNELS } from '../config/RenderConfig';
 import type { StateAccessor, CurvesLUTSnapshot, FalseColorLUTSnapshot, LUT3DSnapshot } from './StateAccessor';
@@ -141,6 +142,7 @@ import {
   GAMUT_MODE_CODES,
   COLOR_PRIMARIES_MATRICES,
   COLOR_PRIMARIES_INVERSE_MATRICES,
+  invertMat3ColMajor,
   DEFAULT_CHECKER_SIZE,
 } from './ShaderConstants';
 
@@ -159,6 +161,20 @@ import { applyRenderState as applyRenderStateFn } from './ShaderBatchApplicator'
 // ---------------------------------------------------------------------------
 // ShaderStateManager
 // ---------------------------------------------------------------------------
+
+/**
+ * Inverse of a chromaticity-derived input matrix, keyed by the cached matrix
+ * object so the same source primaries always yield the same inverse.
+ */
+const chromaticityInverseCache = new WeakMap<Float32Array, Float32Array>();
+function inverseOfCachedMatrix(m: Float32Array): Float32Array {
+  let inv = chromaticityInverseCache.get(m);
+  if (!inv) {
+    inv = invertMat3ColMajor(m);
+    chromaticityInverseCache.set(m, inv);
+  }
+  return inv;
+}
 
 export class ShaderStateManager implements ManagerBase, StateAccessor {
   /** Dirty-flag tracking: only update uniforms whose values have changed */
@@ -821,6 +837,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   setColorPrimaries(
     inputPrimaries: ColorPrimaries | undefined,
     outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+    inputChromaticities?: readonly number[],
   ): void {
     // Called every frame by the viewer; only dirty the uniforms on a change so
     // the render-skip and async-readback fast paths stay effective.
@@ -837,6 +854,14 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.state.inputPrimariesEnabled = true;
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.P3_TO_SRGB;
       this.state.inputPrimariesInverse = COLOR_PRIMARIES_INVERSE_MATRICES.SRGB_TO_P3;
+    } else if (inputPrimaries === undefined && inputChromaticities) {
+      // Arbitrary primaries (ACES AP0/AP1, DCI-P3, custom EXR/Radiance
+      // chromaticities): derived matrix, cached so the reference is stable.
+      const m = getChromaticitiesShaderMatrix(inputChromaticities);
+      const usable = m !== null && !isIdentityMat3(m);
+      this.state.inputPrimariesEnabled = usable;
+      this.state.inputPrimariesMatrix = usable ? m : COLOR_PRIMARIES_MATRICES.IDENTITY;
+      this.state.inputPrimariesInverse = usable ? inverseOfCachedMatrix(m) : COLOR_PRIMARIES_INVERSE_MATRICES.IDENTITY;
     } else {
       this.state.inputPrimariesEnabled = false;
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.IDENTITY;

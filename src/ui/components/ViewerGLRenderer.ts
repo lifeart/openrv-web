@@ -447,7 +447,13 @@ export class ViewerGLRenderer {
       return;
     }
 
-    renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
+    const chromaticities = image.metadata?.chromaticities;
+    if (chromaticities) {
+      // Primaries without a named value: the renderer derives the matrix.
+      renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace, chromaticities);
+    } else {
+      renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
+    }
   }
 
   /**

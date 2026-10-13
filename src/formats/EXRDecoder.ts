@@ -26,6 +26,12 @@
  */
 
 import { IPImage, type ImageMetadata, type ColorPrimaries } from '../core/image/Image';
+import {
+  CHROMATICITIES_LABELS,
+  identifyChromaticities,
+  isValidChromaticities,
+  namedPrimariesForChromaticities,
+} from '../color/ColorPrimariesMath';
 import { decompressPIZ } from './EXRPIZCodec';
 import { decompressDWA } from './EXRDWACodec';
 import { validateImageDimensions } from './shared';
@@ -1530,54 +1536,8 @@ async function decodeTiledImage(
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
-  // Build channel lookup, excluding UINT channels (not decodable)
-  const channelLookup = new Map<string, EXRChannel>();
-  for (const ch of header.channels) {
-    if (ch.pixelType === EXRPixelType.UINT) continue;
-    channelLookup.set(ch.name, ch);
-  }
-
-  // Determine output channel mapping (same logic as scanline)
-  let outputMapping: Map<string, string>;
-  if (channelMapping && channelMapping.size > 0) {
-    outputMapping = channelMapping;
-  } else {
-    outputMapping = new Map();
-    if (channelLookup.has('R')) outputMapping.set('R', 'R');
-    if (channelLookup.has('G')) outputMapping.set('G', 'G');
-    if (channelLookup.has('B')) outputMapping.set('B', 'B');
-    if (channelLookup.has('A')) outputMapping.set('A', 'A');
-    if (channelLookup.has('Y') && !channelLookup.has('R')) {
-      outputMapping.set('R', 'Y');
-      outputMapping.set('G', 'Y');
-      outputMapping.set('B', 'Y');
-    }
-  }
-
-  if (outputMapping.size === 0) {
-    throw new DecoderError('EXR', 'No supported channels found in EXR file');
-  }
-
-  const numOutputChannels = 4;
-  const output = new Float32Array(width * height * numOutputChannels);
-
-  if (!outputMapping.has('A')) {
-    for (let i = 3; i < output.length; i += 4) {
-      output[i] = 1.0;
-    }
-  }
-
-  const sourceToOutputIndices = new Map<string, number[]>();
-  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
-
-  for (const [outputCh, sourceCh] of outputMapping.entries()) {
-    const outputIdx = outputChannelIndices[outputCh];
-    if (outputIdx !== undefined) {
-      const existing = sourceToOutputIndices.get(sourceCh) || [];
-      existing.push(outputIdx);
-      sourceToOutputIndices.set(sourceCh, existing);
-    }
-  }
+  // Same output routing as scanline images, including Y/RY/BY -> RGB.
+  const out = createScanlineOutput(header, resolveOutputMapping(header, channelMapping));
 
   // Compute tile grid for level 0 (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
@@ -1644,9 +1604,9 @@ async function decodeTiledImage(
         const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
         const lineDataOffset = line * tileScanlineBytes + channelOffset;
 
-        const outputIndices = sourceToOutputIndices.get(ch.name);
+        const targets = out.targets.get(ch.name);
 
-        if (outputIndices && outputIndices.length > 0) {
+        if (targets) {
           for (let x = 0; x < actualTileWidth; x++) {
             const outputX = tilePixelX + x;
             if (outputX >= width) continue;
@@ -1661,10 +1621,8 @@ async function decodeTiledImage(
               value = dataView.getFloat32(srcOffset, true);
             }
 
-            for (const outputIdx of outputIndices) {
-              const dstIdx = (outputY * width + outputX) * numOutputChannels + outputIdx;
-              output[dstIdx] = value;
-            }
+            const pixel = outputY * width + outputX;
+            for (const t of targets) t.buf[pixel * t.stride + t.offset] = value;
           }
         }
 
@@ -1673,7 +1631,7 @@ async function decodeTiledImage(
     }
   }
 
-  return output;
+  return finishScanlineOutput(out);
 }
 
 /**
@@ -1696,53 +1654,8 @@ async function decodeMultiPartTiledImage(
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
-  // Build channel lookup, excluding UINT channels (not decodable)
-  const channelLookup = new Map<string, EXRChannel>();
-  for (const ch of header.channels) {
-    if (ch.pixelType === EXRPixelType.UINT) continue;
-    channelLookup.set(ch.name, ch);
-  }
-
-  let outputMapping: Map<string, string>;
-  if (channelMapping && channelMapping.size > 0) {
-    outputMapping = channelMapping;
-  } else {
-    outputMapping = new Map();
-    if (channelLookup.has('R')) outputMapping.set('R', 'R');
-    if (channelLookup.has('G')) outputMapping.set('G', 'G');
-    if (channelLookup.has('B')) outputMapping.set('B', 'B');
-    if (channelLookup.has('A')) outputMapping.set('A', 'A');
-    if (channelLookup.has('Y') && !channelLookup.has('R')) {
-      outputMapping.set('R', 'Y');
-      outputMapping.set('G', 'Y');
-      outputMapping.set('B', 'Y');
-    }
-  }
-
-  if (outputMapping.size === 0) {
-    throw new DecoderError('EXR', 'No supported channels found in EXR file');
-  }
-
-  const numOutputChannels = 4;
-  const output = new Float32Array(width * height * numOutputChannels);
-
-  if (!outputMapping.has('A')) {
-    for (let i = 3; i < output.length; i += 4) {
-      output[i] = 1.0;
-    }
-  }
-
-  const sourceToOutputIndices = new Map<string, number[]>();
-  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
-
-  for (const [outputCh, sourceCh] of outputMapping.entries()) {
-    const outputIdx = outputChannelIndices[outputCh];
-    if (outputIdx !== undefined) {
-      const existing = sourceToOutputIndices.get(sourceCh) || [];
-      existing.push(outputIdx);
-      sourceToOutputIndices.set(sourceCh, existing);
-    }
-  }
+  // Same output routing as scanline images, including Y/RY/BY -> RGB.
+  const out = createScanlineOutput(header, resolveOutputMapping(header, channelMapping));
 
   // Level 0 tile count (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
@@ -1817,9 +1730,9 @@ async function decodeMultiPartTiledImage(
         const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
         const lineDataOffset = line * tileScanlineBytes + channelOffset;
 
-        const outputIndices = sourceToOutputIndices.get(ch.name);
+        const targets = out.targets.get(ch.name);
 
-        if (outputIndices && outputIndices.length > 0) {
+        if (targets) {
           for (let x = 0; x < actualTileWidth; x++) {
             const outputX = tilePixelX + x;
             if (outputX >= width) continue;
@@ -1834,10 +1747,8 @@ async function decodeMultiPartTiledImage(
               value = dataView.getFloat32(srcOffset, true);
             }
 
-            for (const outputIdx of outputIndices) {
-              const dstIdx = (outputY * width + outputX) * numOutputChannels + outputIdx;
-              output[dstIdx] = value;
-            }
+            const pixel = outputY * width + outputX;
+            for (const t of targets) t.buf[pixel * t.stride + t.offset] = value;
           }
         }
 
@@ -1846,7 +1757,7 @@ async function decodeMultiPartTiledImage(
     }
   }
 
-  return output;
+  return finishScanlineOutput(out);
 }
 
 /**
@@ -2552,18 +2463,11 @@ export async function decodeEXR(buffer: ArrayBuffer, options?: EXRDecodeOptions)
   }
 }
 
-// Known CIE xy chromaticity coordinates for standard color primaries.
-// Layout: [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy]
-const KNOWN_CHROMATICITIES: { primaries: ColorPrimaries; values: readonly number[] }[] = [
-  { primaries: 'bt709', values: [0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329] },
-  { primaries: 'bt2020', values: [0.708, 0.292, 0.17, 0.797, 0.131, 0.046, 0.3127, 0.329] },
-  { primaries: 'p3', values: [0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329] },
-];
-
 /**
- * Detect color primaries from EXR chromaticities header attribute.
- * Matches against known CIE xy values for BT.709, BT.2020, and Display-P3.
- * Returns undefined for unrecognized primaries (e.g. ACES AP0/AP1).
+ * Detect named color primaries from EXR chromaticities header attribute.
+ * Matches against known CIE xy values for BT.709, BT.2020, and Display-P3 (the
+ * renderer's named fast paths). Returns undefined for anything else (e.g. ACES
+ * AP0/AP1, DCI-P3), which exrToIPImage passes on as raw chromaticities.
  *
  * @param chromaticities - Float32Array of 8 values: [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy]
  * @param tolerance - Maximum deviation per coordinate (default 0.005)
@@ -2572,20 +2476,7 @@ export function detectColorPrimariesFromChromaticities(
   chromaticities: Float32Array,
   tolerance = 0.005,
 ): ColorPrimaries | undefined {
-  if (chromaticities.length < 8) return undefined;
-
-  for (const known of KNOWN_CHROMATICITIES) {
-    let match = true;
-    for (let i = 0; i < 8; i++) {
-      if (Math.abs((chromaticities[i] ?? 0) - (known.values[i] ?? 0)) > tolerance) {
-        match = false;
-        break;
-      }
-    }
-    if (match) return known.primaries;
-  }
-
-  return undefined;
+  return namedPrimariesForChromaticities(chromaticities, tolerance);
 }
 
 /**
@@ -2611,11 +2502,20 @@ export function exrToIPImage(result: EXRDecodeResult, sourcePath?: string): IPIm
     },
   };
 
-  if (result.header.chromaticities) {
-    if (metadata.attributes) metadata.attributes.chromaticities = Array.from(result.header.chromaticities);
-    const detected = detectColorPrimariesFromChromaticities(result.header.chromaticities);
-    if (detected && detected !== 'bt709') {
-      metadata.colorPrimaries = detected;
+  const chroma = result.header.chromaticities;
+  if (chroma) {
+    if (metadata.attributes) {
+      metadata.attributes.chromaticities = Array.from(chroma);
+      const known = identifyChromaticities(chroma);
+      if (known) metadata.attributes.primaries = CHROMATICITIES_LABELS[known];
+    }
+    const detected = detectColorPrimariesFromChromaticities(chroma);
+    if (detected) {
+      if (detected !== 'bt709') metadata.colorPrimaries = detected;
+    } else if (isValidChromaticities(chroma)) {
+      // Any other primaries (ACES AP0/AP1, DCI-P3, custom): the renderer
+      // derives the matrix to BT.709/D65 from the chromaticities.
+      metadata.chromaticities = Array.from(chroma);
     }
   }
 

@@ -1235,6 +1235,26 @@ describe('RenderWorkerProxy', () => {
       expect(proxy.isOCIOWasmActive()).toBe(false);
     });
 
+    it('RWP-SURF-002b: source chromaticities reach the worker (sync state and image message)', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const ap1 = [0.713, 0.293, 0.165, 0.83, 0.128, 0.044, 0.32168, 0.33767];
+      proxy.setColorPrimaries(undefined, 'srgb', ap1);
+      const image = createImage();
+      image.metadata.chromaticities = ap1;
+
+      void proxy.renderHDRAsync(image).catch(() => {});
+
+      expect(syncMessages()[0]!.state.colorPrimaries).toEqual({
+        input: undefined,
+        output: 'srgb',
+        chromaticities: ap1,
+      });
+      const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderHDR') as
+        | { chromaticities?: number[] }
+        | undefined;
+      expect(renderMsg?.chromaticities).toEqual(ap1);
+    });
+
     it('RWP-SURF-002: renderer-only setters are forwarded in syncState', () => {
       mockWorker.simulateMessage({ type: 'ready' });
       proxy.setColorPrimaries('bt2020', 'display-p3');

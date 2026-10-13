@@ -178,10 +178,15 @@ export interface StateAccessor {
   /** Get the current gamut mapping state. */
   getGamutMapping(): GamutMappingState;
 
-  /** Set automatic color primaries conversion (source→BT.709 input, BT.709→display output). */
+  /**
+   * Set automatic color primaries conversion (source→BT.709 input, BT.709→display output).
+   * `inputChromaticities` describes primaries without a named value; used only when
+   * `inputPrimaries` is undefined.
+   */
   setColorPrimaries(
     inputPrimaries: ColorPrimaries | undefined,
     outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+    inputChromaticities?: readonly number[],
   ): void;
 
   /** Set deinterlace state for GPU shader. */

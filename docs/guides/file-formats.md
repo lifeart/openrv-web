@@ -11,6 +11,8 @@ OpenRV Web supports a wide range of image, video, and session file formats, span
 - **Decoder-backed formats** (EXR, DPX, Cineon, Float TIFF, Radiance HDR, JPEG Gainmap HDR, HEIC/AVIF Gainmap HDR, JPEG XL HDR, HEIC SDR via WASM, JP2) are decoded into **Float32Array** pixel data in RGBA layout and stored as `IPImage` objects. This ensures full floating-point precision for HDR and professional VFX formats throughout the rendering pipeline.
 - **Browser-native formats** (PNG, JPEG, WebP, GIF, BMP, SVG, ICO, standard AVIF, standard TIFF, RAW preview (extracted by custom parser, then rendered via browser `<img>`)) are decoded by the browser's built-in `<img>` element and stored as **`HTMLImageElement`** sources -- no Float32Array conversion takes place. The browser handles color management and compositing for these standard formats directly.
 
+> **PNG `cICP` and wide-gamut ICC profiles**: when a local PNG has a `cICP` chunk that signals PQ or HLG, it is decoded without colour conversion and shown through the HDR path with the signalled transfer and primaries. 16-bit PNGs go through the PNG16 decoder and 8-bit PNGs through the browser. AVIF, JPEG XL and HEIC files are labelled with their `nclx` primaries (Rec.709, Rec.2020, Display P3, DCI-P3). AVIF files with a Display P3 or Rec.2020 ICC profile are labelled with those primaries instead of Rec.709. The profile is identified by its `cicp` tag, its colorant primaries or its description; no full ICC colour management is applied.
+
 > **Note on `process()` conversion**: When browser-native images flow through the node graph's `process()` method (e.g., for color corrections or compositing), the `HTMLImageElement` is rasterized into a **uint8 `IPImage`** (8 bits per channel, RGBA). This is distinct from the **float32 `IPImage`** that decoder-backed formats produce. The uint8 path is sufficient for standard-dynamic-range content but does not preserve the floating-point precision available in HDR workflows.
 
 Format detection uses a **two-tier** strategy. The fast path classifies files by MIME type and extension via `detectMediaTypeFromFile()`. When neither is recognized (extensionless or misnamed files), the fallback path reads the first bytes and checks them against the `DecoderRegistry`'s magic-number detectors (`detectMediaTypeFromFileBytes()`). This combination keeps the common case fast while still handling misnamed or extensionless files correctly -- any file whose bytes match a registered decoder will be loaded even if the extension is wrong or absent.
@@ -36,7 +38,9 @@ OpenEXR is the industry-standard HDR image format for VFX, developed by Industri
 
 **Magic number**: `0x01312f76` (little-endian 32-bit integer at offset 0)
 
-**Color space**: Linear (scene-referred). The renderer applies display transforms after decode.
+**Color space**: Linear (scene-referred). The renderer applies display transforms after decode. The `chromaticities` attribute sets the source primaries: Rec.709, Rec.2020 and Display P3 use built-in matrices, and any other primaries (ACES AP0/AP1, DCI-P3, custom) get a matrix derived from the chromaticities, Bradford-adapted to the D65 working white when the white point differs.
+
+**Luminance/chroma images**: `Y`/`RY`/`BY` images (scanline or tiled, with full-resolution or subsampled chroma) are converted to RGB with luminance weights derived from the file's chromaticities, as OpenEXR's `RgbaInputFile` does. Subsampled chroma is upsampled with nearest-neighbour replication rather than OpenEXR's reconstruction filter. `Y`-only images are shown as grey.
 
 **Typical VFX usage**: EXR is the primary interchange format for rendered images in VFX. Compositing packages (Nuke, Fusion), renderers (Arnold, RenderMan, V-Ray), and lighting tools all produce EXR output. OpenRV Web's full Float32 decode ensures no precision loss when reviewing EXR renders -- unlike 8-bit viewers that quantize HDR values, all scene-referred data is preserved through the display pipeline.
 
@@ -77,7 +81,7 @@ The Radiance High Dynamic Range format, also known as RGBE (Red-Green-Blue-Expon
 - **Decoder**: Pure JavaScript (`HDRDecoder.ts`)
 - **Encoding**: Each pixel is stored as four bytes: R, G, B mantissa values plus a shared exponent byte. The actual floating-point value is reconstructed as `mantissa * 2^(exponent - 128)`
 - **Compression**: Adaptive run-length encoding (RLE) for efficient storage
-- **Headers**: Standard Radiance headers are parsed for image dimensions, exposure, and orientation
+- **Headers**: Standard Radiance headers are parsed for image dimensions, exposure, and orientation. Pixel values are divided by the product of all `EXPOSURE` lines, which gives the original radiance. `PRIMARIES` sets the source primaries; files without it are treated as Rec.709. `XYZE` files are converted from CIE XYZ by the renderer
 
 **Magic signature**: File begins with `#?RADIANCE` or `#?RGBE`
 

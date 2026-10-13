@@ -780,4 +780,74 @@ describe('HDRDecoder', () => {
       }
     });
   });
+
+  describe('EXPOSURE and PRIMARIES headers', () => {
+    /** Build a 1x1 uncompressed file with arbitrary header lines. */
+    function hdrWithHeader(lines: string[], pixel: [number, number, number] = [1, 0.5, 0.25]): ArrayBuffer {
+      const head = ['#?RADIANCE', ...lines, '', '-Y 1 +X 1', ''].join('\n');
+      return new Uint8Array([...strToBytes(head), ...floatToRGBE(...pixel)]).buffer;
+    }
+
+    it('divides pixel values by EXPOSURE', async () => {
+      const plain = await decodeHDR(hdrWithHeader(['FORMAT=32-bit_rle_rgbe']));
+      const exposed = await decodeHDR(hdrWithHeader(['FORMAT=32-bit_rle_rgbe', 'EXPOSURE=2']));
+      for (let c = 0; c < 3; c++) expect(exposed.data[c]).toBeCloseTo((plain.data[c] ?? 0) / 2, 6);
+      expect(exposed.data[3]).toBe(1);
+    });
+
+    it('divides by the product of all EXPOSURE lines', async () => {
+      const plain = await decodeHDR(hdrWithHeader(['FORMAT=32-bit_rle_rgbe']));
+      const result = await decodeHDR(
+        hdrWithHeader(['FORMAT=32-bit_rle_rgbe', 'EXPOSURE=2', 'EXPOSURE=0.25', 'EXPOSURE=4']),
+      );
+      expect(result.metadata.exposure).toBe(2);
+      for (let c = 0; c < 3; c++) expect(result.data[c]).toBeCloseTo((plain.data[c] ?? 0) / 2, 6);
+    });
+
+    it('leaves files without PRIMARIES untagged (BT.709)', async () => {
+      const result = await decodeHDR(hdrWithHeader(['FORMAT=32-bit_rle_rgbe']));
+      expect(result.colorPrimaries).toBeUndefined();
+      expect(result.chromaticities).toBeUndefined();
+    });
+
+    it('maps BT.709 PRIMARIES to no tag', async () => {
+      const result = await decodeHDR(
+        hdrWithHeader(['FORMAT=32-bit_rle_rgbe', 'PRIMARIES= 0.640 0.330 0.300 0.600 0.150 0.060 0.3127 0.3290']),
+      );
+      expect(result.colorPrimaries).toBeUndefined();
+      expect(result.chromaticities).toBeUndefined();
+    });
+
+    it('maps BT.2020 PRIMARIES to the named primaries', async () => {
+      const result = await decodeHDR(
+        hdrWithHeader(['FORMAT=32-bit_rle_rgbe', 'PRIMARIES=0.708 0.292 0.170 0.797 0.131 0.046 0.3127 0.3290']),
+      );
+      expect(result.colorPrimaries).toBe('bt2020');
+    });
+
+    it('passes other PRIMARIES (ACES AP1, Radiance default white E) through as chromaticities', async () => {
+      const ap1 = await decodeHDR(
+        hdrWithHeader(['FORMAT=32-bit_rle_rgbe', 'PRIMARIES=0.713 0.293 0.165 0.830 0.128 0.044 0.32168 0.33767']),
+      );
+      expect(ap1.colorPrimaries).toBeUndefined();
+      expect(ap1.chromaticities).toEqual([0.713, 0.293, 0.165, 0.83, 0.128, 0.044, 0.32168, 0.33767]);
+
+      const stdprims = await decodeHDR(
+        hdrWithHeader(['FORMAT=32-bit_rle_rgbe', 'PRIMARIES=0.640 0.330 0.290 0.600 0.150 0.060 0.3333 0.3333']),
+      );
+      expect(stdprims.chromaticities).toEqual([0.64, 0.33, 0.29, 0.6, 0.15, 0.06, 0.3333, 0.3333]);
+    });
+
+    it('ignores malformed PRIMARIES', async () => {
+      const result = await decodeHDR(hdrWithHeader(['FORMAT=32-bit_rle_rgbe', 'PRIMARIES=0.64 0.33 0.3']));
+      expect(result.colorPrimaries).toBeUndefined();
+      expect(result.chromaticities).toBeUndefined();
+    });
+
+    it('tags XYZE files with CIE XYZ chromaticities', async () => {
+      const result = await decodeHDR(hdrWithHeader(['FORMAT=32-bit_rle_xyze']));
+      expect(result.chromaticities?.slice(0, 6)).toEqual([1, 0, 0, 1, 0, 0]);
+      expect(result.chromaticities?.[6]).toBeCloseTo(1 / 3, 6);
+    });
+  });
 });
