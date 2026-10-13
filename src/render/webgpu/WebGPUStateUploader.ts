@@ -16,6 +16,8 @@
 import type { InternalShaderState } from '../ShaderStateTypes';
 import type { StageId } from '../ShaderStage';
 import { TONE_MAPPING_OPERATOR_CODES } from '../ShaderConstants';
+import { OUTPUT_ENCODING_DISPLAY, type OutputEncodingCode } from '../../config/RenderConfig';
+import { getHueRotationMatrix, isIdentityHueRotation } from '../../color/HueRotation';
 import type { WGPUDevice, WGPUBuffer, WGPUTexture } from './WebGPUTypes';
 import { GPUBufferUsage, GPUTextureUsage } from './WebGPUTypes';
 
@@ -27,6 +29,13 @@ import { GPUBufferUsage, GPUTextureUsage } from './WebGPUTypes';
  * Defines which InternalShaderState fields each stage needs.
  * This enables uploading only the relevant uniforms for each stage.
  */
+const SOURCE_GAMUT_FIELDS = [
+  'inputPrimariesEnabled',
+  'inputPrimariesMatrix',
+  'inputPrimariesInverse',
+  'fileLUT3DEnabled',
+] as const;
+
 export const STAGE_FIELDS: Record<StageId, readonly string[]> = {
   inputDecode: [
     'deinterlaceEnabled',
@@ -53,7 +62,14 @@ export const STAGE_FIELDS: Record<StageId, readonly string[]> = {
     'inputPrimariesEnabled',
     'inputPrimariesMatrix',
   ],
-  primaryGrade: ['colorAdjustments', 'texelSize', 'inlineLUTEnabled', 'inlineLUTChannels', 'inlineLUTSize'],
+  primaryGrade: [
+    'colorAdjustments',
+    'inlineLUTEnabled',
+    'inlineLUTChannels',
+    'inlineLUTSize',
+    'curvesEnabled',
+    ...SOURCE_GAMUT_FIELDS,
+  ],
   secondaryGrade: [
     'hsEnabled',
     'highlightsValue',
@@ -64,8 +80,9 @@ export const STAGE_FIELDS: Record<StageId, readonly string[]> = {
     'vibranceValue',
     'vibranceSkinProtection',
     'colorAdjustments',
+    ...SOURCE_GAMUT_FIELDS,
   ],
-  spatialEffects: ['clarityEnabled', 'clarityValue', 'texelSize'],
+  spatialEffects: ['clarityEnabled', 'clarityValue', 'texelSize', ...SOURCE_GAMUT_FIELDS],
   colorPipeline: [
     'colorWheelsEnabled',
     'wheelLift',
@@ -117,9 +134,11 @@ export const STAGE_FIELDS: Record<StageId, readonly string[]> = {
     'gamutSourceCode',
     'gamutTargetCode',
     'gamutHighlightEnabled',
+    ...SOURCE_GAMUT_FIELDS,
   ],
-  spatialEffectsPost: ['sharpenEnabled', 'sharpenAmount', 'texelSize'],
+  spatialEffectsPost: ['sharpenEnabled', 'sharpenAmount', 'texelSize', ...SOURCE_GAMUT_FIELDS],
   displayOutput: [
+    'colorAdjustments',
     'outputPrimariesEnabled',
     'outputPrimariesMatrix',
     'displayTransferCode',
@@ -158,7 +177,7 @@ export const STAGE_FIELDS: Record<StageId, readonly string[]> = {
 
 /** Maps dirty flags to the stages that need re-upload. */
 export const DIRTY_FLAG_TO_STAGES: Record<string, readonly StageId[]> = {
-  color: ['primaryGrade', 'secondaryGrade'],
+  color: ['primaryGrade', 'secondaryGrade', 'displayOutput'],
   toneMapping: ['sceneAnalysis'],
   cdl: ['colorPipeline'],
   colorWheels: ['colorPipeline'],
@@ -186,9 +205,24 @@ export const DIRTY_FLAG_TO_STAGES: Record<string, readonly StageId[]> = {
   premult: ['inputDecode', 'compositing'],
   dither: ['diagnostics'],
   spherical: ['inputDecode'],
-  colorPrimaries: ['linearize', 'displayOutput'],
+  colorPrimaries: [
+    'linearize',
+    'primaryGrade',
+    'secondaryGrade',
+    'spatialEffects',
+    'sceneAnalysis',
+    'spatialEffectsPost',
+    'displayOutput',
+  ],
   contour: ['diagnostics'],
-  fileLut3d: ['colorPipeline'],
+  fileLut3d: [
+    'colorPipeline',
+    'primaryGrade',
+    'secondaryGrade',
+    'spatialEffects',
+    'sceneAnalysis',
+    'spatialEffectsPost',
+  ],
   displayLut3d: ['displayOutput'],
 };
 
@@ -291,6 +325,20 @@ function packMat3(view: DataView, offset: number, mat: Float32Array): number {
   return aligned + 48;
 }
 
+const IDENTITY_MAT3 = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+
+/**
+ * Pack a common.wgsl `SourceGamutClamp` at `offset` (16-byte aligned).
+ * Enabled when the input-primaries conversion ran and no File LUT replaced
+ * it, mirroring the GLSL clampToSourceGamut condition.
+ */
+function packSourceGamutClamp(view: DataView, offset: number, state: Readonly<InternalShaderState>): void {
+  const enabled = state.inputPrimariesEnabled && !state.fileLUT3DEnabled;
+  packMat3(view, offset + SOURCE_GAMUT_CLAMP_OFFSETS.toWorking, enabled ? state.inputPrimariesMatrix : IDENTITY_MAT3);
+  packMat3(view, offset + SOURCE_GAMUT_CLAMP_OFFSETS.toSource, enabled ? state.inputPrimariesInverse : IDENTITY_MAT3);
+  packI32(view, offset + SOURCE_GAMUT_CLAMP_OFFSETS.enabled, enabled ? 1 : 0);
+}
+
 // ---------------------------------------------------------------------------
 // Scene-analysis byte layout — pinned to scene_analysis.wgsl Uniforms struct.
 //
@@ -319,13 +367,92 @@ export const SCENE_ANALYSIS_OFFSETS = {
   gamutSourceCode: 56,
   gamutTargetCode: 60,
   gamutHighlightEnabled: 64,
-  _pad1: 68,
+  sourcePrimariesApplied: 68,
   _pad2: 72,
   _pad3: 76,
+  gamut: 80,
 } as const;
 
-/** Total byte size of the scene-analysis uniform struct (after final pad). */
-export const SCENE_ANALYSIS_BYTE_SIZE = 80;
+// ---------------------------------------------------------------------------
+// SourceGamutClamp — pinned to the struct in common.wgsl.
+//   toWorking: mat3x3f (source -> BT.709), toSource: mat3x3f (BT.709 -> source),
+//   enabled: i32, 3 x i32 padding. Stages that clamp negatives append it.
+// ---------------------------------------------------------------------------
+
+export const SOURCE_GAMUT_CLAMP_OFFSETS = {
+  toWorking: 0,
+  toSource: 48,
+  enabled: 96,
+} as const;
+
+export const SOURCE_GAMUT_CLAMP_BYTE_SIZE = 112;
+
+/** Total byte size of the scene-analysis uniform struct. */
+export const SCENE_ANALYSIS_BYTE_SIZE = SCENE_ANALYSIS_OFFSETS.gamut + SOURCE_GAMUT_CLAMP_BYTE_SIZE;
+
+/** Byte offsets of primary_grade.wgsl `Uniforms`. */
+export const PRIMARY_GRADE_OFFSETS = {
+  exposureRGB: 0,
+  scaleRGB: 16,
+  offsetRGB: 32,
+  gammaRGB: 48,
+  contrastRGB: 64,
+  temperature: 80,
+  tint: 84,
+  brightness: 88,
+  saturation: 92,
+  inlineLUTEnabled: 96,
+  inlineLUTChannels: 100,
+  inlineLUTSize: 104,
+  curvesEnabled: 108,
+  gamut: 112,
+} as const;
+
+/** Byte offsets of secondary_grade.wgsl `Uniforms`. */
+export const SECONDARY_GRADE_OFFSETS = {
+  highlights: 0,
+  shadows: 4,
+  whites: 8,
+  blacks: 12,
+  vibrance: 16,
+  vibranceSkinProtection: 20,
+  hueRotationEnabled: 24,
+  hueRotationMatrix: 32,
+  gamut: 80,
+} as const;
+
+/** Byte offset of `gamut` in spatial_effects.wgsl / spatial_effects_post.wgsl `Uniforms`. */
+export const SPATIAL_GAMUT_OFFSET = 16;
+
+/** Byte offsets of display_output.wgsl `Uniforms`. */
+export const DISPLAY_OUTPUT_OFFSETS = {
+  outputPrimariesEnabled: 0,
+  displayLUT3DEnabled: 4,
+  displayTransferCode: 8,
+  colorInversionEnabled: 12,
+  displayGammaOverride: 16,
+  displayBrightnessMultiplier: 20,
+  displayCustomGamma: 24,
+  displayLUT3DIntensity: 28,
+  displayLUT3DSize: 32,
+  outputEncoding: 36,
+  displayLUT3DDomainMin: 48,
+  displayLUT3DDomainMax: 64,
+  outputPrimariesMatrix: 80,
+  gammaRGB: 128,
+} as const;
+
+export const DISPLAY_OUTPUT_BYTE_SIZE = 144;
+
+/** Apply `fn` to each channel of an RGB triple. */
+function mapRGB(rgb: [number, number, number], fn: (v: number) => number): [number, number, number] {
+  return [fn(rgb[0]), fn(rgb[1]), fn(rgb[2])];
+}
+
+/** Per-channel value from an optional RGB triple, else the scalar. */
+function rgbOrScalar(rgb: readonly [number, number, number] | undefined, scalar: number): [number, number, number] {
+  return rgb ? [rgb[0], rgb[1], rgb[2]] : [scalar, scalar, scalar];
+}
 
 // ---------------------------------------------------------------------------
 // WebGPUStateUploader
@@ -371,6 +498,22 @@ export class WebGPUStateUploader {
   /** Get the current HDR headroom value. */
   getHDRHeadroom(): number {
     return this.hdrHeadroom;
+  }
+
+  /**
+   * Output encoding packed into the displayOutput stage (OUTPUT_ENCODING_*
+   * in RenderConfig), the same contract as the GLSL `u_outputEncoding`.
+   * Like hdrHeadroom it is a property of the output surface, not of
+   * InternalShaderState, so the backend sets it from its canvas configuration.
+   */
+  private outputEncoding: OutputEncodingCode = OUTPUT_ENCODING_DISPLAY;
+
+  setOutputEncoding(encoding: OutputEncodingCode): void {
+    this.outputEncoding = encoding;
+  }
+
+  getOutputEncoding(): OutputEncodingCode {
+    return this.outputEncoding;
   }
 
   /**
@@ -617,49 +760,58 @@ export class WebGPUStateUploader {
     packMat3(view, off, state.inputPrimariesMatrix);
   }
 
-  // WGSL struct: exposureRGB: vec4f, scaleRGB: vec4f, offsetRGB: vec4f, gammaRGB: vec4f,
-  //   contrastRGB: vec4f, temperature: f32, tint: f32, brightness: f32, saturation: f32,
-  //   inlineLUTEnabled: i32, inlineLUTChannels: i32, inlineLUTSize: f32, curvesEnabled: i32
+  // Layout MUST match primary_grade.wgsl Uniforms (PRIMARY_GRADE_OFFSETS).
+  // Per-channel values follow the WebGL ShaderUniformUploader.
   private packPrimaryGrade(view: DataView, state: Readonly<InternalShaderState>): void {
     const ca = state.colorAdjustments;
-    let off = 0;
-    off = packFloat(view, off, ca.exposure);
-    off = packFloat(view, off, ca.gamma);
-    off = packFloat(view, off, ca.contrast);
-    off = packFloat(view, off, ca.saturation);
-    off = packFloat(view, off, ca.brightness);
-    off = packFloat(view, off, ca.temperature);
-    off = packFloat(view, off, ca.tint);
-    off = packFloat(view, off, ca.scale ?? 1.0);
-    off = packFloat(view, off, ca.offset ?? 0.0);
-    off = packVec2(view, off, state.texelSize[0], state.texelSize[1]);
-    off = packI32(view, off, state.inlineLUTEnabled ? 1 : 0);
-    off = packI32(view, off, state.inlineLUTChannels);
-    packFloat(view, off, state.inlineLUTSize);
+    const o = PRIMARY_GRADE_OFFSETS;
+    const exposure = mapRGB(rgbOrScalar(ca.exposureRGB, ca.exposure), (v) => (Number.isFinite(v) ? v : 0));
+    const gamma = mapRGB(rgbOrScalar(ca.gammaRGB, ca.gamma), (v) => (v <= 0 ? 1e-4 : v));
+    const contrast = rgbOrScalar(ca.contrastRGB, ca.contrast);
+    const scale = rgbOrScalar(ca.scaleRGB, ca.scale ?? 1);
+    const offset = rgbOrScalar(ca.offsetRGB, ca.offset ?? 0);
+    packVec4(view, o.exposureRGB, exposure[0], exposure[1], exposure[2], 0);
+    packVec4(view, o.scaleRGB, scale[0], scale[1], scale[2], 0);
+    packVec4(view, o.offsetRGB, offset[0], offset[1], offset[2], 0);
+    packVec4(view, o.gammaRGB, gamma[0], gamma[1], gamma[2], 0);
+    packVec4(view, o.contrastRGB, contrast[0], contrast[1], contrast[2], 0);
+    packFloat(view, o.temperature, ca.temperature);
+    packFloat(view, o.tint, ca.tint);
+    packFloat(view, o.brightness, ca.brightness);
+    packFloat(view, o.saturation, ca.saturation);
+    packI32(view, o.inlineLUTEnabled, state.inlineLUTEnabled ? 1 : 0);
+    packI32(view, o.inlineLUTChannels, state.inlineLUTChannels);
+    packFloat(view, o.inlineLUTSize, state.inlineLUTSize);
+    packI32(view, o.curvesEnabled, state.curvesEnabled ? 1 : 0);
+    packSourceGamutClamp(view, o.gamut, state);
   }
 
-  // WGSL struct: highlights: f32, shadows: f32, whites: f32, blacks: f32,
-  //   vibrance: f32, vibranceSkinProtection: i32, hueRotationEnabled: i32, _pad0: f32,
-  //   hueRotationMatrix: mat3x3f
+  // Layout MUST match secondary_grade.wgsl Uniforms (SECONDARY_GRADE_OFFSETS).
+  // The WGSL stage has no enable flags, so disabled effects pack as 0.
   private packSecondaryGrade(view: DataView, state: Readonly<InternalShaderState>): void {
-    let off = 0;
-    off = packI32(view, off, state.hsEnabled ? 1 : 0);
-    off = packFloat(view, off, state.highlightsValue);
-    off = packFloat(view, off, state.shadowsValue);
-    off = packFloat(view, off, state.whitesValue);
-    off = packFloat(view, off, state.blacksValue);
-    off = packI32(view, off, state.vibranceEnabled ? 1 : 0);
-    off = packFloat(view, off, state.vibranceValue);
-    off = packI32(view, off, state.vibranceSkinProtection ? 1 : 0);
-    packFloat(view, off, state.colorAdjustments.hueRotation);
+    const o = SECONDARY_GRADE_OFFSETS;
+    const hs = state.hsEnabled;
+    packFloat(view, o.highlights, hs ? state.highlightsValue : 0);
+    packFloat(view, o.shadows, hs ? state.shadowsValue : 0);
+    packFloat(view, o.whites, hs ? state.whitesValue : 0);
+    packFloat(view, o.blacks, hs ? state.blacksValue : 0);
+    packFloat(view, o.vibrance, state.vibranceEnabled ? state.vibranceValue : 0);
+    packI32(view, o.vibranceSkinProtection, state.vibranceSkinProtection ? 1 : 0);
+    const hueDegrees = state.colorAdjustments.hueRotation;
+    const hueEnabled = !isIdentityHueRotation(hueDegrees);
+    packI32(view, o.hueRotationEnabled, hueEnabled ? 1 : 0);
+    packMat3(view, o.hueRotationMatrix, hueEnabled ? getHueRotationMatrix(hueDegrees) : IDENTITY_MAT3);
+    packSourceGamutClamp(view, o.gamut, state);
   }
 
-  // WGSL struct: clarityEnabled: u32, clarityValue: f32, texelSize: vec2f
+  // WGSL struct: clarityEnabled: u32, clarityValue: f32, texelSize: vec2f,
+  //   gamut: SourceGamutClamp (at SPATIAL_GAMUT_OFFSET)
   private packSpatialEffects(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
     off = packU32(view, off, state.clarityEnabled ? 1 : 0);
     off = packFloat(view, off, state.clarityValue);
     packVec2(view, off, state.texelSize[0], state.texelSize[1]);
+    packSourceGamutClamp(view, SPATIAL_GAMUT_OFFSET, state);
   }
 
   // WGSL struct: colorWheelsEnabled: i32, _pad0-2: i32, wheelLift/Gamma/Gain: vec4f,
@@ -722,7 +874,8 @@ export class WebGPUStateUploader {
   //   tmFilmicExposureBias: f32, tmFilmicWhitePoint: f32,
   //   tmDragoBias: f32, tmDragoLwa: f32, tmDragoLmax: f32, tmDragoBrightness: f32,
   //   gamutMappingEnabled: i32, gamutMappingModeCode: i32, gamutSourceCode: i32,
-  //   gamutTargetCode: i32, gamutHighlightEnabled: i32, _pad1: i32, _pad2: i32, _pad3: i32
+  //   gamutTargetCode: i32, gamutHighlightEnabled: i32, sourcePrimariesApplied: i32,
+  //   _pad2: i32, _pad3: i32, gamut: SourceGamutClamp
   //
   // Named offsets are exported as SCENE_ANALYSIS_OFFSETS — pinned by tests.
   // hdrHeadroom is sourced from this.hdrHeadroom because it is not a member
@@ -750,53 +903,45 @@ export class WebGPUStateUploader {
     off = packI32(view, off, state.gamutSourceCode);
     off = packI32(view, off, state.gamutTargetCode);
     off = packI32(view, off, state.gamutHighlightEnabled ? 1 : 0);
-    off = packI32(view, off, 0); // _pad1
+    off = packI32(view, off, state.inputPrimariesEnabled || state.fileLUT3DEnabled ? 1 : 0); // sourcePrimariesApplied
     off = packI32(view, off, 0); // _pad2
     packI32(view, off, 0); // _pad3
+    packSourceGamutClamp(view, SCENE_ANALYSIS_OFFSETS.gamut, state);
   }
 
-  // WGSL struct: sharpenEnabled: u32, sharpenAmount: f32, texelSize: vec2f
+  // WGSL struct: sharpenEnabled: u32, sharpenAmount: f32, texelSize: vec2f,
+  //   gamut: SourceGamutClamp (at SPATIAL_GAMUT_OFFSET)
   private packSpatialEffectsPost(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
     off = packU32(view, off, state.sharpenEnabled ? 1 : 0);
     off = packFloat(view, off, state.sharpenAmount);
     packVec2(view, off, state.texelSize[0], state.texelSize[1]);
+    packSourceGamutClamp(view, SPATIAL_GAMUT_OFFSET, state);
   }
 
-  // WGSL struct: outputPrimariesEnabled: i32, displayLUT3DEnabled: i32,
-  //   displayTransferCode: i32, colorInversionEnabled: i32,
-  //   displayGammaOverride: f32, displayBrightnessMultiplier: f32,
-  //   displayCustomGamma: f32, displayLUT3DIntensity: f32, displayLUT3DSize: f32, ...
+  // Layout MUST match display_output.wgsl Uniforms (DISPLAY_OUTPUT_OFFSETS).
+  // outputEncoding comes from setOutputEncoding() (surface property); the
+  // creative per-channel gamma (GLSL step 8b) is applied here, after 8a.
   private packDisplayOutput(view: DataView, state: Readonly<InternalShaderState>): void {
-    let off = 0;
-    off = packI32(view, off, state.outputPrimariesEnabled ? 1 : 0);
-    off = packI32(view, off, state.displayTransferCode);
-    off = packFloat(view, off, state.displayGammaOverride);
-    off = packFloat(view, off, state.displayBrightnessMultiplier);
-    off = packFloat(view, off, state.displayCustomGamma);
-    off = packI32(view, off, state.colorInversionEnabled ? 1 : 0);
-    off = packI32(view, off, state.displayLUT3DEnabled ? 1 : 0);
-    off = packFloat(view, off, state.displayLUT3DIntensity);
-    off = packFloat(view, off, state.displayLUT3DSize);
-    off = packFloat(view, off, 0); // padding
-    off = packFloat(view, off, 0); // padding
-    off = packFloat(view, off, 0); // padding
-    off = packVec3(
-      view,
-      off,
-      state.displayLUT3DDomainMin[0],
-      state.displayLUT3DDomainMin[1],
-      state.displayLUT3DDomainMin[2],
-    );
-    off = packVec3(
-      view,
-      off,
-      state.displayLUT3DDomainMax[0],
-      state.displayLUT3DDomainMax[1],
-      state.displayLUT3DDomainMax[2],
-    );
-    off = align(off, 16);
-    packMat3(view, off, state.outputPrimariesMatrix);
+    const o = DISPLAY_OUTPUT_OFFSETS;
+    const ca = state.colorAdjustments;
+    const gamma = mapRGB(rgbOrScalar(ca.gammaRGB, ca.gamma), (v) => (v <= 0 ? 1e-4 : v));
+    packI32(view, o.outputPrimariesEnabled, state.outputPrimariesEnabled ? 1 : 0);
+    packI32(view, o.displayLUT3DEnabled, state.displayLUT3DEnabled ? 1 : 0);
+    packI32(view, o.displayTransferCode, state.displayTransferCode);
+    packI32(view, o.colorInversionEnabled, state.colorInversionEnabled ? 1 : 0);
+    packFloat(view, o.displayGammaOverride, state.displayGammaOverride);
+    packFloat(view, o.displayBrightnessMultiplier, state.displayBrightnessMultiplier);
+    packFloat(view, o.displayCustomGamma, state.displayCustomGamma);
+    packFloat(view, o.displayLUT3DIntensity, state.displayLUT3DIntensity);
+    packFloat(view, o.displayLUT3DSize, state.displayLUT3DSize);
+    packI32(view, o.outputEncoding, this.outputEncoding);
+    const dMin = state.displayLUT3DDomainMin;
+    const dMax = state.displayLUT3DDomainMax;
+    packVec3(view, o.displayLUT3DDomainMin, dMin[0], dMin[1], dMin[2]);
+    packVec3(view, o.displayLUT3DDomainMax, dMax[0], dMax[1], dMax[2]);
+    packMat3(view, o.outputPrimariesMatrix, state.outputPrimariesMatrix);
+    packVec4(view, o.gammaRGB, gamma[0], gamma[1], gamma[2], 0);
   }
 
   // WGSL struct: channelModeCode: i32, falseColorEnabled: i32, contourEnabled: i32,

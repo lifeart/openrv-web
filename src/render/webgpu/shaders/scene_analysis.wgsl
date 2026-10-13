@@ -6,7 +6,7 @@
 //   LUMA, tonemapReinhard, tonemapFilmic, filmicCurve, tonemapACES,
 //   tonemapAgX, agxDefaultContrastApprox, tonemapPBRNeutral,
 //   tonemapGT, gt_tonemap_channel, tonemapACESHill, RRTAndODTFit,
-//   tonemapDrago, tonemapDragoChannel, gamutSoftClip
+//   tonemapDrago, tonemapDragoChannel, gamutSoftClip, SourceGamutClamp
 // The dispatcher applyToneMapping() and applyGamutMapping() below are
 // stage-local because they read from this stage's `u` uniform.
 
@@ -41,9 +41,12 @@ struct Uniforms {
   gamutSourceCode: i32,      // 0=srgb, 1=rec2020, 2=display-p3
   gamutTargetCode: i32,      // 0=srgb, 1=rec2020, 2=display-p3
   gamutHighlightEnabled: i32,
-  _pad1: i32,
+  sourcePrimariesApplied: i32, // 1 when the input-primaries step or a File LUT already produced BT.709
   _pad2: i32,
   _pad3: i32,
+
+  // Tone mapping runs per channel in the source primaries (wide-gamut working space)
+  gamut: SourceGamutClamp,
 }
 
 // VSOut is provided by the prepended vertex shader source
@@ -79,20 +82,25 @@ const REC2020_TO_SRGB = mat3x3f(
   -0.0728, -0.0083,  1.1187
 );
 
-// Rec.2020 (ITU-R BT.2020) → Display-P3 (D65 → D65)
-// Reference: SMPTE EG 432-1 / Apple Display-P3 (DCI-P3 primaries with D65).
-const REC2020_TO_P3 = mat3x3f(
-   1.3436, -0.0653,  0.0028,
-  -0.2822,  1.0758, -0.0196,
-  -0.0614, -0.0105,  1.0168
-);
-
 // Display-P3 (D65) → sRGB / BT.709 (D65)
 // Reference: SMPTE EG 432-1 (Display-P3) and ITU-R BT.709-6.
 const P3_TO_SRGB = mat3x3f(
    1.2249, -0.0420, -0.0197,
   -0.2247,  1.0419, -0.0786,
   -0.0002,  0.0001,  1.0983
+);
+
+// sRGB / BT.709 (D65) → Display-P3 (D65) and → Rec.2020 (D65).
+// Mirrors COLOR_PRIMARIES_MATRICES.SRGB_TO_P3 / SRGB_TO_REC2020.
+const SRGB_TO_P3 = mat3x3f(
+   0.8225,  0.0332,  0.0171,
+   0.1774,  0.9669,  0.0724,
+   0.0001, -0.0001,  0.9105
+);
+const SRGB_TO_REC2020 = mat3x3f(
+   0.6274,  0.0691,  0.0164,
+   0.3293,  0.9195,  0.0880,
+   0.0433,  0.0114,  0.8956
 );
 
 // =====================================================================
@@ -124,40 +132,60 @@ fn applyToneMapping(color: vec3f, op: i32) -> vec3f {
 // --- Gamut mapping ---
 // gamutSoftClip is provided by common.wgsl (prepended).
 
+// Gamut mapping takes and returns BT.709 working-space values; the
+// displayOutput stage converts the result to the output primaries.
 fn applyGamutMapping(color: vec3f) -> vec3f {
   var c = color;
 
-  // Matrix conversion based on source/target gamut
-  if (u.gamutSourceCode == 1) {
-    // Rec.2020 source
-    if (u.gamutTargetCode == 2) {
-      c = REC2020_TO_P3 * c;
-    } else {
+  // Bring the pixel into BT.709. The input-primaries step already did this
+  // for tagged sources; only untagged pixels still carry the declared gamut.
+  if (u.sourcePrimariesApplied == 0) {
+    if (u.gamutSourceCode == 1) {
       c = REC2020_TO_SRGB * c;
+    } else if (u.gamutSourceCode == 2) {
+      c = P3_TO_SRGB * c;
     }
-  } else if (u.gamutSourceCode == 2 && u.gamutTargetCode == 0) {
-    // P3 -> sRGB
-    c = P3_TO_SRGB * c;
   }
 
+  // Express it in the target gamut, where out-of-gamut means < 0.
+  if (u.gamutTargetCode == 2) {
+    c = SRGB_TO_P3 * c;
+  } else if (u.gamutTargetCode == 1) {
+    c = SRGB_TO_REC2020 * c;
+  }
+
+  // Range ceiling: SDR white, or the display headroom on HDR outputs so
+  // gamut mapping does not clip highlights above 1.0.
+  let peak = max(u.hdrHeadroom, 1.0);
+
   // Detect out-of-gamut pixels BEFORE clipping/compressing
+  var highlighted = false;
   if (u.gamutHighlightEnabled == 1) {
-    let outOfGamut = c.r < 0.0 || c.r > 1.0
-                  || c.g < 0.0 || c.g > 1.0
-                  || c.b < 0.0 || c.b > 1.0;
+    let outOfGamut = c.r < 0.0 || c.r > peak
+                  || c.g < 0.0 || c.g > peak
+                  || c.b < 0.0 || c.b > peak;
     if (outOfGamut) {
       // Blend with magenta at ~50% opacity
-      c = clamp(c, vec3f(0.0), vec3f(1.0));
-      c = mix(c, vec3f(1.0, 0.0, 1.0), 0.5);
-      return c;
+      c = clamp(c, vec3f(0.0), vec3f(peak));
+      c = mix(c, vec3f(peak, 0.0, peak), 0.5);
+      highlighted = true;
     }
   }
 
   // Apply clipping or soft compression
-  if (u.gamutMappingModeCode == 1) {
-    c = gamutSoftClip(c);
-  } else {
-    c = clamp(c, vec3f(0.0), vec3f(1.0));
+  if (!highlighted) {
+    if (u.gamutMappingModeCode == 1) {
+      c = gamutSoftClip(c / peak) * peak;
+    } else {
+      c = clamp(c, vec3f(0.0), vec3f(peak));
+    }
+  }
+
+  // Back to the BT.709 working space.
+  if (u.gamutTargetCode == 2) {
+    c = P3_TO_SRGB * c;
+  } else if (u.gamutTargetCode == 1) {
+    c = REC2020_TO_SRGB * c;
   }
 
   return c;
@@ -185,11 +213,18 @@ fn applyGamutMapping(color: vec3f) -> vec3f {
   }
 
   // 7. Tone mapping (applied before display transfer for proper HDR handling)
+  // The per-channel curves run in the source primaries so a wide-gamut
+  // source keeps its gamut; BT.709 sources are tone mapped in BT.709.
   if (u.toneMappingEnabled == 1) {
-    color = vec4f(
-      applyToneMapping(max(color.rgb, vec3f(0.0)), u.toneMappingOperator),
-      color.a
-    );
+    if (u.gamut.enabled != 0) {
+      let tmSource = max(u.gamut.toSource * color.rgb, vec3f(0.0));
+      color = vec4f(u.gamut.toWorking * applyToneMapping(tmSource, u.toneMappingOperator), color.a);
+    } else {
+      color = vec4f(
+        applyToneMapping(max(color.rgb, vec3f(0.0)), u.toneMappingOperator),
+        color.a
+      );
+    }
   }
 
   // 7a. Gamut mapping (after tone mapping, before display transfer)

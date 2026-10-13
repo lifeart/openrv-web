@@ -5,6 +5,7 @@ struct Uniforms {
   sharpenEnabled: u32,   // 0=off, 1=on
   sharpenAmount: f32,    // 0.0 to 1.0
   texelSize: vec2f,      // 1.0 / textureResolution
+  gamut: SourceGamutClamp, // negative clamp runs in the source primaries
 }
 
 // VSOut is provided by the prepended vertex shader source
@@ -55,7 +56,7 @@ struct Uniforms {
 
     // Laplacian: high-frequency edge detail (both terms in same space)
     let detail = origCenter * 4.0 - neighbors;
-    color = vec4f(max(color.rgb + detail * u.sharpenAmount, vec3f(0.0)), color.a);
+    color = vec4f(clampToSourceGamut(color.rgb + detail * u.sharpenAmount, u.gamut), color.a);
   }
 
   return color;

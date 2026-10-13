@@ -16,6 +16,7 @@ import { DEFAULT_BACKGROUND_PATTERN_STATE } from '../ui/components/BackgroundPat
 import { DEFAULT_HSL_QUALIFIER_STATE } from '../ui/components/HSLQualifier';
 import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
 import type { RenderState } from './RenderState';
+import { OUTPUT_ENCODING_DISPLAY, OUTPUT_ENCODING_EXTENDED_SRGB } from '../config/RenderConfig';
 
 // =============================================================================
 // Helpers
@@ -373,6 +374,72 @@ describe('WebGPUBackend', () => {
 
       backend.setHDROutputMode('pq', DEFAULT_CAPABILITIES);
       expect(backend.getHDROutputMode()).toBe('pq');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Output contract (u_outputEncoding + output primaries), H7
+  // ---------------------------------------------------------------------------
+
+  describe('output contract', () => {
+    async function createInitialized() {
+      const device = createMockDevice();
+      const gpuCtx = createMockGPUContext(device);
+      setupNavigatorGPU(createMockAdapter(device));
+      const backend = new WebGPUBackend();
+      backend.initialize(createWebGPUCanvas(gpuCtx));
+      await backend.initAsync();
+      return { backend, gpuCtx };
+    }
+
+    function pipelineEncoding(backend: WebGPUBackend): number {
+      return (
+        backend as unknown as { shaderPipeline: { getOutputEncoding(): number } }
+      ).shaderPipeline.getOutputEncoding();
+    }
+
+    it('SDR mode applies the user display transfer (OUTPUT_ENCODING_DISPLAY)', async () => {
+      const { backend } = await createInitialized();
+      expect(backend.getOutputEncoding()).toBe(OUTPUT_ENCODING_DISPLAY);
+      expect(pipelineEncoding(backend)).toBe(OUTPUT_ENCODING_DISPLAY);
+    });
+
+    it('HDR modes on the display-p3 float16 canvas encode extended sRGB with P3 primaries', async () => {
+      const { backend } = await createInitialized();
+      for (const mode of ['extended', 'hlg', 'pq'] as const) {
+        backend.setHDROutputMode(mode, DEFAULT_CAPABILITIES);
+        expect(backend.getOutputEncoding()).toBe(OUTPUT_ENCODING_EXTENDED_SRGB);
+        expect(pipelineEncoding(backend)).toBe(OUTPUT_ENCODING_EXTENDED_SRGB);
+        expect(backend.getOutputColorSpace()).toBe('display-p3');
+      }
+    });
+
+    it('returning to SDR reconfigures an sRGB canvas and the display encoding', async () => {
+      const { backend } = await createInitialized();
+      backend.setHDROutputMode('extended', DEFAULT_CAPABILITIES);
+      backend.setHDROutputMode('sdr', DEFAULT_CAPABILITIES);
+      expect(backend.getOutputColorSpace()).toBe('srgb');
+      expect(backend.getOutputEncoding()).toBe(OUTPUT_ENCODING_DISPLAY);
+      expect(pipelineEncoding(backend)).toBe(OUTPUT_ENCODING_DISPLAY);
+    });
+
+    it('setColorPrimaries selects the input and output matrices', async () => {
+      const { backend } = await createInitialized();
+      backend.setColorPrimaries('bt2020', 'display-p3');
+      const state = (
+        backend as unknown as {
+          stateManager: {
+            getInternalState(): {
+              inputPrimariesEnabled: boolean;
+              outputPrimariesEnabled: boolean;
+              inputPrimariesInverse: Float32Array;
+            };
+          };
+        }
+      ).stateManager.getInternalState();
+      expect(state.inputPrimariesEnabled).toBe(true);
+      expect(state.outputPrimariesEnabled).toBe(true);
+      expect(state.inputPrimariesInverse[0]).toBeCloseTo(0.6274, 3);
     });
   });
 

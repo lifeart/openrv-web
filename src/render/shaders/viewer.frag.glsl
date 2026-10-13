@@ -180,6 +180,7 @@
       // Automatic color primaries conversion (separate from creative gamut mapping)
       uniform bool u_inputPrimariesEnabled;   // source primaries → BT.709 working space
       uniform mat3 u_inputPrimariesMatrix;
+      uniform mat3 u_inputPrimariesInverse;   // BT.709 working space → source primaries
       uniform bool u_outputPrimariesEnabled;  // BT.709 working space → display gamut
       uniform mat3 u_outputPrimariesMatrix;
 
@@ -239,6 +240,27 @@
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
+      // Whether the source → BT.709 primaries conversion ran (step 0e).
+      // A File LUT replaces it and is assumed to output the working space.
+      bool sourcePrimariesApplied() {
+        return u_inputPrimariesEnabled || u_fileLUT3DEnabled;
+      }
+
+      // Non-negative clamp in the source primaries.
+      // The working space is linear BT.709. A wide-gamut source (P3, BT.2020)
+      // has legitimately negative BT.709 components there, so max(c, 0) in
+      // BT.709 would clip it to the 709 gamut long before the output-primaries
+      // conversion (step 7c). Clamping in the source primaries removes only
+      // values no source pixel can have (e.g. a negative brightness offset);
+      // whatever is outside the output gamut is clipped after step 7c.
+      // For BT.709 sources and File LUT inputs this is exactly max(c, 0).
+      vec3 clampToSourceGamut(vec3 c) {
+        if (u_inputPrimariesEnabled && !u_fileLUT3DEnabled) {
+          return u_inputPrimariesMatrix * max(u_inputPrimariesInverse * c, vec3(0.0));
+        }
+        return max(c, vec3(0.0));
+      }
+
       // Temperature/tint adjustment (simplified Kelvin shift)
       vec3 applyTemperature(vec3 color, float temp, float tint) {
         // Temperature shifts blue-orange
@@ -255,7 +277,8 @@
         // Clamp negative values: negative color is physically meaningless and
         // corrupts downstream stages (HSL conversion in vibrance, contrast
         // amplification, etc.). Values > 1.0 are preserved for HDR headroom.
-        return max(color, 0.0);
+        // Clamped in the source primaries so wide-gamut colours survive (H7).
+        return clampToSourceGamut(color);
       }
 
       // ----- HDR headroom semantics (MED-52) -----
@@ -579,17 +602,6 @@
         -0.5876,  1.1329, -0.1006,
         -0.0728, -0.0083,  1.1187
       );
-      // Rec.2020 (ITU-R BT.2020) → Display-P3 (D65 → D65)
-      // Source primaries: BT.2020. Dest primaries: Display-P3 / SMPTE RP 431-2 D65
-      // (R: 0.680,0.320; G: 0.265,0.690; B: 0.150,0.060). Both D65, no
-      // chromatic adaptation. Reference: SMPTE EG 432-1 / Apple Display P3
-      // (DCI-P3 primaries with sRGB-style D65 white point).
-      // Column-major for GLSL: each group of 3 is one column.
-      const mat3 REC2020_TO_P3 = mat3(
-         1.3436, -0.0653,  0.0028,
-        -0.2822,  1.0758, -0.0196,
-        -0.0614, -0.0105,  1.0168
-      );
       // Display-P3 (D65) → sRGB / BT.709 (D65)
       // Source primaries: Display-P3. Dest primaries: BT.709. Both D65.
       // Reference: SMPTE EG 432-1 (Display-P3) and ITU-R BT.709-6.
@@ -599,6 +611,20 @@
         -0.2247,  1.0419, -0.0786,
         -0.0002,  0.0001,  1.0983
       );
+      // sRGB / BT.709 (D65) → Display-P3 (D65) and → Rec.2020 (D65).
+      // Mirrors COLOR_PRIMARIES_MATRICES.SRGB_TO_P3 / SRGB_TO_REC2020 in
+      // ShaderConstants.ts. Column-major for GLSL: each group of 3 is one column.
+      const mat3 SRGB_TO_P3 = mat3(
+         0.8225,  0.0332,  0.0171,
+         0.1774,  0.9669,  0.0724,
+         0.0001, -0.0001,  0.9105
+      );
+      const mat3 SRGB_TO_REC2020 = mat3(
+         0.6274,  0.0691,  0.0164,
+         0.3293,  0.9195,  0.0880,
+         0.0433,  0.0114,  0.8956
+      );
+
 
       vec3 gamutSoftClip(vec3 color) {
         vec3 result;
@@ -615,30 +641,53 @@
         return result;
       }
 
+      // Gamut mapping takes and returns BT.709 working-space values; the
+      // output-primaries step (7c) converts the result to the surface.
       vec3 applyGamutMapping(vec3 color) {
-        // Matrix conversion based on source/target gamut
-        if (u_sourceGamut == 1) { // Rec.2020
-          color = (u_targetGamut == 2) ? REC2020_TO_P3 * color : REC2020_TO_SRGB * color;
-        } else if (u_sourceGamut == 2 && u_targetGamut == 0) { // P3 -> sRGB
-          color = P3_TO_SRGB * color;
+        // Bring the pixel into BT.709. Step 0e already did this for tagged
+        // sources; only untagged pixels still carry the declared source gamut.
+        if (!sourcePrimariesApplied()) {
+          if (u_sourceGamut == 1) { // Rec.2020
+            color = REC2020_TO_SRGB * color;
+          } else if (u_sourceGamut == 2) { // Display-P3
+            color = P3_TO_SRGB * color;
+          }
         }
+        // Express it in the target gamut, where out-of-gamut means < 0.
+        if (u_targetGamut == 2) {
+          color = SRGB_TO_P3 * color;
+        } else if (u_targetGamut == 1) {
+          color = SRGB_TO_REC2020 * color;
+        }
+        // Range ceiling: SDR white, or the display headroom on HDR outputs so
+        // gamut mapping does not clip highlights above 1.0.
+        float peak = max(u_hdrHeadroom, 1.0);
         // Detect out-of-gamut pixels BEFORE clipping/compressing
+        bool highlighted = false;
         if (u_gamutHighlightEnabled) {
-          bool outOfGamut = color.r < 0.0 || color.r > 1.0
-                         || color.g < 0.0 || color.g > 1.0
-                         || color.b < 0.0 || color.b > 1.0;
+          bool outOfGamut = color.r < 0.0 || color.r > peak
+                         || color.g < 0.0 || color.g > peak
+                         || color.b < 0.0 || color.b > peak;
           if (outOfGamut) {
             // Blend with magenta at ~50% opacity
-            color = clamp(color, 0.0, 1.0);
-            color = mix(color, vec3(1.0, 0.0, 1.0), 0.5);
-            return color;
+            color = clamp(color, 0.0, peak);
+            color = mix(color, vec3(peak, 0.0, peak), 0.5);
+            highlighted = true;
           }
         }
         // Apply clipping or soft compression
-        if (u_gamutMappingMode == 1) {
-          color = gamutSoftClip(color);
-        } else {
-          color = clamp(color, 0.0, 1.0);
+        if (!highlighted) {
+          if (u_gamutMappingMode == 1) {
+            color = gamutSoftClip(color / peak) * peak;
+          } else {
+            color = clamp(color, 0.0, peak);
+          }
+        }
+        // Back to the BT.709 working space.
+        if (u_targetGamut == 2) {
+          color = P3_TO_SRGB * color;
+        } else if (u_targetGamut == 1) {
+          color = REC2020_TO_SRGB * color;
         }
         return color;
       }
@@ -1315,7 +1364,8 @@
 
         // 3a. Clamp after brightness: negative values are physically meaningless
         // and would be amplified by contrast multiplication, producing artifacts.
-        color.rgb = max(color.rgb, vec3(0.0));
+        // Clamped in the source primaries so wide-gamut colours survive (H7).
+        color.rgb = clampToSourceGamut(color.rgb);
 
         // 4. Contrast (pivot at 0.5, per-channel)
         color.rgb = (color.rgb - 0.5) * u_contrastRGB + 0.5;
@@ -1335,7 +1385,7 @@
             float blackPoint = hsPeak * u_blacks * (55.0 / 255.0);
             float range = whitePoint - blackPoint;
             if (range > 0.0) {
-              color.rgb = clamp((color.rgb - blackPoint) / range * hsPeak, 0.0, hsPeak);
+              color.rgb = min(clampToSourceGamut((color.rgb - blackPoint) / range * hsPeak), vec3(hsPeak));
             }
           }
 
@@ -1353,12 +1403,18 @@
           if (u_shadows != 0.0) {
             color.rgb += u_shadows * shadowMask * hsPeak * (128.0 / 255.0);
           }
-          color.rgb = max(color.rgb, vec3(0.0));
+          color.rgb = clampToSourceGamut(color.rgb);
         }
 
         // 5c. Vibrance (intelligent saturation - boosts less-saturated colors more)
         if (u_vibranceEnabled && u_vibrance != 0.0) {
-          vec3 vibHsl = rgbToHsl(clamp(color.rgb, 0.0, 1.0));
+          // HSL is defined on [0,1]: scale HDR values (> 1.0) down by their
+          // largest channel and back up afterwards instead of clipping them.
+          // SDR values use a scale of exactly 1.0. Negative components are
+          // clamped for the hue math.
+          vec3 vibIn = max(color.rgb, vec3(0.0));
+          float vibScale = max(max(max(vibIn.r, vibIn.g), vibIn.b), 1.0);
+          vec3 vibHsl = rgbToHsl(vibIn / vibScale);
           float vibH = vibHsl.x; // 0-360
           float vibS = vibHsl.y; // 0-1
           float vibL = vibHsl.z; // 0-1
@@ -1374,7 +1430,7 @@
           float newS = clamp(vibS + adjustment, 0.0, 1.0);
 
           if (abs(newS - vibS) > 0.001) {
-            color.rgb = hslToRgb(vibH, newS, vibL);
+            color.rgb = hslToRgb(vibH, newS, vibL) * vibScale;
           }
         }
 
@@ -1447,7 +1503,8 @@
           // High-frequency detail from original texture (both terms in same space)
           vec3 highFreq = origCenter - blurred;
           float effectScale = u_clarity * 0.7; // CLARITY_EFFECT_SCALE
-          color.rgb = clamp(color.rgb + highFreq * midtoneMask * effectScale, 0.0, max(max(color.r, max(color.g, color.b)), 1.0));
+          float clarityCeil = max(max(color.r, max(color.g, color.b)), 1.0);
+          color.rgb = min(clampToSourceGamut(color.rgb + highFreq * midtoneMask * effectScale), vec3(clarityCeil));
         }
 
         // --- Color grading effects ---
@@ -1513,7 +1570,11 @@
 
         // 6e. HSL Qualifier (secondary color correction)
         if (u_hslQualifierEnabled) {
-          vec3 hslQ = rgbToHsl(clamp(color.rgb, 0.0, 1.0));
+          // Same HDR scaling as vibrance: qualify and correct the colour
+          // normalised to its largest channel, then restore the level.
+          vec3 qIn = max(color.rgb, vec3(0.0));
+          float qScale = max(max(max(qIn.r, qIn.g), qIn.b), 1.0);
+          vec3 hslQ = rgbToHsl(qIn / qScale);
           float qH = hslQ.x;
           float qS = hslQ.y * 100.0;
           float qL = hslQ.z * 100.0;
@@ -1548,7 +1609,7 @@
             if (newH >= 360.0) newH -= 360.0;
             float newS = clamp((hslQ.y * (1.0 - matte)) + (hslQ.y * u_hslCorrSatScale * matte), 0.0, 1.0);
             float newL = clamp((hslQ.z * (1.0 - matte)) + (hslQ.z * u_hslCorrLumScale * matte), 0.0, 1.0);
-            color.rgb = hslToRgb(newH, newS, newL);
+            color.rgb = hslToRgb(newH, newS, newL) * qScale;
           }
         }
 
@@ -1593,7 +1654,15 @@
         }
 
         // 7. Tone mapping (applied before display transfer for proper HDR handling)
-        color.rgb = applyToneMapping(max(color.rgb, 0.0), u_toneMappingOperator);
+        // The per-channel curves run in the source primaries so a wide-gamut
+        // source keeps its gamut (see clampToSourceGamut); BT.709 sources are
+        // tone mapped in BT.709 exactly as before.
+        if (u_inputPrimariesEnabled && !u_fileLUT3DEnabled) {
+          vec3 tmSource = max(u_inputPrimariesInverse * color.rgb, vec3(0.0));
+          color.rgb = u_inputPrimariesMatrix * applyToneMapping(tmSource, u_toneMappingOperator);
+        } else {
+          color.rgb = applyToneMapping(max(color.rgb, 0.0), u_toneMappingOperator);
+        }
 
         // 7a. Gamut mapping (after tone mapping, before display transfer)
         if (u_gamutMappingEnabled) {
@@ -1639,10 +1708,12 @@
             + texture(u_texture, v_texCoord + vec2(0.0, 1.0) * u_texelSize).rgb;
           // Laplacian: high-frequency edge detail (both terms in same space)
           vec3 detail = origCenter * 4.0 - neighbors;
-          color.rgb = max(color.rgb + detail * u_sharpenAmount, 0.0);
+          color.rgb = clampToSourceGamut(color.rgb + detail * u_sharpenAmount);
         }
 
         // 7c. Output primaries conversion (BT.709 working space → display gamut)
+        // Colours outside the output gamut become negative here and are
+        // clipped by the display-output stage below, after the conversion.
         if (u_outputPrimariesEnabled) {
             color.rgb = u_outputPrimariesMatrix * color.rgb;
         }

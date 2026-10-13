@@ -149,6 +149,51 @@ export const COLOR_PRIMARIES_MATRICES = {
   SRGB_TO_REC2020: new Float32Array([0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.088, 0.0433, 0.0114, 0.8956]),
 } as const;
 
+/**
+ * Exact inverse of a column-major 3x3 matrix (same layout as GLSL `mat3`).
+ * Returns the identity for a singular matrix.
+ */
+export function invertMat3ColMajor(m: Float32Array): Float32Array {
+  // Column-major: m[col * 3 + row], so the math matrix is [[a b c] [d e f] [g h i]].
+  const [a = 0, d = 0, g = 0, b = 0, e = 0, h = 0, c = 0, f = 0, i = 0] = m;
+  const A = e * i - f * h;
+  const B = -(d * i - f * g);
+  const C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) {
+    return new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  }
+  const inv = 1 / det;
+  // Inverse = adjugate / det; adjugate is the transposed cofactor matrix.
+  return new Float32Array([
+    A * inv,
+    B * inv,
+    C * inv,
+    -(b * i - c * h) * inv,
+    (a * i - c * g) * inv,
+    -(a * h - b * g) * inv,
+    (b * f - c * e) * inv,
+    -(a * f - c * d) * inv,
+    (a * e - b * d) * inv,
+  ]);
+}
+
+/**
+ * Inverses of the input-primaries matrices (BT.709 working space → source
+ * primaries). The viewer shader uses them to clamp negative values in the
+ * source gamut rather than in BT.709, so wide-gamut colours that are negative
+ * in BT.709 survive until the output-primaries conversion. Computed from the
+ * forward matrices (not the 4-decimal SRGB_TO_* tables) so the round trip is
+ * the identity to float precision.
+ */
+export const COLOR_PRIMARIES_INVERSE_MATRICES = {
+  IDENTITY: COLOR_PRIMARIES_MATRICES.IDENTITY,
+  /** BT.709/sRGB (D65) → BT.2020 (D65), exact inverse of REC2020_TO_SRGB */
+  SRGB_TO_REC2020: invertMat3ColMajor(COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB),
+  /** BT.709/sRGB (D65) → Display-P3 (D65), exact inverse of P3_TO_SRGB */
+  SRGB_TO_P3: invertMat3ColMajor(COLOR_PRIMARIES_MATRICES.P3_TO_SRGB),
+} as const;
+
 /** Map ChannelMode string to shader integer */
 export const CHANNEL_MODE_CODES: Record<ChannelMode, number> = {
   rgb: 0,

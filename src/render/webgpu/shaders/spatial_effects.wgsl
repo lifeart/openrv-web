@@ -5,6 +5,7 @@ struct Uniforms {
   clarityEnabled: u32,   // 0=off, 1=on
   clarityValue: f32,     // -1.0 to +1.0
   texelSize: vec2f,      // 1.0 / textureResolution
+  gamut: SourceGamutClamp, // negative clamp runs in the source primaries
 }
 
 // VSOut is provided by the prepended vertex shader source
@@ -75,7 +76,7 @@ struct Uniforms {
     let effectScale = u.clarityValue * 0.7; // CLARITY_EFFECT_SCALE
     let maxVal = max(max(color.r, max(color.g, color.b)), 1.0);
     color = vec4f(
-      clamp(color.rgb + highFreq * midtoneMask * effectScale, vec3f(0.0), vec3f(maxVal)),
+      min(clampToSourceGamut(color.rgb + highFreq * midtoneMask * effectScale, u.gamut), vec3f(maxVal)),
       color.a
     );
   }

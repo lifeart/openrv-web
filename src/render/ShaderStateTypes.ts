@@ -214,6 +214,8 @@ export interface InternalShaderState {
   // Automatic color primaries conversion
   inputPrimariesEnabled: boolean;
   inputPrimariesMatrix: Float32Array; // 9 floats, column-major mat3
+  /** Inverse of inputPrimariesMatrix (BT.709 working space → source primaries) */
+  inputPrimariesInverse: Float32Array; // 9 floats, column-major mat3
   outputPrimariesEnabled: boolean;
   outputPrimariesMatrix: Float32Array; // 9 floats, column-major mat3
 }
@@ -348,6 +350,7 @@ export function createDefaultInternalState(): InternalShaderState {
     contourLineColor: [1.0, 1.0, 1.0],
     inputPrimariesEnabled: false,
     inputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    inputPrimariesInverse: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
     outputPrimariesEnabled: false,
     outputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
   };

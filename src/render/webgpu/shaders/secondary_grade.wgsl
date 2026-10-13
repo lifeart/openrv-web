@@ -2,7 +2,7 @@
 // Ports the highlights/shadows, vibrance, and hue rotation logic from viewer.frag.glsl.
 //
 // NOTE: This shader expects common.wgsl to be prepended, which provides:
-//   LUMA
+//   LUMA, SourceGamutClamp, clampToSourceGamut, hdrHslScale
 
 struct Uniforms {
   highlights: f32,             // -1.0 to +1.0
@@ -14,6 +14,7 @@ struct Uniforms {
   hueRotationEnabled: i32,     // 0=off, 1=on
   _pad0: f32,                  // padding for alignment
   hueRotationMatrix: mat3x3f,  // luminance-preserving 3x3 matrix
+  gamut: SourceGamutClamp,     // negative clamps run in the source primaries
 }
 
 // VSOut is provided by the prepended vertex shader source
@@ -109,7 +110,7 @@ fn hslToRgb(h: f32, s: f32, l: f32) -> vec3f {
     let range = whitePoint - blackPoint;
     if (range > 0.0) {
       color = vec4f(
-        clamp((color.rgb - blackPoint) / range * hsPeak, vec3f(0.0), vec3f(hsPeak)),
+        min(clampToSourceGamut((color.rgb - blackPoint) / range * hsPeak, u.gamut), vec3f(hsPeak)),
         color.a
       );
     }
@@ -135,11 +136,16 @@ fn hslToRgb(h: f32, s: f32, l: f32) -> vec3f {
       color.a
     );
   }
-  color = vec4f(max(color.rgb, vec3f(0.0)), color.a);
+  color = vec4f(clampToSourceGamut(color.rgb, u.gamut), color.a);
 
   // --- Vibrance (intelligent saturation) ---
   if (u.vibrance != 0.0) {
-    let vibHsl = rgbToHsl(clamp(color.rgb, vec3f(0.0), vec3f(1.0)));
+    // HSL is defined on [0,1]: scale HDR values (> 1.0) down by their largest
+    // channel and back up afterwards instead of clipping them. Negative
+    // components are clamped for the hue math.
+    let vibIn = max(color.rgb, vec3f(0.0));
+    let vibScale = hdrHslScale(vibIn);
+    let vibHsl = rgbToHsl(vibIn / vibScale);
     let vibH = vibHsl.x; // 0-360
     let vibS = vibHsl.y; // 0-1
     let vibL = vibHsl.z; // 0-1
@@ -155,7 +161,7 @@ fn hslToRgb(h: f32, s: f32, l: f32) -> vec3f {
     let newS = clamp(vibS + adjustment, 0.0, 1.0);
 
     if (abs(newS - vibS) > 0.001) {
-      color = vec4f(hslToRgb(vibH, newS, vibL), color.a);
+      color = vec4f(hslToRgb(vibH, newS, vibL) * vibScale, color.a);
     }
   }
 

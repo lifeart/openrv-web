@@ -47,7 +47,9 @@ import {
 // ---------------------------------------------------------------------------
 // Uniform layout — must match `Uniforms` in scene_analysis.wgsl exactly.
 // ---------------------------------------------------------------------------
-const UNIFORM_BUFFER_SIZE = 80;
+// 80 bytes of scalars + the trailing SourceGamutClamp (112 bytes, all zero =
+// disabled, i.e. BT.709 source) — see SCENE_ANALYSIS_BYTE_SIZE.
+const UNIFORM_BUFFER_SIZE = 192;
 
 interface ToneMappingUniforms {
   outOfRange?: number;

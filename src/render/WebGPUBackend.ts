@@ -16,7 +16,7 @@
  * - createTexture/deleteTexture/getContext: STUB - returns null (WebGPU uses different types)
  */
 
-import type { IPImage } from '../core/image/Image';
+import type { ColorPrimaries, IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
 import type {
@@ -51,6 +51,13 @@ import { WebGPUReadback } from './webgpu/WebGPUReadback';
 // ---------------------------------------------------------------------------
 
 import { Logger } from '../utils/Logger';
+import {
+  OUTPUT_ENCODING_DISPLAY,
+  OUTPUT_MODE_HDR,
+  OUTPUT_MODE_SDR,
+  outputEncodingForCanvasColorSpace,
+  type OutputEncodingCode,
+} from '../config/RenderConfig';
 
 const logger = new Logger('WebGPUBackend');
 export class WebGPUBackend implements RendererBackend {
@@ -83,6 +90,10 @@ export class WebGPUBackend implements RendererBackend {
 
   // Whether HDR output is enabled (canvas uses rgba16float)
   private hdrOutputEnabled = false;
+
+  // Color space the canvas context is configured with (drives output primaries
+  // and the output encoding, like the WebGL drawing-buffer color space).
+  private canvasColorSpace: 'srgb' | 'display-p3' = 'srgb';
 
   // HDR headroom value (peak brightness / SDR white)
   private hdrHeadroomValue = 1.0;
@@ -198,6 +209,8 @@ export class WebGPUBackend implements RendererBackend {
         alphaMode: 'opaque',
       });
       this.extendedToneMapping = toneMappingMode === 'extended';
+      this.canvasColorSpace = 'display-p3';
+      this.syncOutputContract();
     } catch {
       if (toneMappingMode === 'extended') {
         logger.warn('Extended tone mapping not supported, falling back to standard');
@@ -439,6 +452,7 @@ export class WebGPUBackend implements RendererBackend {
             alphaMode: 'opaque',
           });
           this.extendedToneMapping = false;
+          this.canvasColorSpace = 'srgb';
         } catch {
           // Fall back to HDR config if SDR config fails
           this.configureContext(this.device, 'standard');
@@ -446,7 +460,43 @@ export class WebGPUBackend implements RendererBackend {
       }
     }
 
+    this.syncOutputContract();
     return true;
+  }
+
+  /**
+   * Color space of the pixels this backend writes to its canvas. Output
+   * primaries must follow it (see ViewerGLRenderer.applyAutomaticColorPrimaries),
+   * mirroring Renderer.getOutputColorSpace for the WebGL drawing buffer.
+   */
+  getOutputColorSpace(): 'srgb' | 'display-p3' | 'rec2020' {
+    return this.canvasColorSpace;
+  }
+
+  /**
+   * Output encoding the displayOutput stage must produce (the GLSL
+   * `u_outputEncoding` contract): the user's display transfer in SDR, and the
+   * encoding the canvas expects in HDR. WebGPU canvases are 'srgb' or
+   * 'display-p3' float16 with extended tone mapping, so every HDR mode
+   * (including 'hlg' / 'pq') encodes extended-range sRGB.
+   */
+  getOutputEncoding(): OutputEncodingCode {
+    if (this.hdrOutputMode === 'sdr') return OUTPUT_ENCODING_DISPLAY;
+    return outputEncodingForCanvasColorSpace(this.canvasColorSpace);
+  }
+
+  /** Automatic input / output primaries conversion (same contract as Renderer). */
+  setColorPrimaries(
+    inputPrimaries: ColorPrimaries | undefined,
+    outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+  ): void {
+    this.stateManager.setColorPrimaries(inputPrimaries, outputColorSpace);
+  }
+
+  /** Push the surface-dependent output contract to the shader pipeline. */
+  private syncOutputContract(): void {
+    this.shaderPipeline.setOutputEncoding(this.getOutputEncoding());
+    this.shaderPipeline.setGlobalOutputMode(this.hdrOutputMode === 'sdr' ? OUTPUT_MODE_SDR : OUTPUT_MODE_HDR);
   }
 
   getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended' {

@@ -138,6 +138,7 @@ import {
   GAMUT_CODES,
   GAMUT_MODE_CODES,
   COLOR_PRIMARIES_MATRICES,
+  COLOR_PRIMARIES_INVERSE_MATRICES,
   DEFAULT_CHECKER_SIZE,
 } from './ShaderConstants';
 
@@ -781,12 +782,15 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     if (inputPrimaries === 'bt2020') {
       this.state.inputPrimariesEnabled = true;
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB;
+      this.state.inputPrimariesInverse = COLOR_PRIMARIES_INVERSE_MATRICES.SRGB_TO_REC2020;
     } else if (inputPrimaries === 'p3') {
       this.state.inputPrimariesEnabled = true;
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.P3_TO_SRGB;
+      this.state.inputPrimariesInverse = COLOR_PRIMARIES_INVERSE_MATRICES.SRGB_TO_P3;
     } else {
       this.state.inputPrimariesEnabled = false;
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.IDENTITY;
+      this.state.inputPrimariesInverse = COLOR_PRIMARIES_INVERSE_MATRICES.IDENTITY;
     }
 
     if (outputColorSpace === 'display-p3') {
