@@ -2179,6 +2179,22 @@ describe('ShaderStateManager', () => {
       expect(mat[2]).toBeCloseTo(-0.024, 4);
     });
 
+    it('CP-SM-008b: chromaticities also upload the inverse used by the source-gamut clamp', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'srgb', AP1);
+      const uploaded = uploadPrimaries(mgr);
+      const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
+      const inv = uploaded['u_inputPrimariesInverse'] as Float32Array;
+      // Column-major product M · M⁻¹ is the identity.
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          let sum = 0;
+          for (let k = 0; k < 3; k++) sum += mat[k * 3 + r]! * inv[c * 3 + k]!;
+          expect(sum).toBeCloseTo(r === c ? 1 : 0, 5);
+        }
+      }
+    });
+
     it('CP-SM-009: a named value wins over chromaticities', () => {
       const mgr = new ShaderStateManager();
       mgr.setColorPrimaries('bt709', 'srgb', AP1);

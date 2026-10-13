@@ -15,6 +15,7 @@ import {
   type Chromaticities,
 } from '../../color/ColorPrimariesMath';
 
+import { invertMat3ColMajor } from '../ShaderConstants';
 import viewerVertSrc from '../shaders/viewer.vert.glsl?raw';
 import viewerFragSrc from '../shaders/viewer.frag.glsl?raw';
 
@@ -64,6 +65,12 @@ describe('Input primaries from chromaticities (real GPU)', () => {
       gl.getUniformLocation(program, 'u_inputPrimariesMatrix'),
       false,
       getChromaticitiesShaderMatrix(chroma)!,
+    );
+    // The source-gamut clamp needs the matching inverse, as ShaderStateManager sets it.
+    gl.uniformMatrix3fv(
+      gl.getUniformLocation(program, 'u_inputPrimariesInverse'),
+      false,
+      invertMat3ColMajor(getChromaticitiesShaderMatrix(chroma)!),
     );
     const { texture, dispose } = createSolidTexture(gl, rgb[0], rgb[1], rgb[2], 1.0, 'float32');
     gl.activeTexture(gl.TEXTURE0);
