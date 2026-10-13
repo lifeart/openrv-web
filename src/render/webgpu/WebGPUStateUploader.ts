@@ -224,6 +224,9 @@ export const DIRTY_FLAG_TO_STAGES: Record<string, readonly StageId[]> = {
     'spatialEffectsPost',
   ],
   displayLut3d: ['displayOutput'],
+  // The OCIO float stage is WebGL-only (viewer.frag.glsl 7b'); the WebGPU
+  // stage pipeline is feature-flagged off and has no OCIO stage yet.
+  ocioLut3d: ['displayOutput'],
 };
 
 // ---------------------------------------------------------------------------

@@ -22,6 +22,12 @@ import type { ColorWheelsState } from './core/types/color';
 
 export const DEFAULT_OCIO_BAKE_SIZE = 33;
 export const ACES_OCIO_BAKE_SIZE = 65;
+/**
+ * Cube size of the float-pipeline OCIO bake (HDR / float sources). Its log2
+ * shaper spreads ~15 stops over the cube, so 33 points would leave about two
+ * per stop; it always uses 65.
+ */
+export const OCIO_FLOAT_BAKE_SIZE = 65;
 
 /**
  * Choose baked OCIO LUT resolution.
@@ -284,7 +290,11 @@ export function updateOCIOPipeline(ctx: AppWiringContext, state: OCIOState): voi
     // ACES transforms use 65^3 for better precision; others use 33^3.
     const bakeSize = resolveOCIOBakeSize(state);
     const bakedLUT = processor.bakeTo3DLUT(bakeSize);
-    ctx.viewer.setOCIOBakedLUT(bakedLUT, true);
+    // HDR / float sources run OCIO inside the GL float pipeline instead of
+    // the 8-bit canvas; that bake is only built when such a source is shown.
+    ctx.viewer.setOCIOBakedLUT(bakedLUT, true, (options) =>
+      processor.bakeLinearDisplayLUT(OCIO_FLOAT_BAKE_SIZE, options),
+    );
   } else {
     // Disable OCIO - clear the baked LUT
     ctx.viewer.setOCIOBakedLUT(null, false);

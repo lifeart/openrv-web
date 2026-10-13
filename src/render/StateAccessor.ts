@@ -144,6 +144,13 @@ export interface StateAccessor {
     domainMax?: [number, number, number],
   ): void;
 
+  /**
+   * Set the OCIO display transform for HDR / float sources (stage 7b'): a
+   * float 3D LUT indexed through a log2 shaper. Pass null to disable. Only
+   * marks state dirty when the LUT or shaper actually changed.
+   */
+  setOCIOLUT(lut: { data: Float32Array; size: number; shaper: { epsilon: number; maxValue: number } } | null): void;
+
   /** Get the current display color management state. */
   getDisplayColorState(): DisplayColorConfig;
 
@@ -287,6 +294,9 @@ export interface StateAccessor {
   /** Get the Display LUT texture data and dirty state. */
   getDisplayLUT3DSnapshot(): LUT3DSnapshot;
 
+  /** Get the OCIO LUT texture data and dirty state. */
+  getOCIOLUT3DSnapshot(): LUT3DSnapshot;
+
   /**
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
@@ -299,6 +309,7 @@ export interface StateAccessor {
       | 'filmLUTDirty'
       | 'inlineLUTDirty'
       | 'fileLUT3DDirty'
-      | 'displayLUT3DDirty',
+      | 'displayLUT3DDirty'
+      | 'ocioLUT3DDirty',
   ): void;
 }

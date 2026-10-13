@@ -96,6 +96,7 @@ export function setupIdentityPipeline(gl: WebGL2RenderingContext, program: WebGL
   gl.uniform1i(gl.getUniformLocation(program, 'u_fileLUT3DEnabled'), 0);
   gl.uniform1i(gl.getUniformLocation(program, 'u_lookLUT3DEnabled'), 0);
   gl.uniform1i(gl.getUniformLocation(program, 'u_displayLUT3DEnabled'), 0);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_ocioLUT3DEnabled'), 0);
 
   // Display transfer: linear (0) — no OETF
   gl.uniform1i(gl.getUniformLocation(program, 'u_displayTransfer'), 0);
@@ -220,6 +221,7 @@ function bindUnusedSamplerDummies(gl: WebGL2RenderingContext, program: WebGLProg
   gl.uniform1i(gl.getUniformLocation(program, 'u_fileLUT3D'), DUMMY_LUT_3D_UNIT);
   gl.uniform1i(gl.getUniformLocation(program, 'u_lookLUT3D'), DUMMY_LUT_3D_UNIT);
   gl.uniform1i(gl.getUniformLocation(program, 'u_displayLUT3D'), DUMMY_LUT_3D_UNIT);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_ocioLUT3D'), DUMMY_LUT_3D_UNIT);
 
   // Restore active texture to unit 0 so callers can bind u_texture without
   // having to know what setupIdentityPipeline left selected.

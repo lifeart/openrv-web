@@ -1279,6 +1279,42 @@ export class OCIOTransform {
   }
 
   /**
+   * Split the chain into its linear-light core for the GPU float pipeline.
+   *
+   * A display transform chain starts by decoding the input space's transfer
+   * function and ends by encoding for the display. The WebGL pipeline applies
+   * the output encoding of its own surface, so the display encode is always
+   * taken off and `core` ends in display-linear light. The input decode is
+   * taken off as well when `stripInputDecode` is set, i.e. when the pipeline
+   * has already linearised the source (PQ / HLG / sRGB-curve inputs); then
+   * `core` starts from scene-linear values in the input space's primaries.
+   * The removed transfer functions are reported so the caller can account
+   * for them.
+   */
+  splitLinearCore(stripInputDecode = true): {
+    inputDecode: TransferFunctionName | null;
+    outputEncode: TransferFunctionName | null;
+    core: OCIOTransform;
+  } {
+    const steps = [...this.steps];
+    let inputDecode: TransferFunctionName | null = null;
+    let outputEncode: TransferFunctionName | null = null;
+    const first = steps[0];
+    if (stripInputDecode && first?.type === 'gamma_decode') {
+      inputDecode = first.func;
+      steps.shift();
+    }
+    const last = steps[steps.length - 1];
+    if (last?.type === 'gamma_encode') {
+      outputEncode = last.func;
+      steps.pop();
+    }
+    const core = new OCIOTransform(this._inputSpace, this._outputSpace);
+    core.steps = steps;
+    return { inputDecode, outputEncode, core };
+  }
+
+  /**
    * Apply the transform to an ImageData (in-place modification)
    */
   applyToImageData(imageData: ImageData): ImageData {

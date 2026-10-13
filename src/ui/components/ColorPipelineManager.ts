@@ -27,6 +27,7 @@ import {
   getSharedOCIOProcessor,
 } from '../../color/ColorProcessingFacade';
 import { applyLUT3D } from '../../color/LUTLoader';
+import type { OCIOLinearDisplayLUT } from '../../color/OCIODisplayLUT';
 import { applyColorMatrix } from '../../color/LUTUtils';
 import type { LUTStageState } from '../../color/pipeline/LUTPipelineState';
 import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
@@ -34,6 +35,9 @@ import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMapping
 import { Logger } from '../../utils/Logger';
 
 const logger = new Logger('ColorPipelineManager');
+
+/** Builds the OCIO float-pipeline bake (OCIOProcessor.bakeLinearDisplayLUT). */
+export type OCIOLinearLUTProvider = (options: { stripInputDecode: boolean }) => OCIOLinearDisplayLUT;
 interface NamedLUTStage {
   label: string;
   stage: LUTStageState;
@@ -83,6 +87,10 @@ export class ColorPipelineManager {
   private _ocioLUTProcessor: WebGLLUTProcessor | null = null;
   private _ocioEnabled = false;
   private _ocioBakedLUT: LUT3D | null = null;
+  // Float-pipeline bakes for HDR / float sources (built on first use, see
+  // getOCIOLinearDisplayLUT). The provider is replaced on every OCIO change.
+  private _ocioLinearLUTProvider: OCIOLinearLUTProvider | null = null;
+  private _ocioLinearLUTs = new Map<boolean, OCIOLinearDisplayLUT>();
 
   // --- Tone mapping ---
   private _toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
@@ -323,9 +331,21 @@ export class ColorPipelineManager {
     return this._ocioLUTProcessor;
   }
 
-  setOCIOBakedLUT(lut: LUT3D | null, enabled: boolean): void {
+  /**
+   * Set the OCIO transform.
+   *
+   * @param lut              Baked [0, 1] LUT for the 8-bit canvas path (SDR sources)
+   * @param enabled          Whether OCIO is on
+   * @param linearLUTProvider Builds the float-pipeline bake for HDR / float
+   *   sources (OCIOProcessor.bakeLinearDisplayLUT). Called lazily, at most once
+   *   per variant per call to this method. Without it HDR sources cannot be
+   *   colour managed on the GPU and the viewer keeps them on the canvas path.
+   */
+  setOCIOBakedLUT(lut: LUT3D | null, enabled: boolean, linearLUTProvider: OCIOLinearLUTProvider | null = null): void {
     this._ocioBakedLUT = lut;
     this._ocioEnabled = enabled;
+    this._ocioLinearLUTProvider = lut && enabled ? linearLUTProvider : null;
+    this._ocioLinearLUTs.clear();
     if (this._ocioLUTProcessor) {
       this._ocioLUTProcessor.setLUT(lut);
     }
@@ -333,6 +353,28 @@ export class ColorPipelineManager {
 
   isOCIOEnabled(): boolean {
     return this._ocioEnabled && this._ocioBakedLUT !== null;
+  }
+
+  /** Whether OCIO is on and can run inside the GL float pipeline. */
+  get ocioGPUAvailable(): boolean {
+    return this.isOCIOEnabled() && this._ocioLinearLUTProvider !== null;
+  }
+
+  /**
+   * The OCIO transform baked for the GL float pipeline, or null when OCIO is
+   * off or no float bake was supplied. Baked on first access per variant.
+   *
+   * @param inputLinearized True when the renderer has already decoded the
+   *   source's transfer function (PQ / HLG): the OCIO input decode is dropped.
+   */
+  getOCIOLinearDisplayLUT(inputLinearized: boolean): OCIOLinearDisplayLUT | null {
+    if (!this.isOCIOEnabled() || !this._ocioLinearLUTProvider) return null;
+    let bake = this._ocioLinearLUTs.get(inputLinearized);
+    if (!bake) {
+      bake = this._ocioLinearLUTProvider({ stripInputDecode: inputLinearized });
+      this._ocioLinearLUTs.set(inputLinearized, bake);
+    }
+    return bake;
   }
 
   // =========================================================================

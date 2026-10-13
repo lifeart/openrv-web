@@ -142,7 +142,8 @@ describe('Documentation consistency', () => {
   // -- LUT slots ------------------------------------------------------------
 
   test('shader has 3 LUT3D slots', () => {
-    const lutNames = getLUT3DUniformNames();
+    // u_ocioLUT3D is the internal OCIO float stage, not a user LUT slot.
+    const lutNames = getLUT3DUniformNames().filter((name) => name !== 'u_ocioLUT3D');
     expect(lutNames).toContain('u_fileLUT3D');
     expect(lutNames).toContain('u_lookLUT3D');
     expect(lutNames).toContain('u_displayLUT3D');

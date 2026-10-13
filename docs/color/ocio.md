@@ -113,6 +113,17 @@ Custom configurations are registered alongside built-in configurations and persi
 
 ---
 
+## HDR and Float Sources
+
+For HDR and float sources (EXR, HDR video, PQ/HLG images) OCIO runs inside the GPU float pipeline, not on an 8-bit canvas. The active OCIO chain is baked into a float 3D LUT (65³) behind a log2 shaper that covers values up to 128× reference white, so highlights above 1.0 reach the transform unclamped. The baked LUT outputs display-linear light; the viewer then converts to the output primaries and applies one display encoding:
+
+- **SDR output**: the OCIO display's own transfer (sRGB, Rec.709, gamma 2.6 for DCI-P3, ...).
+- **HDR output (PQ / HLG / extended sRGB)**: the surface encoding. A PQ view shown on a PQ output (or an HLG view on HLG) passes the view's signal through unchanged, because the bake decodes it to linear (1.0 = 203 cd/m²) and the output stage re-encodes it.
+
+The WebGPU and Canvas2D HDR output paths read back from the same GL pipeline, so OCIO is applied there too. The background render worker has no OCIO stage, so while OCIO is active on an HDR source the viewer renders on the main thread instead. If a float bake is unavailable, OCIO is applied on the 8-bit canvas (with a one-time warning) rather than skipped.
+
+---
+
 ## WASM Processing
 
 For complex OCIO transforms that cannot be expressed as simple matrix + transfer function combinations, OpenRV Web uses a WASM-compiled OCIO processor. This provides accurate results but processes on the CPU, which may introduce latency for high-resolution images. The native GPU pipeline handles the most common transforms (linearization, primaries conversion, display transfer) at full frame rate.

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { wireColorControls, resolveOCIOBakeSize, ACES_OCIO_BAKE_SIZE, DEFAULT_OCIO_BAKE_SIZE } from './AppColorWiring';
+import {
+  wireColorControls,
+  resolveOCIOBakeSize,
+  ACES_OCIO_BAKE_SIZE,
+  DEFAULT_OCIO_BAKE_SIZE,
+  OCIO_FLOAT_BAKE_SIZE,
+} from './AppColorWiring';
 import { EventEmitter } from './utils/EventEmitter';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { DEFAULT_COLOR_WHEELS_STATE } from './core/types/color';
@@ -29,6 +35,7 @@ class StubCurvesControl extends EventEmitter {}
 class StubOCIOControl extends EventEmitter {
   private _processor = {
     bakeTo3DLUT: vi.fn(() => new Float32Array(65 * 65 * 65 * 3)),
+    bakeLinearDisplayLUT: vi.fn(() => ({ lut: { size: 65 } })),
   };
   getProcessor() {
     return this._processor;
@@ -239,7 +246,13 @@ describe('wireColorControls', () => {
     const processor = ctx._controls.ocioControl.getProcessor();
     expect(processor.bakeTo3DLUT).toHaveBeenCalledWith(ACES_OCIO_BAKE_SIZE);
     expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledTimes(1);
-    expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(expect.any(Float32Array), true);
+    expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(expect.any(Float32Array), true, expect.any(Function));
+    // The float-pipeline bake (HDR / float sources) is lazy: only built when the
+    // viewer asks for it, at the float bake size and with the requested variant.
+    expect(processor.bakeLinearDisplayLUT).not.toHaveBeenCalled();
+    const provider = ctx._viewer.setOCIOBakedLUT.mock.calls[0]![2];
+    provider({ stripInputDecode: true });
+    expect(processor.bakeLinearDisplayLUT).toHaveBeenCalledWith(OCIO_FLOAT_BAKE_SIZE, { stripInputDecode: true });
     expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
   });
@@ -340,6 +353,10 @@ describe('wireColorControls', () => {
 
     const processor = ctx._controls.ocioControl.getProcessor();
     expect(processor.bakeTo3DLUT).toHaveBeenCalledWith(DEFAULT_OCIO_BAKE_SIZE);
+    // The float-pipeline bake does not drop to 33³: its shaper needs the finer grid.
+    const provider = ctx._viewer.setOCIOBakedLUT.mock.calls[0]![2];
+    provider({ stripInputDecode: false });
+    expect(processor.bakeLinearDisplayLUT).toHaveBeenCalledWith(OCIO_FLOAT_BAKE_SIZE, { stripInputDecode: false });
   });
 
   it('CW-011: gamutMappingChanged calls viewer.setGamutMappingState + scheduleUpdateScopes + syncGTOStore', () => {

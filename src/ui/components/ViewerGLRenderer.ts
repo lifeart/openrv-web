@@ -51,6 +51,7 @@ import type { LuminanceVisualization } from './LuminanceVisualization';
 import type { AutoExposureState, GamutMappingState, GamutIdentifier } from '../../core/types/effects';
 import { DEFAULT_AUTO_EXPOSURE_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { AutoExposureController } from '../../color/AutoExposureController';
+import { sdrDisplayTransferFor } from '../../color/OCIODisplayLUT';
 import { LuminanceAnalyzer } from '../../render/LuminanceAnalyzer';
 import { PerfTrace } from '../../utils/PerfTrace';
 
@@ -132,6 +133,17 @@ function bakeFilmLUT(stockId: string): Uint8Array | null {
   }
   _filmLUTCache = { stockId, data };
   return data;
+}
+
+/**
+ * Whether viewer.frag.glsl decodes this image's transfer function to linear
+ * light before the colour pipeline (mirrors the u_inputTransfer selection in
+ * Renderer.renderImage). Other float sources keep their file values, which
+ * the OCIO input space then describes.
+ */
+export function isInputLinearizedByShader(image: IPImage): boolean {
+  const tf = image.metadata?.transferFunction;
+  return tf === 'hlg' || tf === 'pq' || tf === 'smpte240m' || (!!image.videoFrame && tf === 'srgb');
 }
 
 export class ViewerGLRenderer {
@@ -426,7 +438,56 @@ export class ViewerGLRenderer {
     // written to (drawing buffer or blit canvas), not the display gamut: the
     // browser converts that color space to the display itself.
     const outputColorSpace = targetColorSpace ?? this.getDrawingBufferColorSpace(renderer);
+
+    // OCIO float stage: the OCIO input space defines the source primaries, so
+    // no input normalization. Its output is display-linear BT.709, which the
+    // output conversion takes to the surface like any other content.
+    if (this.isOCIOFloatStageActive()) {
+      renderer.setColorPrimaries(undefined, outputColorSpace);
+      return;
+    }
+
     renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
+  }
+
+  /**
+   * Whether OCIO runs inside the GL float pipeline for HDR / float sources
+   * (OCIO on and a float bake available; see OCIODisplayLUT.ts).
+   */
+  isOCIOFloatStageActive(): boolean {
+    return this.ctx.getColorPipeline().ocioGPUAvailable;
+  }
+
+  /**
+   * Install (or clear) the OCIO float stage on the renderer for an HDR render
+   * and adapt the display transfer to it. Must run before applyRenderState().
+   *
+   * @param image The image being rendered: whether the shader linearises it
+   *   (PQ / HLG / sRGB-curve input) picks the bake variant.
+   * @param sdrSurface True when the output encoding is the SDR display
+   *   transfer (u_outputEncoding 0). The display transfer is then set to the
+   *   OCIO display's own transfer so the view's signal is reproduced; HDR
+   *   surfaces encode the display-linear OCIO output themselves.
+   */
+  private applyOCIOFloatStage(renderer: Renderer, image: IPImage, state: RenderState, sdrSurface: boolean): void {
+    const stage = renderer as Partial<Pick<Renderer, 'setOCIOLUT'>>;
+    if (typeof stage.setOCIOLUT !== 'function') return;
+    const ocio = this.isOCIOFloatStageActive()
+      ? this.ctx.getColorPipeline().getOCIOLinearDisplayLUT(isInputLinearizedByShader(image))
+      : null;
+    if (!ocio) {
+      renderer.setOCIOLUT(null);
+      return;
+    }
+    renderer.setOCIOLUT({ data: ocio.lut.data, size: ocio.lut.size, shaper: ocio.shaper });
+    if (sdrSurface) {
+      const transfer = sdrDisplayTransferFor(ocio.displayTransfer);
+      state.displayColor = {
+        ...state.displayColor,
+        transferFunction: DISPLAY_TRANSFER_CODES[transfer.transferFunction],
+        customGamma: transfer.customGamma ?? state.displayColor.customGamma,
+      };
+    }
   }
 
   /**
@@ -473,9 +534,12 @@ export class ViewerGLRenderer {
     // or when in E2E test mode (tests need main-thread access to sample pixels).
     const override = typeof window !== 'undefined' ? getRendererOverride(window.location.search) : null;
     const isTest = typeof window !== 'undefined' && !!window.__OPENRV_TEST__;
+    // The OCIO float stage (HDR / float sources with OCIO on) is only
+    // installed on the sync Renderer, like the blits' FBO readback.
     const skipWorker =
       this._webgpuBlit?.initialized === true ||
       this._canvas2dBlit?.initialized === true ||
+      this.isOCIOFloatStageActive() ||
       override === 'main' ||
       (isTest && override !== 'worker');
     if (!skipWorker && !this._renderWorkerProxy && !this._isAsyncRenderer) {
@@ -743,9 +807,11 @@ export class ViewerGLRenderer {
   renderHDRWithWebGL(image: IPImage, displayWidth: number, displayHeight: number): boolean {
     const blitReady = this._webgpuBlit?.initialized === true;
 
-    // If the blit is ready but the current renderer is a worker proxy,
-    // we must switch to sync. Do this BEFORE ensureGLRenderer().
-    if (blitReady && this._isAsyncRenderer && this._glRenderer) {
+    // If the blit is ready or OCIO runs in the float pipeline, but the current
+    // renderer is a worker proxy, we must switch to sync: both need state the
+    // worker does not have (FBO readback, the OCIO LUT). Do this BEFORE
+    // ensureGLRenderer().
+    if ((blitReady || this.isOCIOFloatStageActive()) && this._isAsyncRenderer && this._glRenderer) {
       this.fallbackToSyncRenderer();
     }
 
@@ -835,6 +901,7 @@ export class ViewerGLRenderer {
 
     // Automatic color primaries conversion (separate from creative gamut mapping)
     this.applyAutomaticColorPrimaries(renderer, image);
+    this.applyOCIOFloatStage(renderer, image, state, !isHDROutput);
 
     PerfTrace.end('buildRenderState');
 
@@ -902,6 +969,9 @@ export class ViewerGLRenderer {
     displayWidth: number,
     displayHeight: number,
   ): boolean {
+    if (this.isOCIOFloatStageActive() && this._isAsyncRenderer && this._glRenderer) {
+      this.fallbackToSyncRenderer();
+    }
     const renderer = this.ensureGLRenderer();
     if (!renderer || !this._glCanvas || tiles.length === 0) return false;
 
@@ -939,6 +1009,7 @@ export class ViewerGLRenderer {
       state.gamutMapping = this.detectGamutMapping(firstImage);
     }
     this.applyAutomaticColorPrimaries(renderer, firstImage);
+    this.applyOCIOFloatStage(renderer, firstImage, state, !isHDROutput);
     PerfTrace.end('buildRenderState');
 
     PerfTrace.begin('applyRenderState');
@@ -999,6 +1070,8 @@ export class ViewerGLRenderer {
     // Primaries follow the blit canvas color space ('srgb' or 'display-p3').
     const blit = this._webgpuBlit;
     this.applyAutomaticColorPrimaries(renderer, image, blit?.colorSpace === 'display-p3' ? 'display-p3' : 'srgb');
+    // OCIO applies inside the float pipeline the blit reads back from.
+    this.applyOCIOFloatStage(renderer, image, state, false);
 
     // Debug: log blit render state (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -1109,6 +1182,8 @@ export class ViewerGLRenderer {
     const canvas2dColorSpace = this._canvas2dBlit?.colorSpace ?? 'srgb-linear';
     const canvas2dEncoding = outputEncodingForCanvasColorSpace(canvas2dColorSpace);
     this.applyAutomaticColorPrimaries(renderer, image, canvas2dColorSpace.startsWith('rec2100') ? 'rec2020' : 'srgb');
+    // OCIO applies inside the float pipeline the blit reads back from.
+    this.applyOCIOFloatStage(renderer, image, state, false);
 
     // Debug: log canvas2d blit render state (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -1498,6 +1573,12 @@ export class ViewerGLRenderer {
 
     // Sync all render state (SDR: use as configured, no overrides)
     renderer.applyRenderState(this.buildRenderState());
+
+    // SDR sources get OCIO on the canvas path (the viewer never routes them
+    // here while OCIO is on); drop a float-stage LUT left by an HDR source.
+    if (typeof (renderer as Partial<Renderer>).setOCIOLUT === 'function') {
+      renderer.setOCIOLUT(null);
+    }
 
     // SDR frames are display-encoded sRGB: the primaries matrices left over
     // from an HDR source (e.g. BT.2020 -> 709, 709 -> P3) must not touch them.

@@ -9,6 +9,7 @@ import { PaintEngine } from '../../paint/PaintEngine';
 import { DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import type { MediaSource } from '../../core/session/Session';
+import { IPImage } from '../../core/image/Image';
 import type { CropRegion, CropState } from './CropControl';
 import type { PixelProbe } from './PixelProbe';
 
@@ -393,10 +394,10 @@ describe('Viewer', () => {
       ocioSpy.mockRestore();
     });
 
-    it('VWR-407: HDR WebGL path is bypassed when OCIO is active (regression fix)', () => {
+    it('VWR-407: HDR WebGL path is bypassed when OCIO is active without a float bake (regression fix)', () => {
       // Regression: the HDR WebGL path used to render and return without OCIO.
-      // Now when OCIO is active, the HDR path should be skipped so OCIO can be
-      // applied via the 2D canvas fallback.
+      // Without a float-pipeline bake the HDR path is skipped so OCIO can be
+      // applied via the 2D canvas fallback (with one, see VWR-409).
       const tv = testable(viewer);
       const fakeLUT = createFakeLUT();
       viewer.setOCIOBakedLUT(fakeLUT, true);
@@ -412,7 +413,7 @@ describe('Viewer', () => {
       expect(() => viewer.render()).not.toThrow();
     });
 
-    it('VWR-408: HDR mode is deactivated when OCIO becomes active', () => {
+    it('VWR-408: HDR mode is deactivated when OCIO without a float bake becomes active', () => {
       // When OCIO is enabled while an HDR source was being rendered via WebGL,
       // the HDR mode should be deactivated to switch to the 2D canvas path.
       const tv = testable(viewer);
@@ -428,6 +429,83 @@ describe('Viewer', () => {
 
       // HDR mode should be deactivated because OCIO is active
       expect(tv.glRendererManager.hdrRenderActive).toBe(false);
+    });
+
+    describe('HDR source + OCIO routing (H11)', () => {
+      function setHDRFileSource() {
+        const ipImage = new IPImage({ width: 64, height: 32, channels: 4, dataType: 'float32' });
+        const getCanvas = vi.fn(() => document.createElement('canvas'));
+        const fileSourceNode = {
+          isHDR: () => true,
+          getIPImage: () => ipImage,
+          getCanvas,
+          getElement: () => null,
+          stereoInputFormat: null,
+        };
+        const tv = testable(viewer);
+        tv.session = {
+          ...tv.session,
+          currentSource: {
+            type: 'image',
+            name: 'plate.exr',
+            url: 'plate.exr',
+            width: 64,
+            height: 32,
+            duration: 1,
+            fps: 24,
+            fileSourceNode,
+          } as unknown as MediaSource,
+        };
+        const internals = viewer as unknown as {
+          renderHDRWithWebGL: (image: IPImage, w: number, h: number) => boolean;
+        };
+        const renderHDR = vi.spyOn(internals, 'renderHDRWithWebGL').mockReturnValue(true);
+        return { getCanvas, renderHDR, ipImage };
+      }
+
+      const floatBake = () =>
+        ({
+          lut: createFakeLUT(),
+          shaper: { epsilon: 1 / 256, maxValue: 128 },
+          displayTransfer: 'srgb',
+          signal: 'sdr',
+          inputDecode: null,
+          stripInputDecode: false,
+        }) as unknown as import('../../color/OCIODisplayLUT').OCIOLinearDisplayLUT;
+
+      it('VWR-409: with a float bake, an HDR source stays in the GL float pipeline (no 8-bit canvas)', () => {
+        const { getCanvas, renderHDR } = setHDRFileSource();
+        viewer.setOCIOBakedLUT(createFakeLUT(), true, floatBake);
+
+        viewer.render();
+
+        expect(renderHDR).toHaveBeenCalledTimes(1);
+        expect(getCanvas).not.toHaveBeenCalled();
+      });
+
+      it('VWR-410: without a float bake, OCIO is applied on the canvas instead of being skipped', () => {
+        const { getCanvas, renderHDR } = setHDRFileSource();
+        viewer.setOCIOBakedLUT(createFakeLUT(), true);
+
+        viewer.render();
+
+        expect(renderHDR).not.toHaveBeenCalled();
+        expect(getCanvas).toHaveBeenCalled();
+      });
+
+      it('VWR-411: an active WebGPU blit no longer bypasses OCIO for HDR sources', () => {
+        const { getCanvas, renderHDR } = setHDRFileSource();
+        const tv = testable(viewer);
+        Object.defineProperty(tv.glRendererManager, 'isWebGPUBlitReady', { get: () => true, configurable: true });
+        viewer.setOCIOBakedLUT(createFakeLUT(), true);
+
+        viewer.render();
+
+        // No float bake: the blit (which reads the GL pipeline) must not be used
+        // without OCIO; the canvas path applies it instead.
+        expect(renderHDR).not.toHaveBeenCalled();
+        expect(getCanvas).toHaveBeenCalled();
+      });
     });
   });
 

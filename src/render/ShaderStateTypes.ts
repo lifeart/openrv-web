@@ -98,6 +98,14 @@ export interface InternalShaderState {
   displayLUT3DDomainMin: [number, number, number];
   displayLUT3DDomainMax: [number, number, number];
 
+  // OCIO display transform for HDR / float sources (stage 7b', shaped float LUT)
+  ocioLUT3DEnabled: boolean;
+  ocioLUT3DSize: number;
+  ocioLUT3DDirty: boolean;
+  ocioLUT3DData: Float32Array | null;
+  /** [epsilon, 1 / log2(1 + max / epsilon)] — see OCIODisplayLUT.ts. */
+  ocioShaper: [number, number];
+
   // Display color management
   displayTransferCode: number;
   displayGammaOverride: number;
@@ -273,6 +281,11 @@ export function createDefaultInternalState(): InternalShaderState {
     displayLUT3DData: null,
     displayLUT3DDomainMin: [0, 0, 0],
     displayLUT3DDomainMax: [1, 1, 1],
+    ocioLUT3DEnabled: false,
+    ocioLUT3DSize: 0,
+    ocioLUT3DDirty: true,
+    ocioLUT3DData: null,
+    ocioShaper: [1, 1],
     displayTransferCode: DISPLAY_TRANSFER_SRGB,
     displayGammaOverride: 1.0,
     displayBrightnessMultiplier: 1.0,
@@ -384,6 +397,8 @@ export interface TextureCallbacks {
   bindFileLUT3DTexture(): void;
   /** Ensure Display LUT 3D texture exists, upload if dirty, activate TEXTURE7, bind. */
   bindDisplayLUT3DTexture(): void;
+  /** Ensure OCIO LUT 3D texture exists, upload if dirty, activate TEXTURE8, bind. */
+  bindOCIOLUT3DTexture?(): void;
   /** Get the current canvas dimensions for u_resolution. */
   getCanvasSize(): { width: number; height: number };
 }
