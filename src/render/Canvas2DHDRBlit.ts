@@ -31,6 +31,8 @@ export class Canvas2DHDRBlit {
   private ctx: CanvasRenderingContext2D | null = null;
   private _initialized = false;
   private _colorSpace: string = 'srgb-linear';
+  /** Reused float32 ImageData for uploads at an unchanged size. */
+  private imageData: ImageData | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -117,6 +119,7 @@ export class Canvas2DHDRBlit {
         this.canvas = testCanvas;
         this.ctx = ctx;
         this._colorSpace = attempt.colorSpace;
+        this.imageData = null;
         this._initialized = true;
         log.info(`Canvas2D HDR blit initialized (colorSpace: ${attempt.colorSpace})`);
         return;
@@ -159,11 +162,16 @@ export class Canvas2DHDRBlit {
       this.canvas.height = height;
     }
 
-    // Create float32 ImageData with the canvas color space
-    const imageData = new ImageData(width, height, {
-      colorSpace: this._colorSpace as PredefinedColorSpace,
-      storageFormat: 'float32',
-    } as ImageDataSettings);
+    // Float32 ImageData in the canvas color space, reused while the size is
+    // unchanged (putImageData copies, so the buffer can be refilled next frame)
+    let imageData = this.imageData;
+    if (!imageData || imageData.width !== width || imageData.height !== height) {
+      imageData = new ImageData(width, height, {
+        colorSpace: this._colorSpace as PredefinedColorSpace,
+        storageFormat: 'float32',
+      } as ImageDataSettings);
+      this.imageData = imageData;
+    }
 
     // Copy pixels with row flip (WebGL bottom-to-top → Canvas2D top-to-bottom)
     const dst = imageData.data as unknown as Float32Array;
@@ -185,6 +193,7 @@ export class Canvas2DHDRBlit {
       this.canvas.parentNode.removeChild(this.canvas);
     }
     this.ctx = null;
+    this.imageData = null;
     this._initialized = false;
     this._colorSpace = 'srgb-linear';
   }

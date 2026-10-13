@@ -12,6 +12,7 @@ import { DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl'
 import type { RenderWorkerMessage, RenderWorkerResult, SyncStateMessage } from './renderWorker.messages';
 import type { RenderState } from './RenderState';
 import { IPImage } from '../core/image/Image';
+import { DEFAULT_CAPABILITIES, type DisplayCapabilities } from '../color/DisplayCapabilities';
 
 // Mock OffscreenCanvas for jsdom
 if (typeof globalThis.OffscreenCanvas === 'undefined') {
@@ -284,9 +285,87 @@ describe('RenderWorkerProxy', () => {
       expect(proxy.getHDROutputMode()).toBe('sdr');
     });
 
+    const hdrCaps: DisplayCapabilities = {
+      ...DEFAULT_CAPABILITIES,
+      displayHDR: true,
+      webglHLG: true,
+      webglPQ: true,
+      webglDrawingBufferStorage: true,
+    };
+
+    async function flushHDRRequest(): Promise<SyncStateMessage> {
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+      const syncMsg = mockWorker.messageHistory.filter((m) => m.type === 'syncState').pop() as SyncStateMessage;
+      const renderMsg = mockWorker.messageHistory.filter((m) => m.type === 'renderSDR').pop();
+      mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as { id: number }).id });
+      await promise;
+      return syncMsg;
+    }
+
     it('RWP-020: setHDROutputMode stores mode', () => {
-      proxy.setHDROutputMode('hlg', {} as any);
+      expect(proxy.setHDROutputMode('hlg', hdrCaps)).toBe(true);
       expect(proxy.getHDROutputMode()).toBe('hlg');
+    });
+
+    it('RWP-020a: rejects modes the capabilities cannot provide without contacting the worker', () => {
+      expect(proxy.setHDROutputMode('hlg', { ...hdrCaps, webglHLG: false })).toBe(false);
+      expect(proxy.setHDROutputMode('pq', { ...hdrCaps, webglPQ: false })).toBe(false);
+      expect(proxy.setHDROutputMode('extended', { ...hdrCaps, webglDrawingBufferStorage: false })).toBe(false);
+      expect(proxy.getHDROutputMode()).toBe('sdr');
+      expect(proxy.hasPendingStateChanges()).toBe(false);
+      // SDR is always accepted
+      expect(proxy.setHDROutputMode('sdr', DEFAULT_CAPABILITIES)).toBe(true);
+    });
+
+    it('RWP-020b: sends a request id with the mode in the next syncState', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setHDROutputMode('pq', hdrCaps);
+      const syncMsg = await flushHDRRequest();
+      expect(syncMsg.state.hdrOutputMode?.mode).toBe('pq');
+      expect(syncMsg.state.hdrOutputMode?.requestId).toEqual(expect.any(Number));
+    });
+
+    it('RWP-020c: a worker rejection restores the mode actually in effect', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setHDROutputMode('hlg', hdrCaps);
+      const syncMsg = await flushHDRRequest();
+      expect(proxy.getHDROutputMode()).toBe('hlg');
+
+      mockWorker.simulateMessage({
+        type: 'hdrOutputModeResult',
+        requestId: syncMsg.state.hdrOutputMode?.requestId,
+        requested: 'hlg',
+        accepted: false,
+        mode: 'sdr',
+      });
+      expect(proxy.getHDROutputMode()).toBe('sdr');
+    });
+
+    it('RWP-020d: a stale worker reply does not override a newer request', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setHDROutputMode('hlg', hdrCaps);
+      const first = await flushHDRRequest();
+      proxy.setHDROutputMode('pq', hdrCaps);
+      const second = await flushHDRRequest();
+
+      // Reply to the first request (it failed) arrives after the second was sent.
+      mockWorker.simulateMessage({
+        type: 'hdrOutputModeResult',
+        requestId: first.state.hdrOutputMode?.requestId,
+        requested: 'hlg',
+        accepted: false,
+        mode: 'sdr',
+      });
+      expect(proxy.getHDROutputMode()).toBe('pq');
+
+      mockWorker.simulateMessage({
+        type: 'hdrOutputModeResult',
+        requestId: second.state.hdrOutputMode?.requestId,
+        requested: 'pq',
+        accepted: true,
+        mode: 'pq',
+      });
+      expect(proxy.getHDROutputMode()).toBe('pq');
     });
   });
 

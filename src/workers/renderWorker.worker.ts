@@ -14,7 +14,7 @@
 
 import { Renderer } from '../render/Renderer';
 import { createRenderer } from '../render/createRenderer';
-import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
+import { DEFAULT_CAPABILITIES, type DisplayCapabilities } from '../color/DisplayCapabilities';
 import { IPImage } from '../core/image/Image';
 import type { RenderWorkerMessage, RenderWorkerResult, RenderHDRMessage } from '../render/renderWorker.messages';
 import {
@@ -161,6 +161,20 @@ function reconstructIPImage(msg: RenderHDRMessage): IPImage {
 }
 
 /**
+ * Switch the renderer's HDR output mode and report the outcome, so the main
+ * thread's cached mode follows what the drawing buffer actually uses.
+ */
+function applyHDROutputMode(
+  mode: 'sdr' | 'hlg' | 'pq' | 'extended',
+  capabilities: DisplayCapabilities,
+  requestId: number | undefined,
+): void {
+  if (!renderer) return;
+  const accepted = renderer.setHDROutputMode(mode, capabilities);
+  post({ type: 'hdrOutputModeResult', requestId, requested: mode, accepted, mode: renderer.getHDROutputMode() });
+}
+
+/**
  * Apply a batch sync state message to the renderer.
  */
 function applySyncState(msg: RenderWorkerMessage): void {
@@ -218,7 +232,9 @@ function applySyncState(msg: RenderWorkerMessage): void {
   }
   if (state.displayColorState) renderer.setDisplayColorState(state.displayColorState);
   if (state.backgroundPattern) renderer.setBackgroundPattern(state.backgroundPattern);
-  if (state.hdrOutputMode) renderer.setHDROutputMode(state.hdrOutputMode.mode, state.hdrOutputMode.capabilities);
+  if (state.hdrOutputMode) {
+    applyHDROutputMode(state.hdrOutputMode.mode, state.hdrOutputMode.capabilities, state.hdrOutputMode.requestId);
+  }
   if (state.gamutMapping) renderer.setGamutMapping(state.gamutMapping);
   if (state.premultMode !== undefined) renderer.setPremultMode(state.premultMode);
   if (state.ditherMode !== undefined) renderer.setDitherMode(state.ditherMode);
@@ -488,7 +504,7 @@ function handleMessage(msg: RenderWorkerMessage): void {
       break;
 
     case 'setHDROutputMode':
-      renderer?.setHDROutputMode(msg.mode, msg.capabilities);
+      applyHDROutputMode(msg.mode, msg.capabilities, msg.requestId);
       break;
 
     case 'syncState':

@@ -139,6 +139,23 @@ const RENDER_STATE_COVERED_SYNC_KEYS: readonly (keyof RendererSyncState)[] = [
   'channelSwizzle',
 ];
 
+/**
+ * Whether the display capabilities allow the worker's Renderer to switch to
+ * `mode`. Mirrors the conditions Renderer.setHDROutputMode depends on.
+ */
+function canApplyHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', caps: DisplayCapabilities): boolean {
+  switch (mode) {
+    case 'hlg':
+      return caps.webglHLG === true;
+    case 'pq':
+      return caps.webglPQ === true;
+    case 'extended':
+      return caps.webglDrawingBufferStorage === true;
+    default:
+      return true;
+  }
+}
+
 /** Most recent scope readback received from the worker. */
 interface ScopeCacheEntry {
   image: WeakRef<IPImage>;
@@ -183,6 +200,8 @@ export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSu
   private colorInversionEnabled = false;
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
   private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
+  /** Id of the latest HDR output mode request; older worker replies are ignored. */
+  private hdrOutputModeRequestId = 0;
   private premultMode = 0;
   private ditherMode = 0;
   private quantizeBits = 0;
@@ -689,9 +708,26 @@ export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSu
   // HDR output
   // ==========================================================================
 
+  /**
+   * Request an HDR output mode on the worker's renderer.
+   *
+   * The worker applies the mode asynchronously, so the answer here is a
+   * capability pre-check (the same conditions under which Renderer can switch
+   * the drawing buffer): rec2100 modes need `webglHLG` / `webglPQ`, extended
+   * needs `webglDrawingBufferStorage` for its half-float buffer. A mode that
+   * fails the pre-check is rejected without touching the worker. An accepted
+   * request is cached optimistically and then corrected by the worker's
+   * `hdrOutputModeResult`, so getHDROutputMode() reports the mode actually in
+   * effect after a switch the worker could not complete.
+   */
   setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', capabilities: DisplayCapabilities): boolean {
+    if (!canApplyHDROutputMode(mode, capabilities)) {
+      log.warn(`HDR output mode '${mode}' not supported by this display/browser; keeping '${this.hdrOutputMode}'`);
+      return false;
+    }
+    const requestId = ++this.hdrOutputModeRequestId;
     this.hdrOutputMode = mode;
-    this.dirtyState.hdrOutputMode = { mode, capabilities };
+    this.dirtyState.hdrOutputMode = { mode, capabilities, requestId };
     this.hasDirtyState = true;
     return true;
   }
@@ -1206,6 +1242,15 @@ export class RenderWorkerProxy implements RendererBackend, WorkerProxyRendererSu
         }
         break;
       }
+
+      case 'hdrOutputModeResult':
+        // Only the reply to the latest request describes the current state.
+        if (msg.requestId !== undefined && msg.requestId !== this.hdrOutputModeRequestId) break;
+        if (!msg.accepted) {
+          log.warn(`Worker could not switch HDR output to '${msg.requested}'; staying in '${msg.mode}'`);
+        }
+        this.hdrOutputMode = msg.mode;
+        break;
 
       case 'contextLost':
         this.contextLost = true;

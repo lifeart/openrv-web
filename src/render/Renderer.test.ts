@@ -225,6 +225,45 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     expect(getLastUniform1i(mockGL, 'u_outputMode')).toBe(0);
   });
 
+  it('REN-SDR-005a: on an HLG buffer, SDR frames are decoded from sRGB and HLG-encoded in BT.2020', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportHLG: true });
+    renderer.setHDROutputMode('hlg', makeCaps({ webglHLG: true }));
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(document.createElement('canvas'));
+
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(4); // OUTPUT_ENCODING_HLG
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(5); // INPUT_TRANSFER_SRGB_TO_LINEAR
+    expect(getLastUniform1i(mockGL, 'u_outputPrimariesEnabled')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_inputPrimariesEnabled')).toBe(0);
+    expect(getLastUniform1i(mockGL, 'u_outputMode')).toBe(0);
+  });
+
+  it('REN-SDR-005b: on a PQ buffer, SDR frames are PQ-encoded', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportPQ: true });
+    renderer.setHDROutputMode('pq', makeCaps({ webglPQ: true }));
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(document.createElement('canvas'));
+
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(3); // OUTPUT_ENCODING_PQ
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(5);
+    expect(getLastUniform1i(mockGL, 'u_outputPrimariesEnabled')).toBe(1);
+  });
+
+  it('REN-SDR-005c: SDR and extended buffers keep the display-encoded path', () => {
+    const mockGL = initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(document.createElement('canvas'));
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(0); // OUTPUT_ENCODING_DISPLAY
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(0);
+
+    renderer.setHDROutputMode('extended', makeCaps({ webglDrawingBufferStorage: true }));
+    renderer.renderSDRFrame(document.createElement('canvas'));
+    expect(getLastUniform1i(mockGL, 'u_outputEncoding')).toBe(0);
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(0);
+  });
+
   it('REN-SDR-006: renderSDRFrame reuses SDR texture across calls', () => {
     const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
@@ -1993,6 +2032,19 @@ describe('Renderer renderImageToFloat', () => {
     expect(result1).toBe(result2);
   });
 
+  it('REN-FBO-012a: shrinking to the interaction size reuses the larger readback buffer', () => {
+    initWithFBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const full = renderer.renderImageToFloat(image, 8, 8)!;
+    const reduced = renderer.renderImageToFloat(image, 4, 4)!;
+    const fullAgain = renderer.renderImageToFloat(image, 8, 8)!;
+
+    expect(reduced.length).toBe(4 * 4 * 4);
+    expect(reduced.buffer).toBe(full.buffer);
+    expect(fullAgain).toBe(full);
+  });
+
   it('REN-FBO-013: allocates new readback buffer when dimensions change', () => {
     initWithFBOCapableGL();
 
@@ -2385,6 +2437,19 @@ describe('Renderer renderImageToFloatAsync', () => {
     // Last viewport should restore original [0, 0, 100, 100]
     const lastViewport = viewport!.mock.calls[viewport!.mock.calls.length - 1] as number[];
     expect(lastViewport).toEqual([0, 0, 100, 100]);
+  });
+
+  it('REN-PBO-013a: interaction-size readbacks reuse the full-size pixel storage', () => {
+    initWithPBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const full = renderer.renderImageToFloatAsync(image, 8, 8)!;
+    const reduced = renderer.renderImageToFloatAsync(image, 4, 4)!;
+    const fullAgain = renderer.renderImageToFloatAsync(image, 8, 8)!;
+
+    expect(reduced.length).toBe(4 * 4 * 4);
+    expect(reduced.buffer).toBe(full.buffer);
+    expect(fullAgain).toBe(full);
   });
 
   it('REN-PBO-013: reuses cached pixel buffer when dimensions unchanged', () => {

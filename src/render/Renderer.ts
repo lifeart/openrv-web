@@ -200,6 +200,7 @@ export class Renderer implements RendererBackend {
   private hdrPBOWidth = 0;
   private hdrPBOHeight = 0;
   private hdrPBOCachedPixels: Float32Array | null = null; // data from previous frame
+  private hdrPBOPixelStore: Float32Array | null = null; // grow-only backing for hdrPBOCachedPixels
   private hdrPBOReady = false; // true after first frame has been captured
 
   // --- Dedicated FBO/PBO for scope readback (separate from display blit path) ---
@@ -523,6 +524,7 @@ export class Renderer implements RendererBackend {
     this.hdrPBOWidth = 0;
     this.hdrPBOHeight = 0;
     this.hdrPBOCachedPixels = null;
+    this.hdrPBOPixelStore = null;
     this.hdrPBOReady = false;
 
     // Scope FBO/PBO resources
@@ -2018,12 +2020,10 @@ export class Renderer implements RendererBackend {
     this.hdrOutputMode = prevHdrMode;
     this._readbackEncoding = null;
 
-    // Read float pixels (reuse buffer across frames when dimensions match)
+    // Read float pixels (reuse buffer across frames and across the switch
+    // between interaction and full resolution)
     const pixelCount = width * height * RGBA_CHANNELS;
-    if (!this.hdrReadbackBuffer || this.hdrReadbackBuffer.length !== pixelCount) {
-      this.hdrReadbackBuffer = new Float32Array(pixelCount);
-    }
-    const pixels = this.hdrReadbackBuffer;
+    const pixels = this.growOnlyFloatView('sync', pixelCount);
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
 
     const err = gl.getError();
@@ -2096,7 +2096,7 @@ export class Renderer implements RendererBackend {
 
     const pixelCount = width * height * RGBA_CHANNELS;
     if (!this.hdrPBOCachedPixels || this.hdrPBOCachedPixels.length !== pixelCount) {
-      this.hdrPBOCachedPixels = new Float32Array(pixelCount);
+      this.hdrPBOCachedPixels = this.growOnlyFloatView('pbo', pixelCount);
     }
 
     // Step 1: Render current frame to FBO
@@ -2155,6 +2155,22 @@ export class Renderer implements RendererBackend {
     gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
 
     return this.hdrPBOCachedPixels;
+  }
+
+  /**
+   * Float readback storage that only grows: the blit paths alternate between
+   * the reduced interaction resolution and the full resolution, and reusing
+   * the larger allocation avoids a new multi-megabyte array on every switch.
+   * Returns a view of exactly `count` floats.
+   */
+  private growOnlyFloatView(kind: 'sync' | 'pbo', count: number): Float32Array {
+    let store = kind === 'sync' ? this.hdrReadbackBuffer : this.hdrPBOPixelStore;
+    if (!store || store.length < count) {
+      store = new Float32Array(count);
+      if (kind === 'sync') this.hdrReadbackBuffer = store;
+      else this.hdrPBOPixelStore = store;
+    }
+    return store.length === count ? store : store.subarray(0, count);
   }
 
   /**
@@ -2632,7 +2648,8 @@ export class Renderer implements RendererBackend {
    *
    * The source is uploaded as an UNSIGNED_BYTE RGBA texture, u_inputTransfer is
    * set to 0 (sRGB), and all currently configured effects are applied via the
-   * existing fragment shader.
+   * existing fragment shader. On a rec2100-hlg/pq drawing buffer the sRGB
+   * values are decoded to linear and encoded as HLG/PQ in BT.2020 instead.
    *
    * Returns the WebGL canvas element so the Viewer can position / composite it.
    * Returns null if the WebGL context is unavailable.
@@ -2717,14 +2734,25 @@ export class Renderer implements RendererBackend {
     this.scaleBuffer[1] = 1;
     this.displayShader.setUniform('u_scale', this.scaleBuffer);
 
-    // SDR output: always clamp to [0,1], sRGB input (no special EOTF).
-    // SDR sources are already display-encoded, so they keep the display
-    // encoding path (with u_displayTransfer forced to linear below).
+    // SDR output: always clamp to [0,1].
+    // On sRGB / display-p3 / extended buffers the sources are already encoded
+    // for the surface, so they keep the display encoding path (with
+    // u_displayTransfer forced to linear below) and no EOTF.
+    // A rec2100-hlg/pq buffer expects an HLG/PQ signal with BT.2020 primaries:
+    // decode the sRGB curve to linear (SDR white 1.0 = 203 cd/m²), convert
+    // BT.709 -> BT.2020 and encode with the buffer's transfer, as renderImage does.
+    const rec2100Buffer = this.hdrOutputMode === 'hlg' || this.hdrOutputMode === 'pq';
+    const sdrOutputEncoding = rec2100Buffer ? outputEncodingForHDRMode(this.hdrOutputMode) : OUTPUT_ENCODING_DISPLAY;
+    const sdrInputTransfer = rec2100Buffer ? INPUT_TRANSFER_SRGB_TO_LINEAR : INPUT_TRANSFER_SRGB;
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
-    this.displayShader.setUniformInt('u_outputEncoding', OUTPUT_ENCODING_DISPLAY);
-    this._lastOutputEncodingCode = OUTPUT_ENCODING_DISPLAY;
-    this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
-    this._lastInputTransferCode = INPUT_TRANSFER_SRGB;
+    this.displayShader.setUniformInt('u_outputEncoding', sdrOutputEncoding);
+    this._lastOutputEncodingCode = sdrOutputEncoding;
+    this.displayShader.setUniformInt('u_inputTransfer', sdrInputTransfer);
+    this._lastInputTransferCode = sdrInputTransfer;
+    if (rec2100Buffer) {
+      // sRGB sources (uploaded with unpackColorSpace 'srgb'), BT.2020 buffer.
+      this.stateManager.setColorPrimaries(undefined, 'rec2020');
+    }
     // Apply user rotation/flip (SDR has no video rotation metadata)
     const sdrRotMatrix = getRotationMatrix2x2(normalizeAngle(this._userRotation));
     this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', sdrRotMatrix);
@@ -2851,6 +2879,7 @@ export class Renderer implements RendererBackend {
     this.hdrFBOHeight = 0;
     this.hasColorBufferFloat = null;
     this.hdrReadbackBuffer = null;
+    this.hdrPBOPixelStore = null;
 
     // Release PBO resources
     this.disposeHDRPBOs();

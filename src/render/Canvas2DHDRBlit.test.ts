@@ -177,6 +177,20 @@ describe('Canvas2DHDRBlit', () => {
       expect(dst[10]).toBeCloseTo(0.0);
     });
 
+    it('reuses the float ImageData while the size is unchanged', () => {
+      const { blit, mockCtx } = createInitializedBlit();
+
+      blit.uploadAndDisplay(new Float32Array(2 * 2 * 4).fill(0.25), 2, 2);
+      blit.uploadAndDisplay(new Float32Array(2 * 2 * 4).fill(0.5), 2, 2);
+      blit.uploadAndDisplay(new Float32Array(1 * 1 * 4).fill(0.75), 1, 1);
+
+      const [a, b, c] = mockCtx.putImageData.mock.calls.map((call: unknown[]) => call[0]);
+      expect(b).toBe(a);
+      expect(c).not.toBe(a);
+      // The reused ImageData carries the latest frame
+      expect((b as { data: Float32Array }).data[0]).toBeCloseTo(0.5);
+    });
+
     it('should resize canvas when dimensions change', () => {
       const { blit } = createInitializedBlit();
       const canvas = blit.getCanvas();

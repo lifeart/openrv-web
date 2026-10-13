@@ -754,7 +754,6 @@ export class ViewerGLRenderer {
 
     const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
     const hasFloatReadback = typeof renderer.renderImageToFloat === 'function';
-    const interactionActive = this.ctx.isInteractionActive();
 
     // Debug: log HDR rendering path decision (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -778,13 +777,18 @@ export class ViewerGLRenderer {
       );
     }
 
+    // The blit paths stay active during interaction (zoom, pan, scrub). The
+    // caller already passes the reduced interaction resolution, so the float
+    // readback shrinks with it; switching to the SDR GL canvas instead would
+    // make the picture flicker between HDR and SDR on every gesture.
+
     // Try WebGPU HDR blit path when WebGL2 has no native HDR output
-    if (!interactionActive && !isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
+    if (!isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithWebGPUBlit(renderer, image, displayWidth, displayHeight);
     }
 
     // Try Canvas2D HDR blit path as last resort when WebGPU blit is not available
-    if (!interactionActive && !isHDROutput && this._canvas2dBlit?.initialized && hasFloatReadback) {
+    if (!isHDROutput && this._canvas2dBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithCanvas2DBlit(renderer, image, displayWidth, displayHeight);
     }
 
@@ -1498,8 +1502,12 @@ export class ViewerGLRenderer {
     // SDR frames are display-encoded sRGB: the primaries matrices left over
     // from an HDR source (e.g. BT.2020 -> 709, 709 -> P3) must not touch them.
     // Gamut conversion for a P3 drawing buffer happens at texture upload.
+    // A rec2100 buffer is the exception: renderSDRFrame linearizes SDR frames
+    // there and needs the 709 -> 2020 matrix (it sets it itself; matching it
+    // here keeps the primaries uniforms from being re-dirtied every frame).
     if (typeof (renderer as Partial<Renderer>).setColorPrimaries === 'function') {
-      renderer.setColorPrimaries(undefined, 'srgb');
+      const rec2100 = this.getDrawingBufferColorSpace(renderer) === 'rec2020';
+      renderer.setColorPrimaries(undefined, rec2100 ? 'rec2020' : 'srgb');
     }
 
     // Apply user rotation/flip via shader uniforms (replaces CSS transform)
