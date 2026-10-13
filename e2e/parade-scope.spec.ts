@@ -122,7 +122,7 @@ test.describe('Parade Scope (RGB Parade)', () => {
       expect(paradeScreenshot.length).toBeGreaterThan(100);
     });
 
-    test('PARADE-004: scale matches 0-255 range', async ({ page }) => {
+    test('PARADE-004: scale shows the 0-100 IRE range', async ({ page }) => {
       // Open waveform and set to parade mode
       await page.keyboard.press('w');
       await page.waitForTimeout(300);
@@ -133,14 +133,14 @@ test.describe('Parade Scope (RGB Parade)', () => {
         await page.waitForTimeout(100);
       }
 
-      // Check footer shows scale markers (0, 128, 255)
+      // Footer shows the default IRE scale: 0 to 100 (% of reference white)
       const waveformFooter = page.locator('[data-testid="waveform-container"] .waveform-footer');
       await expect(waveformFooter).toBeVisible();
 
       const footerText = await waveformFooter.textContent();
       expect(footerText).toContain('0');
-      expect(footerText).toContain('128');
-      expect(footerText).toContain('255');
+      expect(footerText).toContain('IRE %');
+      expect(footerText).toContain('100');
     });
   });
 

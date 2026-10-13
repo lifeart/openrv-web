@@ -6,7 +6,8 @@
  * - RGB parade mode displaying separate R/G/B waveforms
  * - RGB overlay mode with superimposed channels
  * - Horizontal position mapped to image columns
- * - Vertical axis shows signal level (0-255)
+ * - Vertical scale: IRE % (default), cd/m² on a linear axis, or cd/m² on a
+ *   PQ-coded axis for HDR content (see scopes/WaveformScale)
  * - Draggable overlay display
  */
 
@@ -25,6 +26,16 @@ import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
+import {
+  WAVEFORM_SCALES,
+  WAVEFORM_SCALE_LABELS,
+  waveformScalePosition,
+  waveformScaleTicks,
+  waveformScaleUnit,
+  type WaveformScale,
+} from '../../scopes/WaveformScale';
+
+export type { WaveformScale } from '../../scopes/WaveformScale';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade' | 'ycbcr';
 
@@ -39,6 +50,7 @@ export interface WaveformEvents extends EventMap {
   modeChanged: WaveformMode;
   channelToggled: RGBChannelState;
   intensityChanged: number;
+  scaleChanged: WaveformScale;
 }
 
 const WAVEFORM_WIDTH = 256;
@@ -56,6 +68,11 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   private visible = false;
   private mode: WaveformMode = 'luma';
   private modeButton: HTMLButtonElement | null = null;
+  private scale: WaveformScale = 'ire';
+  private scaleButton: HTMLButtonElement | null = null;
+  private footerLabels: { bottom: HTMLSpanElement; unit: HTMLSpanElement; top: HTMLSpanElement } | null = null;
+  // Linear value at the top of the linear axis for the last drawn frame
+  private axisMax = 1.0;
   private lastImageData: ImageData | null = null;
   private lastFloatFrame: { data: Float32Array; width: number; height: number } | null = null;
   private isPlaybackMode = false;
@@ -117,9 +134,18 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.modeButton.dataset.testid = 'waveform-mode-button';
     this.modeButton.addEventListener('click', () => this.cycleMode());
 
-    // Insert button before close button
+    // Vertical scale toggle (IRE / cd/m² / PQ)
+    this.scaleButton = createControlButton(
+      WAVEFORM_SCALE_LABELS[this.scale],
+      'Toggle waveform scale (IRE % / cd/m² / PQ cd/m²)',
+    );
+    this.scaleButton.dataset.testid = 'waveform-scale-button';
+    this.scaleButton.addEventListener('click', () => this.cycleScale());
+
+    // Insert buttons before close button
     const closeButton = controls.querySelector('[data-testid="waveform-close-button"]');
     controls.insertBefore(this.modeButton, closeButton);
+    controls.insertBefore(this.scaleButton, closeButton);
 
     // Create RGB controls container (initially hidden)
     this.rgbControlsContainer = document.createElement('div');
@@ -217,11 +243,14 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       font-size: 10px;
       color: var(--text-secondary);
     `;
-    footer.innerHTML = `
-      <span>0</span>
-      <span>128</span>
-      <span>255</span>
-    `;
+    const bottom = document.createElement('span');
+    const unit = document.createElement('span');
+    const top = document.createElement('span');
+    unit.dataset.testid = 'waveform-scale-unit';
+    top.dataset.testid = 'waveform-scale-top';
+    footer.append(bottom, unit, top);
+    this.footerLabels = { bottom, unit, top };
+    this.updateFooterLabels();
     this.draggableContainer.setFooter(footer);
   }
 
@@ -236,6 +265,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     const waveformOptions: WaveformRenderOptions = {
       channels: { ...this.enabledChannels },
       intensity: this.intensity,
+      scale: this.scale,
     };
 
     // Try GPU rendering first for better performance during playback
@@ -243,6 +273,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     if (gpuProcessor && gpuProcessor.isReady()) {
       gpuProcessor.setPlaybackMode(this.isPlaybackMode);
       gpuProcessor.setImage(imageData);
+      this.setAxisMax(gpuProcessor.getWaveformAxisMax(this.scale));
       // Draw background and grid first (CPU) - use logical dimensions
       this.ctx.fillStyle = getCSSColor('--bg-primary', '#111');
       this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
@@ -253,6 +284,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     }
 
     // Fall back to CPU rendering
+    this.setAxisMax(1.0);
     this.draw(imageData);
   }
 
@@ -272,12 +304,14 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     const waveformOptions: WaveformRenderOptions = {
       channels: { ...this.enabledChannels },
       intensity: this.intensity,
+      scale: this.scale,
     };
 
     const gpuProcessor = getSharedScopesProcessor();
     if (gpuProcessor && gpuProcessor.isReady()) {
       gpuProcessor.setPlaybackMode(this.isPlaybackMode);
       gpuProcessor.setFloatImage(floatData, width, height);
+      this.setAxisMax(gpuProcessor.getWaveformAxisMax(this.scale));
       // Draw background and grid first (CPU)
       this.ctx.fillStyle = getCSSColor('--bg-primary', '#111');
       this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
@@ -288,6 +322,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     }
 
     // Fallback: convert float to ImageData for CPU rendering
+    this.setAxisMax(1.0);
     this.draw(floatRGBAToImageData(floatData, width, height));
   }
 
@@ -342,16 +377,47 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
     ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
     ctx.lineWidth = 1;
+    ctx.font = '8px sans-serif';
+    ctx.fillStyle = 'rgba(160, 160, 160, 0.7)';
 
-    // Horizontal lines at 25%, 50%, 75% - use logical dimensions
-    const levels = [0.25, 0.5, 0.75];
-    for (const level of levels) {
-      const y = Math.floor(WAVEFORM_HEIGHT * (1 - level));
+    // Graticule for the current scale - use logical dimensions. The top
+    // value (canvas edge) is shown in the footer instead.
+    for (const tick of waveformScaleTicks(this.scale, this.axisMax)) {
+      if (tick.position >= 1) continue;
+      const y = Math.floor(WAVEFORM_HEIGHT * (1 - tick.position));
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(WAVEFORM_WIDTH, y);
       ctx.stroke();
+      ctx.fillText(tick.label, 2, y - 1);
     }
+  }
+
+  /**
+   * Canvas row (logical) for each 8-bit level under the current scale.
+   * The CPU fallback only sees clamped 8-bit data, so its axis top is 1.0.
+   */
+  private buildLevelRows(canvasHeight: number): Int32Array {
+    const rows = new Int32Array(256);
+    for (let v = 0; v < 256; v++) {
+      const pos = clamp(waveformScalePosition(v / 255, this.scale, 1.0), 0, 1);
+      rows[v] = canvasHeight - 1 - Math.floor(pos * (canvasHeight - 1));
+    }
+    return rows;
+  }
+
+  private setAxisMax(axisMax: number): void {
+    if (this.axisMax === axisMax) return;
+    this.axisMax = axisMax;
+    this.updateFooterLabels();
+  }
+
+  private updateFooterLabels(): void {
+    if (!this.footerLabels) return;
+    const ticks = waveformScaleTicks(this.scale, this.axisMax);
+    this.footerLabels.bottom.textContent = '0';
+    this.footerLabels.unit.textContent = waveformScaleUnit(this.scale);
+    this.footerLabels.top.textContent = ticks.at(-1)?.label ?? '';
   }
 
   private drawLumaWaveform(data: Uint8ClampedArray, srcWidth: number, srcHeight: number): void {
@@ -365,6 +431,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     const pixelsPerColumn = Math.ceil(srcWidth / canvasWidth);
 
     ctx.fillStyle = 'rgba(200, 200, 200, 0.15)';
+    const rows = this.buildLevelRows(canvasHeight);
 
     for (let x = 0; x < canvasWidth; x++) {
       const srcX = Math.floor((x * srcWidth) / canvasWidth);
@@ -382,8 +449,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
             LUMINANCE_COEFFICIENTS.r * r + LUMINANCE_COEFFICIENTS.g * g + LUMINANCE_COEFFICIENTS.b * b,
           );
 
-          const y = canvasHeight - 1 - Math.floor((luma * (canvasHeight - 1)) / 255);
-          ctx.fillRect(x, y, 1, 1);
+          ctx.fillRect(x, rows[luma] ?? 0, 1, 1);
         }
       }
     }
@@ -402,6 +468,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     const rStyle = `rgba(255, 0, 0, ${intensity})`;
     const gStyle = `rgba(0, 255, 0, ${intensity})`;
     const bStyle = `rgba(0, 0, 255, ${intensity})`;
+    const rows = this.buildLevelRows(canvasHeight);
 
     // Additive blending for RGB overlay - creates white where all channels align
     // Use try/finally to ensure composite operation is restored even on error
@@ -422,21 +489,21 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
             // Draw red (if enabled)
             if (enabledChannels.r) {
-              const yR = canvasHeight - 1 - Math.floor((r * (canvasHeight - 1)) / 255);
+              const yR = rows[r] ?? 0;
               ctx.fillStyle = rStyle;
               ctx.fillRect(x, yR, 1, 1);
             }
 
             // Draw green (if enabled)
             if (enabledChannels.g) {
-              const yG = canvasHeight - 1 - Math.floor((g * (canvasHeight - 1)) / 255);
+              const yG = rows[g] ?? 0;
               ctx.fillStyle = gStyle;
               ctx.fillRect(x, yG, 1, 1);
             }
 
             // Draw blue (if enabled)
             if (enabledChannels.b) {
-              const yB = canvasHeight - 1 - Math.floor((b * (canvasHeight - 1)) / 255);
+              const yB = rows[b] ?? 0;
               ctx.fillStyle = bStyle;
               ctx.fillRect(x, yB, 1, 1);
             }
@@ -456,6 +523,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     const sectionWidth = PARADE_SECTION_WIDTH;
     const sampleStep = Math.max(1, Math.floor(srcWidth / sectionWidth));
     const pixelsPerColumn = Math.ceil(srcWidth / sectionWidth);
+    const rows = this.buildLevelRows(canvasHeight);
 
     // Draw R, G, B in three columns
     const channels = [
@@ -475,9 +543,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
           for (let srcY = 0; srcY < srcHeight; srcY++) {
             const i = (srcY * srcWidth + srcXi) * 4;
             const value = data[i + channelIndex]!;
-
-            const y = canvasHeight - 1 - Math.floor((value * (canvasHeight - 1)) / 255);
-            ctx.fillRect(offset + x, y, 1, 1);
+            ctx.fillRect(offset + x, rows[value] ?? 0, 1, 1);
           }
         }
       }
@@ -531,8 +597,9 @@ export class Waveform extends EventEmitter<WaveformEvents> {
           const cb = -0.1146 * r - 0.3854 * g + 0.5 * b + 0.5;
           const cr = 0.5 * r - 0.4542 * g - 0.0458 * b + 0.5;
 
-          // Y channel (first column - white)
-          const yPos = canvasHeight - 1 - Math.floor(clamp(y, 0, 1) * (canvasHeight - 1));
+          // Y channel (first column - white); Cb/Cr stay on a linear axis
+          const yScaled = clamp(waveformScalePosition(y, this.scale, 1.0), 0, 1);
+          const yPos = canvasHeight - 1 - Math.floor(yScaled * (canvasHeight - 1));
           ctx.fillStyle = yColor;
           ctx.fillRect(x, yPos, 1, 1);
 
@@ -758,6 +825,35 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   /**
+   * Cycle the vertical scale: IRE % -> cd/m² -> PQ cd/m².
+   */
+  cycleScale(): void {
+    const index = WAVEFORM_SCALES.indexOf(this.scale);
+    this.setScale(WAVEFORM_SCALES[(index + 1) % WAVEFORM_SCALES.length] ?? 'ire');
+  }
+
+  /**
+   * Set the vertical scale.
+   */
+  setScale(scale: WaveformScale): void {
+    if (this.scale === scale) return;
+    this.scale = scale;
+    if (this.scaleButton) {
+      this.scaleButton.textContent = WAVEFORM_SCALE_LABELS[scale];
+    }
+    this.updateFooterLabels();
+    this.redrawLastFrame();
+    this.emit('scaleChanged', scale);
+  }
+
+  /**
+   * Get the vertical scale.
+   */
+  getScale(): WaveformScale {
+    return this.scale;
+  }
+
+  /**
    * Get current position
    */
   getPosition(): { x: number; y: number } {
@@ -792,6 +888,8 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.boundOnIntensityChange = null;
     this.intensitySlider = null;
     this.modeButton = null;
+    this.scaleButton = null;
+    this.footerLabels = null;
     this.channelButtons = null;
     this.rgbControlsContainer = null;
     this.draggableContainer.dispose();

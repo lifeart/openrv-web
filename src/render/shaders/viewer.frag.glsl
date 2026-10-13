@@ -43,6 +43,12 @@
       // 2=extended sRGB (float16 srgb/display-p3 canvas), 3=PQ (rec2100-pq), 4=HLG (rec2100-hlg)
       uniform int u_outputEncoding;
 
+      // Scope analysis readback (histogram/waveform/vectorscope). When true the
+      // shader outputs the graded scene-referred signal: tone mapping, gamut
+      // mapping, output primaries, display LUT, display gamma/brightness,
+      // channel isolation, diagnostic overlays and the background are skipped.
+      uniform bool u_scopeAnalysis;
+
       // --- Phase 3: Effect uniforms ---
 
       // CDL (Color Decision List)
@@ -917,6 +923,24 @@
         return c; // tf == 0 (linear)
       }
 
+      // Signal level (Y', 1.0 = 100 IRE) that false color and zebra classify.
+      // Taken from the graded scene-referred value, before tone mapping, the
+      // display stages and the SDR clamp, so a highlight above reference white
+      // stays above 100 IRE however the display compresses it. The value is
+      // expressed on the SDR video scale the palettes and thresholds are
+      // defined on: the user's display transfer on SDR surfaces (linear for
+      // display-referred SDR sources), the sRGB curve, extended above 1.0, on
+      // HDR surfaces and readbacks. Creative gamma is part of the grade.
+      float diagnosticSignalLevel(vec3 scene, float alpha) {
+        vec3 s = applyDisplayTransfer(scene, u_outputEncoding == 0 ? u_displayTransfer : 1);
+        s = pow(s, 1.0 / u_gammaRGB);
+        if (u_channelMode == 1) return s.r;
+        if (u_channelMode == 2) return s.g;
+        if (u_channelMode == 3) return s.b;
+        if (u_channelMode == 4) return alpha;
+        return dot(s, LUMA);
+      }
+
       // --- Linearize functions (RVLinearize log-to-linear conversion) ---
 
       // Cineon log-to-linear: refBlack=95, refWhite=685 (out of 1023), softClip=0
@@ -1637,8 +1661,15 @@
           color.rgb = mix(origFilm, filmColor, u_filmIntensity);
         }
 
+        // Graded scene-referred value, before tone mapping and the display
+        // stages: false color and zebra classify this (diagnosticSignalLevel).
+        vec3 sceneColor = color.rgb;
+
         // 6g. Out-of-range visualization (before tone mapping, on scene-referred linear values)
-        if (u_outOfRange == 2) {
+        // Scopes measure the signal, not the overlay.
+        if (u_scopeAnalysis) {
+          // no overlay
+        } else if (u_outOfRange == 2) {
           // Highlight mode: red where any channel > 1.0, blue where any channel < 0.0
           if (color.r > 1.0 || color.g > 1.0 || color.b > 1.0) {
             color.rgb = vec3(1.0, 0.0, 0.0);
@@ -1654,10 +1685,13 @@
         }
 
         // 7. Tone mapping (applied before display transfer for proper HDR handling)
+        // Display rendering only: scopes measure the scene-referred signal.
         // The per-channel curves run in the source primaries so a wide-gamut
         // source keeps its gamut (see clampToSourceGamut); BT.709 sources are
         // tone mapped in BT.709 exactly as before.
-        if (u_inputPrimariesEnabled && !u_fileLUT3DEnabled) {
+        if (u_scopeAnalysis) {
+          // no tone mapping
+        } else if (u_inputPrimariesEnabled && !u_fileLUT3DEnabled) {
           vec3 tmSource = max(u_inputPrimariesInverse * color.rgb, vec3(0.0));
           color.rgb = u_inputPrimariesMatrix * applyToneMapping(tmSource, u_toneMappingOperator);
         } else {
@@ -1665,7 +1699,7 @@
         }
 
         // 7a. Gamut mapping (after tone mapping, before display transfer)
-        if (u_gamutMappingEnabled) {
+        if (u_gamutMappingEnabled && !u_scopeAnalysis) {
           color.rgb = applyGamutMapping(color.rgb);
         }
 
@@ -1714,12 +1748,13 @@
         // 7c. Output primaries conversion (BT.709 working space → display gamut)
         // Colours outside the output gamut become negative here and are
         // clipped by the display-output stage below, after the conversion.
-        if (u_outputPrimariesEnabled) {
+        // Scopes stay in the BT.709 working space whatever the display gamut.
+        if (u_outputPrimariesEnabled && !u_scopeAnalysis) {
             color.rgb = u_outputPrimariesMatrix * color.rgb;
         }
 
         // 7d. Display LUT (session-wide display calibration)
-        if (u_displayLUT3DEnabled) {
+        if (u_displayLUT3DEnabled && !u_scopeAnalysis) {
           color.rgb = applyLUT3DGeneric(u_displayLUT3D, color.rgb, u_displayLUT3DSize,
                                          u_displayLUT3DIntensity, u_displayLUT3DDomainMin,
                                          u_displayLUT3DDomainMax);
@@ -1754,41 +1789,53 @@
         // unconditionally to guarantee users never lose per-channel gamma control.
         color.rgb = pow(max(color.rgb, vec3(0.0)), 1.0 / u_gammaRGB);
 
-        // 8c. Display gamma override
-        if (u_displayGamma != 1.0) {
-          color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_displayGamma));
+        // 8c/8d. Display gamma override and display brightness (display
+        // calibration, not part of the measured signal).
+        if (!u_scopeAnalysis) {
+          if (u_displayGamma != 1.0) {
+            color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_displayGamma));
+          }
+          color.rgb *= u_displayBrightness;
         }
-
-        // 8d. Display brightness
-        color.rgb *= u_displayBrightness;
 
         // 9. Color inversion (after all corrections, before channel isolation)
         if (u_invert) {
           color.rgb = 1.0 - color.rgb;
         }
 
+        // Steps 10-12c and 13 are viewing aids and diagnostics: scope
+        // readbacks skip them so scopes keep measuring the image.
+        bool viewAids = !u_scopeAnalysis;
+
         // 10. Channel isolation
-        if (u_channelMode == 1) { color.rgb = vec3(color.r); }
-        else if (u_channelMode == 2) { color.rgb = vec3(color.g); }
-        else if (u_channelMode == 3) { color.rgb = vec3(color.b); }
-        else if (u_channelMode == 4) { color.rgb = vec3(color.a); }
-        else if (u_channelMode == 5) { color.rgb = vec3(dot(color.rgb, LUMA)); }
+        if (viewAids) {
+          if (u_channelMode == 1) { color.rgb = vec3(color.r); }
+          else if (u_channelMode == 2) { color.rgb = vec3(color.g); }
+          else if (u_channelMode == 3) { color.rgb = vec3(color.b); }
+          else if (u_channelMode == 4) { color.rgb = vec3(color.a); }
+          else if (u_channelMode == 5) { color.rgb = vec3(dot(color.rgb, LUMA)); }
+        }
+
+        // False color and zebra classify the graded scene-referred signal,
+        // not the tone-mapped, display-encoded and clamped output.
+        float diagLevel = 0.0;
+        if (viewAids && (u_falseColorEnabled || u_zebraEnabled)) {
+          diagLevel = diagnosticSignalLevel(sceneColor, color.a);
+        }
 
         // 11. False Color (diagnostic overlay - replaces color)
         // NOTE: For HSV and Random Color luminance visualization modes, the
         // false color LUT is loaded with the appropriate luminance-to-color mapping.
-        // Super-white (>1.0) and negative values are clamped to LUT bounds.
-        if (u_falseColorEnabled) {
-          float fcLuma = dot(color.rgb, LUMA);
-          float lumaSDR = clamp(fcLuma, 0.0, 1.0);
-          color.rgb = texture(u_falseColorLUT, vec2(lumaSDR, 0.5)).rgb;
+        // Levels above 100 IRE land in the top (clipped) band, negatives in the bottom.
+        if (viewAids && u_falseColorEnabled) {
+          color.rgb = texture(u_falseColorLUT, vec2(clamp(diagLevel, 0.0, 1.0), 0.5)).rgb;
         }
 
         // 11b. Contour iso-lines (luminance visualization - neighbor edge detection)
         // All five luminance samples (center + 4 neighbors) come from u_texture
         // to ensure consistency. Contour boundaries are detected in source-image
         // luminance space. Desaturation blend uses the processed color.rgb.
-        if (u_contourEnabled) {
+        if (viewAids && u_contourEnabled) {
           ivec2 texSize = textureSize(u_texture, 0);
           ivec2 pc = ivec2(v_texCoord * vec2(texSize));
 
@@ -1822,8 +1869,8 @@
         }
 
         // 12. Zebra Stripes (diagnostic overlay)
-        if (u_zebraEnabled) {
-          float zLuma = dot(color.rgb, LUMA);
+        if (viewAids && u_zebraEnabled) {
+          float zLuma = diagLevel;
           vec2 pixelPos = v_texCoord * u_resolution;
           if (u_zebraHighEnabled && zLuma >= u_zebraHighThreshold) {
             float stripe = mod(pixelPos.x + pixelPos.y + u_zebraTime, 12.0);
@@ -1836,7 +1883,7 @@
         }
 
         // 12c. Dither + Quantize visualization (after false color/zebra, before SDR clamp)
-        if (u_quantizeBits > 0) {
+        if (viewAids && u_quantizeBits > 0) {
           float levels = pow(2.0, float(u_quantizeBits)) - 1.0;
 
           if (u_ditherMode == 1) {
@@ -1868,7 +1915,7 @@
         }
 
         // 13. Background pattern blend (alpha compositing)
-        if (u_backgroundPattern > 0 && color.a < 1.0) {
+        if (viewAids && u_backgroundPattern > 0 && color.a < 1.0) {
           vec3 bgColor = u_bgColor1;
           if (u_backgroundPattern == 2) {
             // Checker pattern

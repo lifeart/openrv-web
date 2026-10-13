@@ -923,6 +923,52 @@ describe('WebGLScopesProcessor', () => {
       expect(maxValueCall![1]).toBe(4.0);
     });
 
+    it('WFS-SCOPE-001: waveform defaults to the linear axis (u_waveformScale = 0)', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(10, 10));
+      mockGl.uniform1i.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      const scaleCall = mockGl.uniform1i.mock.calls.find((call) => call[0]?.name === 'u_waveformScale');
+      expect(scaleCall).toBeDefined();
+      expect(scaleCall![1]).toBe(0);
+    });
+
+    it('WFS-SCOPE-002: the PQ scale selects the PQ-coded axis (u_waveformScale = 1)', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setFloatImage(new Float32Array([4.0, 4.0, 4.0, 1.0]), 1, 1);
+      mockGl.uniform1i.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma', { scale: 'pq' });
+
+      const scaleCall = mockGl.uniform1i.mock.calls.find((call) => call[0]?.name === 'u_waveformScale');
+      expect(scaleCall![1]).toBe(1);
+    });
+
+    it('WFS-SCOPE-003: the nits scale fits the axis to the frame peak beyond the headroom', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setHDRAutoFit(true);
+      // 1000 cd/m² peak: above the 4.0 (812 cd/m²) headroom the IRE axis clamps to
+      processor.setFloatImage(new Float32Array([1000 / 203, 1.0, 1.0, 1.0]), 1, 1);
+      mockGl.uniform1f.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma', { scale: 'nits' });
+
+      const maxValueCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_waveformMaxValue');
+      expect(maxValueCall![1] * 203).toBeCloseTo(1000, 6);
+      expect(processor.getWaveformAxisMax('nits') * 203).toBeCloseTo(1000, 6);
+      expect(processor.getWaveformAxisMax('ire')).toBe(4.0);
+    });
+
+    it('WFS-SCOPE-004: the nits axis of an 8-bit frame tops out at reference white (203 cd/m²)', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(10, 10));
+      expect(processor.getWaveformAxisMax('nits')).toBe(1.0);
+    });
+
     it('P3-026: vectorscope sets u_saturationScale to 1.0 in SDR mode', () => {
       const processor = new WebGLScopesProcessor();
       processor.setImage(new ImageData(10, 10));

@@ -12,6 +12,7 @@ import { ShaderProgram } from '../render/ShaderProgram';
 // Uses gl_VertexID to determine bar index and vertex within bar (6 vertices per bar = 2 triangles)
 
 import { Logger } from '../utils/Logger';
+import { nitsAxisMax, type WaveformScale } from './WaveformScale';
 
 const logger = new Logger('WebGLScopes');
 const HISTOGRAM_BAR_VERTEX_SHADER = `#version 300 es
@@ -105,8 +106,19 @@ uniform vec2 u_imageSize; // Dimensions of the analysis image (texture)
 uniform int u_mode; // 0=Luma, 1=RGB, 2=Parade, 3=YCbCr
 uniform int u_channel;
 uniform float u_waveformMaxValue; // Max value for Y-axis scaling (1.0 for SDR, >1.0 for HDR)
+uniform int u_waveformScale; // 0 = linear axis (value / u_waveformMaxValue), 1 = PQ-coded axis
 
 const vec3 LUMA_COEFF = vec3(0.2126, 0.7152, 0.0722);
+
+// Scope values are linear with 1.0 = 203 cd/m² (BT.2408 reference white).
+const float REFERENCE_WHITE_NITS = 203.0;
+
+// SMPTE ST 2084 inverse EOTF: linear value -> PQ code (0-1 = 0-10000 cd/m²)
+float pqCode(float value) {
+  float y = clamp(value * (REFERENCE_WHITE_NITS / 10000.0), 0.0, 1.0);
+  float ym = pow(y, 0.1593017578125);
+  return pow((0.8359375 + 18.8515625 * ym) / (1.0 + 18.6875 * ym), 78.84375);
+}
 
 // BT.709 YCbCr conversion coefficients
 // Cb = -0.1146*R - 0.3854*G + 0.5000*B + 0.5
@@ -180,8 +192,10 @@ void main() {
     }
   }
 
-  // Scale value by maxValue for HDR support (SDR: maxValue=1.0, no change)
-  float scaledValue = value / u_waveformMaxValue;
+  // Scale value by maxValue for HDR support (SDR: maxValue=1.0, no change).
+  // The PQ axis codes signal levels; Cb/Cr (centred on 0.5) stay linear.
+  bool isChroma = u_mode == 3 && u_channel != 0;
+  float scaledValue = (u_waveformScale == 1 && !isChroma) ? pqCode(value) : value / u_waveformMaxValue;
   gl_Position = vec4(xPos * 2.0 - 1.0, scaledValue * 2.0 - 1.0, 0.0, 1.0);
   gl_PointSize = 1.0;
 }
@@ -257,6 +271,8 @@ export interface WaveformRenderOptions {
     b: boolean;
   };
   intensity?: number;
+  /** Vertical scale (default 'ire'). See WaveformScale. */
+  scale?: WaveformScale;
 }
 
 // Target resolution for analysis during playback (keeps scopes responsive)
@@ -323,6 +339,7 @@ export class WebGLScopesProcessor {
     u_channel: WebGLUniformLocation | null;
     u_opacity: WebGLUniformLocation | null;
     u_waveformMaxValue: WebGLUniformLocation | null;
+    u_waveformScale: WebGLUniformLocation | null;
   };
 
   private vectorscopeUniforms!: {
@@ -432,6 +449,7 @@ export class WebGLScopesProcessor {
       u_channel: this.waveformShader.getUniformLocation('u_channel'),
       u_opacity: this.waveformShader.getUniformLocation('u_opacity'),
       u_waveformMaxValue: this.waveformShader.getUniformLocation('u_waveformMaxValue'),
+      u_waveformScale: this.waveformShader.getUniformLocation('u_waveformScale'),
     };
     this.waveformUniformsResolved = true;
   }
@@ -558,6 +576,18 @@ export class WebGLScopesProcessor {
    */
   getMaxValue(): number {
     return this.hdrActive ? (this.hdrHeadroom ?? 4.0) : 1.0;
+  }
+
+  /**
+   * Linear value at the top of the waveform's linear axis for a scale:
+   * the HDR headroom / auto-fit range for 'ire', the frame peak rounded up to
+   * a cd/m² step for 'nits'. ('pq' has a fixed 0-10000 cd/m² axis.)
+   */
+  getWaveformAxisMax(scale: WaveformScale = 'ire'): number {
+    if (scale === 'nits') {
+      return nitsAxisMax(this.hasFloatSignalStats ? this.hdrSignalPeak : 1.0);
+    }
+    return this.getRenderMaxValue();
   }
 
   private getRenderMaxValue(): number {
@@ -883,8 +913,10 @@ export class WebGLScopesProcessor {
         : 0.08;
     // Opacity tuned to match CPU rendering brightness
     gl.uniform1f(this.waveformUniforms.u_opacity!, mode === 'rgb' ? waveformOpacity : 0.08);
-    // HDR: scale Y-axis to [0, maxValue] instead of [0, 1]
-    gl.uniform1f(this.waveformUniforms.u_waveformMaxValue!, this.getRenderMaxValue());
+    // HDR: scale Y-axis to [0, maxValue] instead of [0, 1], or code it as PQ
+    const scale = options?.scale ?? 'ire';
+    gl.uniform1f(this.waveformUniforms.u_waveformMaxValue!, this.getWaveformAxisMax(scale));
+    gl.uniform1i(this.waveformUniforms.u_waveformScale, scale === 'pq' ? 1 : 0);
 
     if (mode === 'luma') {
       gl.uniform1i(this.waveformUniforms.u_mode!, 0);
