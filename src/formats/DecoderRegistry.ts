@@ -592,6 +592,8 @@ const jpegGainmapDecoder: FormatDecoder = {
       metadata: {
         formatName: 'jpeg-gainmap',
         headroom: info.headroom,
+        transferFunction: result.transferFunction,
+        colorPrimaries: result.colorPrimaries,
       },
     };
   },
@@ -619,6 +621,8 @@ const heicGainmapDecoder: FormatDecoder = {
       metadata: {
         formatName: 'heic-gainmap',
         headroom: info.headroom,
+        transferFunction: result.transferFunction,
+        colorPrimaries: result.colorPrimaries,
       },
     };
   },
@@ -646,6 +650,8 @@ const avifGainmapDecoder: FormatDecoder = {
       metadata: {
         formatName: 'avif-gainmap',
         headroom: info.headroom,
+        transferFunction: result.transferFunction,
+        colorPrimaries: result.colorPrimaries,
       },
     };
   },

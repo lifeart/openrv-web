@@ -12,20 +12,36 @@
  * 1. SDR base image (standard JPEG)
  * 2. Grayscale gainmap (smaller JPEG, embedded via MPF)
  *
- * HDR reconstruction formula (ISO 21496-1 simplified when offsets=0):
- *   HDR_linear = sRGB_to_linear(base) * exp2(gainmap * headroom)
+ * HDR reconstruction follows ISO 21496-1 / Adobe gain map math (see
+ * GainMapMetadata.applyGainMap) with W = 1, the full HDR rendition; the
+ * viewer's tone mapping and display headroom adapt it to the display.
  *
- * The headroom value is in XMP metadata:
- *   apple:hdrgainmapheadroom or hdrgm:GainMapMax
+ * Metadata sources, in priority order:
+ *   1. hdrgm:* XMP (primary image, then the gain map image's own XMP)
+ *   2. ISO 21496-1 binary metadata (APP2 'urn:iso:std:iso:ts:21496:-1')
+ *   3. apple:hdrgainmapheadroom XMP
+ *
+ * The base image is decoded in its ICC-declared colour space (sRGB or
+ * Display P3; see GainMapColor) and linearised to float, 1.0 = SDR white.
  */
 
-import { drawImageWithOrientation } from './shared';
 import {
   type GainMapMetadata,
+  type TmapMetadata,
   parseGainMapMetadataFromXMP,
-  reconstructHDR,
+  parseISO21496Metadata,
+  tmapToGainMapMetadata,
+  applyGainMap,
   defaultGainMapMetadata,
 } from './GainMapMetadata';
+import {
+  type GainMapBaseColor,
+  GAIN_MAP_BITMAP_OPTIONS,
+  decodeGainMapBase,
+  parseICCProfileColor,
+  readGainMapPixels,
+} from './GainMapColor';
+import type { ColorPrimaries } from '../core/image/Image';
 import { DecoderError } from '../core/errors';
 
 export interface GainmapInfo {
@@ -37,6 +53,8 @@ export interface GainmapInfo {
   headroom: number;
   /** Full gain map metadata (ISO 21496-1) */
   gainMapMetadata?: GainMapMetadata;
+  /** Base image colour declared by its ICC profile (null/absent: sRGB) */
+  baseColor?: GainMapBaseColor | null;
 }
 
 /**
@@ -89,31 +107,35 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
   // need to ensure the range fits.
   ensureMPFRange(gainmapImage.offset, gainmapImage.size, buffer.byteLength, 'gainmap image (MPEntry #1)');
 
-  // Extract headroom and full metadata from XMP
-  // First try the primary image's XMP (Apple format)
-  let xmpResult = extractXMPFromJPEG(buffer, 0, undefined);
-  if (xmpResult === null && gainmapImage.offset > 0 && gainmapImage.size > 0) {
-    // Try the gainmap image's own XMP (Google Ultra HDR format)
-    xmpResult = extractXMPFromJPEG(buffer, gainmapImage.offset, gainmapImage.offset + gainmapImage.size);
-  }
+  // Extract full metadata. hdrgm XMP may sit in the primary image or (Ultra
+  // HDR) in the gain map image's own XMP, with only hdrgm:Version on the
+  // primary; ISO 21496-1 binary metadata lives in the gain map image's APP2.
+  const hasGainmapRegion = gainmapImage.offset > 0 && gainmapImage.size > 0;
+  const gainmapEnd = gainmapImage.offset + gainmapImage.size;
+  const primaryXMP = extractXMPFromJPEG(buffer, 0, undefined);
+  const gainmapXMP = hasGainmapRegion ? extractXMPFromJPEG(buffer, gainmapImage.offset, gainmapEnd) : null;
+  const hdrgmFrom = (xmp: string | null): GainMapMetadata | null =>
+    xmp && xmp.includes('hdrgm:') ? parseGainMapMetadataFromXMP(xmp) : null;
+  const isoTmap = hasGainmapRegion ? extractISO21496FromJPEG(buffer, gainmapImage.offset, gainmapEnd) : null;
 
-  let gainMapMetadata: GainMapMetadata | undefined;
-  let headroom: number | null = null;
+  let gainMapMetadata: GainMapMetadata | undefined =
+    hdrgmFrom(primaryXMP) ??
+    hdrgmFrom(gainmapXMP) ??
+    (isoTmap ? tmapToGainMapMetadata(isoTmap) : null) ??
+    (primaryXMP ? parseGainMapMetadataFromXMP(primaryXMP) : null) ??
+    (gainmapXMP ? parseGainMapMetadataFromXMP(gainmapXMP) : null) ??
+    undefined;
 
-  if (xmpResult) {
-    gainMapMetadata = parseGainMapMetadataFromXMP(xmpResult) ?? undefined;
-    if (gainMapMetadata) {
-      headroom = gainMapMetadata.hdrCapacityMax;
-    } else {
-      headroom = parseHeadroomFromXMPText(xmpResult);
-    }
+  let headroom: number | null = gainMapMetadata ? gainMapMetadata.hdrCapacityMax : null;
+  if (headroom === null && primaryXMP) {
+    headroom = parseHeadroomFromXMPText(primaryXMP);
   }
 
   // Fallback: try legacy headroom extraction
   if (headroom === null) {
     headroom = extractHeadroomFromXMP(buffer, 0, undefined);
-    if (headroom === null && gainmapImage.offset > 0 && gainmapImage.size > 0) {
-      headroom = extractHeadroomFromXMP(buffer, gainmapImage.offset, gainmapImage.offset + gainmapImage.size);
+    if (headroom === null && hasGainmapRegion) {
+      headroom = extractHeadroomFromXMP(buffer, gainmapImage.offset, gainmapEnd);
     }
   }
 
@@ -129,6 +151,7 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
     gainmapLength: gainmapImage.size,
     headroom: finalHeadroom,
     gainMapMetadata,
+    baseColor: extractBaseColorFromJPEG(buffer, hasGainmapRegion ? gainmapImage.offset : undefined),
   };
 }
 
@@ -144,6 +167,9 @@ export async function decodeGainmapToFloat32(
   height: number;
   data: Float32Array;
   channels: number;
+  /** Primaries of the linear result (the base image's colour space) */
+  colorPrimaries: ColorPrimaries;
+  transferFunction: 'linear';
 }> {
   // Validate that the gainmap and base image regions are within buffer bounds.
   // Use the shared `ensureMPFRange` helper so error UX (NaN/negative/OOB) is
@@ -168,43 +194,29 @@ export async function decodeGainmapToFloat32(
   // Parse EXIF orientation from the original JPEG (applied by browser to base but not to gainmap)
   const orientation = extractJPEGOrientation(buffer);
 
-  // Decode both using browser's JPEG decoder
-  const [baseBitmap, gainmapBitmap] = await Promise.all([createImageBitmap(baseBlob), createImageBitmap(gainmapBlob)]);
-
-  const width = baseBitmap.width;
-  const height = baseBitmap.height;
-
-  function createCanvas(w: number, h: number): OffscreenCanvas | HTMLCanvasElement {
-    if (typeof OffscreenCanvas !== 'undefined') {
-      return new OffscreenCanvas(w, h);
-    }
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    return c;
-  }
-
-  // Draw to canvases and get pixel data
-  const baseCanvas = createCanvas(width, height);
-  const baseCtx = baseCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  baseCtx.drawImage(baseBitmap, 0, 0);
-  const baseData = baseCtx.getImageData(0, 0, width, height).data;
-  baseBitmap.close();
+  // Base: linear float in its declared colour space. Gain map: raw samples.
+  const [base, gainmapBitmap] = await Promise.all([
+    decodeGainMapBase(baseBlob, info.baseColor ?? null),
+    createImageBitmap(gainmapBlob, GAIN_MAP_BITMAP_OPTIONS),
+  ]);
+  const { width, height } = base;
 
   // Gainmap may be smaller - scale up to base image size
   // Apply orientation transform so gainmap pixels align with the display-rotated base
-  const gainCanvas = createCanvas(width, height);
-  const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  drawImageWithOrientation(gainCtx, gainmapBitmap, width, height, orientation);
-  const gainData = gainCtx.getImageData(0, 0, width, height).data;
-  gainmapBitmap.close();
+  const gainData = readGainMapPixels(gainmapBitmap, width, height, orientation);
 
-  // Apply HDR reconstruction per-pixel using shared module
-  const pixelCount = width * height;
+  // Apply the gain map (W = 1: full HDR rendition) using the shared module
   const meta = info.gainMapMetadata ?? defaultGainMapMetadata(info.headroom);
-  const result = reconstructHDR(baseData, gainData, pixelCount, meta);
+  const result = applyGainMap(base.data, gainData, width * height, meta);
 
-  return { width, height, data: result, channels: 4 };
+  return {
+    width,
+    height,
+    data: result,
+    channels: 4,
+    colorPrimaries: base.colorPrimaries,
+    transferFunction: 'linear',
+  };
 }
 
 /**
@@ -773,6 +785,123 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
 }
 
 /**
+ * Collect the payload ranges of every segment with the given APPn marker in a
+ * JPEG region, stopping at SOS. Same scanning rules as extractXMPFromJPEG.
+ */
+function findAPPSegments(
+  buffer: ArrayBuffer,
+  startOffset: number,
+  endOffset: number | undefined,
+  appMarker: number,
+): Array<{ dataStart: number; dataEnd: number }> {
+  const view = new DataView(buffer);
+  const segments: Array<{ dataStart: number; dataEnd: number }> = [];
+
+  let offset = startOffset;
+  if (offset + 1 < view.byteLength && view.getUint8(offset) === 0xff && view.getUint8(offset + 1) === 0xd8) {
+    offset += 2;
+  }
+  const scanEnd = Math.min(endOffset ?? startOffset + 65536, view.byteLength);
+
+  while (offset < scanEnd - 4) {
+    if (view.getUint8(offset) !== 0xff) {
+      offset++;
+      continue;
+    }
+    const marker = view.getUint8(offset + 1);
+    if (marker === 0xda || marker === 0xd9) break;
+    if (marker === 0xff) {
+      offset++;
+      continue;
+    }
+    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0xd8 || marker === 0x01) {
+      offset += 2;
+      continue;
+    }
+    if (offset + 3 >= scanEnd) break;
+    const segmentLength = view.getUint16(offset + 2);
+    // Spec-violating length (< 2, ITU-T T.81 §B.1.1.4): stop rather than re-read misaligned bytes.
+    if (segmentLength < 2) break;
+    if (marker === appMarker) {
+      segments.push({ dataStart: offset + 4, dataEnd: Math.min(offset + 2 + segmentLength, view.byteLength) });
+    }
+    offset += 2 + segmentLength;
+  }
+  return segments;
+}
+
+function segmentStartsWith(view: DataView, seg: { dataStart: number; dataEnd: number }, id: string): boolean {
+  if (seg.dataStart + id.length > seg.dataEnd) return false;
+  for (let i = 0; i < id.length; i++) {
+    if (view.getUint8(seg.dataStart + i) !== id.charCodeAt(i)) return false;
+  }
+  return true;
+}
+
+/** APP2 identifier of ISO 21496-1 gain map metadata (NUL-terminated). */
+const ISO_21496_APP2_ID = 'urn:iso:std:iso:ts:21496:-1\0';
+/** APP2 identifier of an embedded ICC profile chunk (NUL-terminated). */
+const ICC_APP2_ID = 'ICC_PROFILE\0';
+
+/**
+ * Parse ISO 21496-1 binary gain map metadata from the APP2 segments of a
+ * JPEG region (the gain map image carries the full metadata; the primary
+ * image only a version stub, which parses to null).
+ */
+function extractISO21496FromJPEG(
+  buffer: ArrayBuffer,
+  startOffset: number,
+  endOffset: number | undefined,
+): TmapMetadata | null {
+  const view = new DataView(buffer);
+  for (const seg of findAPPSegments(buffer, startOffset, endOffset, 0xe2)) {
+    if (!segmentStartsWith(view, seg, ISO_21496_APP2_ID)) continue;
+    const meta = parseISO21496Metadata(view, seg.dataStart + ISO_21496_APP2_ID.length, seg.dataEnd);
+    if (meta) return meta;
+  }
+  return null;
+}
+
+/**
+ * Reassemble the ICC profile embedded in a JPEG region's APP2 'ICC_PROFILE'
+ * chunks (ICC.1 Annex B: 1-based sequence number, chunk count, data).
+ */
+function extractICCFromJPEG(
+  buffer: ArrayBuffer,
+  startOffset: number,
+  endOffset: number | undefined,
+): Uint8Array | null {
+  const view = new DataView(buffer);
+  const chunks: Array<{ seq: number; bytes: Uint8Array }> = [];
+  for (const seg of findAPPSegments(buffer, startOffset, endOffset, 0xe2)) {
+    if (!segmentStartsWith(view, seg, ICC_APP2_ID)) continue;
+    const headerEnd = seg.dataStart + ICC_APP2_ID.length + 2;
+    if (headerEnd > seg.dataEnd) continue;
+    const seq = view.getUint8(seg.dataStart + ICC_APP2_ID.length);
+    chunks.push({ seq, bytes: new Uint8Array(buffer, headerEnd, seg.dataEnd - headerEnd) });
+  }
+  if (chunks.length === 0) return null;
+  chunks.sort((a, b) => a.seq - b.seq);
+  const total = chunks.reduce((sum, c) => sum + c.bytes.length, 0);
+  const icc = new Uint8Array(total);
+  let pos = 0;
+  for (const c of chunks) {
+    icc.set(c.bytes, pos);
+    pos += c.bytes.length;
+  }
+  return icc;
+}
+
+/**
+ * Colour declared by the base (primary) JPEG's ICC profile, or null when it
+ * has none (browsers then assume sRGB, and so do we).
+ */
+function extractBaseColorFromJPEG(buffer: ArrayBuffer, baseEnd: number | undefined): GainMapBaseColor | null {
+  const icc = extractICCFromJPEG(buffer, 0, baseEnd ?? buffer.byteLength);
+  return icc ? parseICCProfileColor(icc) : null;
+}
+
+/**
  * Test-only export of internal helpers. Not part of the public API — consumers
  * should not import from this namespace; it exists so unit tests can directly
  * exercise small internal helpers like `ensureMPFRange` without round-tripping
@@ -787,6 +916,8 @@ export const _internal = {
   ensureMPFRange,
   extractHeadroomFromXMP,
   extractXMPFromJPEG,
+  extractISO21496FromJPEG,
+  extractICCFromJPEG,
 };
 
 /**

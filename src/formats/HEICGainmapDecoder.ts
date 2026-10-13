@@ -11,10 +11,13 @@
  * - Auxiliary image item linked via `auxC` with type:
  *   - `urn:com:apple:photo:2020:aux:hdrgainmap` (Apple iPhone)
  *   - `urn:com:photo:aux:hdrgainmap` (ISO 21496-1 standard)
- * - Headroom stored in XMP metadata or tmap box
+ * - Metadata from an ISO 21496-1 'tmap' derived item, XMP, or a legacy tmap
+ *   property
  *
- * HDR reconstruction formula (same as AVIF/JPEG gainmap):
- *   HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)
+ * HDR reconstruction follows ISO 21496-1 (GainMapMetadata.applyGainMap) with
+ * W = 1, the full HDR rendition. The base is decoded in its declared colour
+ * space (colr nclx / ICC, Display P3 on iPhone; see GainMapColor) and
+ * linearised to float.
  */
 
 import {
@@ -32,15 +35,25 @@ import {
   parseISOBMFFOrientation,
   parseISOBMFFTransforms,
   parseTmapBox,
+  extractTmapItemMetadata,
+  findItemColor,
 } from './AVIFGainmapDecoder';
-import { drawImageWithOrientation } from './shared';
 import {
   type GainMapMetadata,
   parseGainMapMetadataFromXMP,
   tmapToGainMapMetadata,
-  reconstructHDR,
+  applyGainMap,
   defaultGainMapMetadata,
 } from './GainMapMetadata';
+import {
+  type GainMapBaseColor,
+  GAIN_MAP_BITMAP_OPTIONS,
+  decodeGainMapBase,
+  linearizeBasePixels,
+  rawBaseInterpretation,
+  readGainMapPixels,
+} from './GainMapColor';
+import type { ColorPrimaries } from '../core/image/Image';
 
 // =============================================================================
 // Types
@@ -63,6 +76,8 @@ export interface HEICGainmapInfo {
   gainmapHeight: number;
   /** Full gain map metadata (ISO 21496-1) */
   gainMapMetadata?: GainMapMetadata;
+  /** Base (primary item) colour from its colr properties (null/absent: sRGB) */
+  baseColor?: GainMapBaseColor | null;
 }
 
 export interface HEICColorInfo {
@@ -297,8 +312,13 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
   const gainmapOffset = gainmapLoc.baseOffset + gainmapLoc.extents[0]!.offset;
   const gainmapLength = gainmapLoc.extents.reduce((sum, e) => sum + e.length, 0);
 
-  // 6. Extract headroom and full metadata from XMP mime items or tmap box
-  const metaResult = extractHEICGainMapMetadata(view, buffer, items, locations, ipco.dataStart, ipco.dataEnd);
+  // 6. Extract headroom and full metadata: ISO 21496-1 'tmap' item first,
+  // then XMP mime items or a legacy tmap property
+  const tmapItem = extractTmapItemMetadata(view, buffer, items, locations, meta.dataStart, meta.dataEnd);
+  const tmapItemMeta = tmapItem ? tmapToGainMapMetadata(tmapItem) : null;
+  const metaResult = tmapItemMeta
+    ? { headroom: tmapItemMeta.hdrCapacityMax, metadata: tmapItemMeta }
+    : extractHEICGainMapMetadata(view, buffer, items, locations, ipco.dataStart, ipco.dataEnd);
   let headroom = metaResult?.headroom ?? null;
   const gainMapMetadata = metaResult?.metadata;
 
@@ -352,6 +372,7 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
     gainmapWidth,
     gainmapHeight,
     gainMapMetadata,
+    baseColor: ipma ? findItemColor(view, ipco.dataStart, ipco.dataEnd, ipma, primaryItemId) : null,
   };
 }
 
@@ -723,8 +744,12 @@ export async function decodeHEICGainmapToFloat32(
   height: number;
   data: Float32Array;
   channels: number;
+  /** Primaries of the linear result (the base image's colour space) */
+  colorPrimaries: ColorPrimaries;
+  transferFunction: 'linear';
 }> {
-  let baseData: Uint8ClampedArray;
+  let baseLinear: Float32Array;
+  let colorPrimaries: ColorPrimaries;
   let gainData: Uint8ClampedArray;
   let width: number;
   let height: number;
@@ -755,38 +780,34 @@ export async function decodeHEICGainmapToFloat32(
       gainmapBlob = new Blob([gainmapCodedData], { type: 'image/heic' });
     }
 
-    const [baseBitmap, gainmapBitmap] = await Promise.all([
-      createImageBitmap(baseBlob),
-      createImageBitmap(gainmapBlob),
+    // Base: linear float in its declared colour space. Gain map: raw samples.
+    const [base, gainmapBitmap] = await Promise.all([
+      decodeGainMapBase(baseBlob, info.baseColor ?? null),
+      createImageBitmap(gainmapBlob, GAIN_MAP_BITMAP_OPTIONS),
     ]);
 
-    width = baseBitmap.width;
-    height = baseBitmap.height;
-
-    // Draw base to canvas and get pixel data
-    const baseCanvas = createCanvas(width, height);
-    const baseCtx = baseCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-    baseCtx.drawImage(baseBitmap, 0, 0);
-    baseData = baseCtx.getImageData(0, 0, width, height).data;
-    baseBitmap.close();
+    width = base.width;
+    height = base.height;
+    baseLinear = base.data;
+    colorPrimaries = base.colorPrimaries;
 
     // Gainmap may be smaller — scale up to base image size
     // Apply orientation transform so gainmap pixels align with the display-rotated base
-    const gainCanvas = createCanvas(width, height);
-    const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-    drawImageWithOrientation(gainCtx, gainmapBitmap, width, height, orientation);
-    gainData = gainCtx.getImageData(0, 0, width, height).data;
-    gainmapBitmap.close();
+    gainData = readGainMapPixels(gainmapBitmap, width, height, orientation);
   } catch {
     // WASM fallback (Chrome/Firefox/Edge)
     // Embed matching irot/imir boxes so libheif applies the same rotation to gainmap
     const transforms = meta ? parseISOBMFFTransforms(heicView, meta.dataStart, meta.dataEnd) : {};
     const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
+    // libheif applies no colour management: the base arrives as raw code
+    // values in its declared colour space.
     const baseResult = await decodeHEICToImageData(buffer);
     width = baseResult.width;
     height = baseResult.height;
-    baseData = baseResult.data;
+    const raw = rawBaseInterpretation(info.baseColor ?? null);
+    baseLinear = linearizeBasePixels(baseResult.data, width * height, raw.transfer, raw.primaries);
+    colorPrimaries = raw.primaries;
 
     // Decode gainmap via standalone HEIC wrapper with matching transforms
     if (!info.gainmapHvcC) {
@@ -806,10 +827,9 @@ export async function decodeHEICGainmapToFloat32(
     gainData = scaleImageData(gainResult.data, gainResult.width, gainResult.height, width, height);
   }
 
-  // Apply HDR reconstruction per-pixel using shared module
-  const pixelCount = width * height;
+  // Apply the gain map (W = 1: full HDR rendition) using the shared module
   const gainMeta = info.gainMapMetadata ?? defaultGainMapMetadata(info.headroom);
-  const result = reconstructHDR(baseData, gainData, pixelCount, gainMeta);
+  const result = applyGainMap(baseLinear, gainData, width * height, gainMeta);
 
-  return { width, height, data: result, channels: 4 };
+  return { width, height, data: result, channels: 4, colorPrimaries, transferFunction: 'linear' };
 }

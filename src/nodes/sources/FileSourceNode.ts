@@ -1180,8 +1180,8 @@ export class FileSourceNode extends BaseSourceNode {
     const metadata: ImageMetadata = {
       colorSpace: 'linear',
       sourcePath: originalUrl ?? url,
-      transferFunction: 'srgb',
-      colorPrimaries: 'bt709',
+      transferFunction: result.transferFunction,
+      colorPrimaries: result.colorPrimaries,
       attributes: {
         formatName: 'jpeg-gainmap',
         headroom: info.headroom,
@@ -1247,8 +1247,8 @@ export class FileSourceNode extends BaseSourceNode {
     const metadata: ImageMetadata = {
       colorSpace: 'linear',
       sourcePath: originalUrl ?? url,
-      transferFunction: 'srgb',
-      colorPrimaries: 'bt709',
+      transferFunction: result.transferFunction,
+      colorPrimaries: result.colorPrimaries,
       attributes: {
         formatName: 'avif-gainmap',
         headroom: info.headroom,
@@ -1490,8 +1490,8 @@ export class FileSourceNode extends BaseSourceNode {
     const metadata: ImageMetadata = {
       colorSpace: 'linear',
       sourcePath: originalUrl ?? url,
-      transferFunction: 'srgb',
-      colorPrimaries: 'bt709',
+      transferFunction: result.transferFunction,
+      colorPrimaries: result.colorPrimaries,
       attributes: {
         formatName: 'heic-gainmap',
         headroom: info.headroom,
