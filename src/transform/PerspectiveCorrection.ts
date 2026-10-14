@@ -189,10 +189,29 @@ export function invertHomography3x3(H: Float64Array): Float64Array {
   return inv;
 }
 
+const UNIT_SQUARE: readonly Point2D[] = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+];
+
 /**
- * Compute perspective correction homography as column-major Float32Array(9) for GLSL mat3.
- * Maps from unit square (output rectangle) to the user's quad (source positions).
- * Used for shader inverse mapping: for each output pixel, find the source UV to sample.
+ * Homography mapping the user's quad (pinned image corners in output space)
+ * back to the unit square (source image). Row-major Float64Array(9).
+ */
+function computeCornerPinInverse(params: PerspectiveCorrectionParams): Float64Array {
+  const quad: Point2D[] = [params.topLeft, params.topRight, params.bottomRight, params.bottomLeft];
+  return computeHomography(quad, [...UNIT_SQUARE]);
+}
+
+/**
+ * Compute the corner-pin inverse homography as column-major Float32Array(9) for GLSL mat3.
+ *
+ * The user's quad is where the image corners are pinned on screen (the same
+ * quad the grid overlay draws). The forward warp maps the unit square (source
+ * image) onto that quad, so the shader needs the inverse: for each output
+ * pixel inside the quad, find the source UV to sample.
  */
 export function computeInverseHomographyFloat32(params: PerspectiveCorrectionParams): Float32Array {
   if (!isPerspectiveActive(params)) {
@@ -200,20 +219,9 @@ export function computeInverseHomographyFloat32(params: PerspectiveCorrectionPar
     return new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
   }
 
-  // Source is always the unit square corners (output rectangle)
-  const src: Point2D[] = [
-    { x: 0, y: 0 },
-    { x: 1, y: 0 },
-    { x: 1, y: 1 },
-    { x: 0, y: 1 },
-  ];
-
-  // Destination is the user's quad (source positions in the original image)
-  const dst: Point2D[] = [params.topLeft, params.topRight, params.bottomRight, params.bottomLeft];
-
-  // H maps output rect → source quad. This is exactly what the shader needs:
-  // for each output pixel at position P, sample source at H(P).
-  const H = computeHomography(src, dst);
+  // Inverse of the corner-pin warp: output quad → source unit square.
+  // For each output pixel at position P, sample source at H(P).
+  const H = computeCornerPinInverse(params);
 
   // Convert row-major to column-major for GLSL
   const colMajor = new Float32Array(9);
@@ -358,17 +366,9 @@ export function applyPerspectiveCorrection(sourceData: ImageData, params: Perspe
   const height = sourceData.height;
   const src = sourceData.data;
 
-  // Compute forward homography (output rectangle → source quad)
-  // For correction: output pixel P maps to source position H(P)
-  const unitSquare: Point2D[] = [
-    { x: 0, y: 0 },
-    { x: 1, y: 0 },
-    { x: 1, y: 1 },
-    { x: 0, y: 1 },
-  ];
-  const quad: Point2D[] = [params.topLeft, params.topRight, params.bottomRight, params.bottomLeft];
-
-  const H = computeHomography(unitSquare, quad);
+  // Inverse corner-pin homography (output quad → source unit square):
+  // output pixel P maps to source position H(P)
+  const H = computeCornerPinInverse(params);
 
   const output = new ImageData(width, height);
   const dst = output.data;
@@ -380,7 +380,7 @@ export function applyPerspectiveCorrection(sourceData: ImageData, params: Perspe
       const nx = (dx + 0.5) / width;
       const ny = (dy + 0.5) / height;
 
-      // Apply forward homography (output → source)
+      // Apply inverse homography (output → source)
       const srcHx = H[0]! * nx + H[1]! * ny + H[2]!;
       const srcHy = H[3]! * nx + H[4]! * ny + H[5]!;
       const srcHz = H[6]! * nx + H[7]! * ny + H[8]!;

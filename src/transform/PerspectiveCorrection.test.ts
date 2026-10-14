@@ -200,17 +200,17 @@ describe('PerspectiveCorrection', () => {
 
     it('PERSP-T010: out-of-bounds pixels are black+transparent', () => {
       const imageData = createTestImageData(20, 20, { r: 200, g: 100, b: 50 });
-      // Extend the quad beyond [0,1] so output corners map outside source bounds
+      // Pin the image corners inward so the output corners fall outside the warped image
       const params: PerspectiveCorrectionParams = {
         enabled: true,
-        topLeft: { x: -0.3, y: -0.3 },
-        topRight: { x: 1.3, y: -0.3 },
-        bottomRight: { x: 1.3, y: 1.3 },
-        bottomLeft: { x: -0.3, y: 1.3 },
+        topLeft: { x: 0.2, y: 0.2 },
+        topRight: { x: 0.8, y: 0.2 },
+        bottomRight: { x: 0.8, y: 0.8 },
+        bottomLeft: { x: 0.2, y: 0.8 },
         quality: 'bilinear',
       };
       const result = applyPerspectiveCorrection(imageData, params);
-      // Top-left corner (0,0) maps to source (-0.3, -0.3) which is OOB
+      // Output corner (0,0) lies outside the pinned quad → maps outside the source
       const idx = 0;
       expect(result.data[idx]).toBe(0);
       expect(result.data[idx + 1]).toBe(0);
@@ -297,9 +297,9 @@ describe('PerspectiveCorrection', () => {
     });
   });
 
-  describe('correction direction regression', () => {
-    it('PERSP-T015: correction maps output to source quad (not inverted)', () => {
-      // Create a horizontal gradient: R increases left-to-right
+  describe('corner-pin direction regression', () => {
+    it('PERSP-T015: image corners follow the pinned quad (not inverted)', () => {
+      // Horizontal gradient: R increases left-to-right
       const size = 20;
       const imageData = new ImageData(size, size);
       for (let y = 0; y < size; y++) {
@@ -312,8 +312,7 @@ describe('PerspectiveCorrection', () => {
         }
       }
 
-      // Quad maps output rectangle → right half of source image
-      // Output (0,0) → source (0.5, 0), Output (1,0) → source (1.0, 0)
+      // Pin the whole image into the right half of the output
       const params: PerspectiveCorrectionParams = {
         enabled: true,
         topLeft: { x: 0.5, y: 0 },
@@ -324,23 +323,22 @@ describe('PerspectiveCorrection', () => {
       };
 
       const result = applyPerspectiveCorrection(imageData, params);
+      const row = 10;
 
-      // Center of output (10, 10) → source position ~(0.75, 0.5)
-      // Source gradient R at x_norm=0.75 → R ≈ 191
-      const cx = 10,
-        cy = 10;
-      const idx = (cy * result.width + cx) * 4;
-      const rValue = result.data[idx]!;
+      // Left half of the output is outside the image → transparent.
+      // (The old inverted mapping filled it with the source's right half.)
+      const leftIdx = (row * size + 4) * 4;
+      expect(result.data[leftIdx + 3]).toBe(0);
 
-      // Should sample from the RIGHT half of source (R > 127)
-      // If direction were inverted, it would sample from the left half (R < 127)
-      expect(rValue).toBeGreaterThan(150);
-      expect(rValue).toBeLessThan(230);
+      // Output x≈0.575 shows the source's left edge region (low R),
+      // output x≈0.975 shows the source's right edge region (high R).
+      const nearLeftEdge = result.data[(row * size + 11) * 4]!;
+      const nearRightEdge = result.data[(row * size + 19) * 4]!;
+      expect(nearLeftEdge).toBeLessThan(80);
+      expect(nearRightEdge).toBeGreaterThan(200);
     });
 
-    it('PERSP-T016: computeInverseHomographyFloat32 maps output to source quad', () => {
-      // Verify that the homography matrix maps output positions to source positions
-      // (not the reverse). This catches the H vs H⁻¹ regression.
+    it('PERSP-T016: computeInverseHomographyFloat32 maps pinned quad corners back to source corners', () => {
       const params: PerspectiveCorrectionParams = {
         enabled: true,
         topLeft: { x: 0.2, y: 0.1 },
@@ -352,14 +350,47 @@ describe('PerspectiveCorrection', () => {
       const mat = computeInverseHomographyFloat32(params);
 
       // Column-major mat3: mat[col*3+row]
-      // Apply to output corner (0, 0, 1) → should give source topLeft (0.2, 0.1)
-      // mat * [0, 0, 1]^T = [mat[6], mat[7], mat[8]] (3rd column)
-      const hx = mat[6]!;
-      const hy = mat[7]!;
-      const hz = mat[8]!;
-      expect(hz).not.toBe(0);
-      expect(hx / hz).toBeCloseTo(0.2, 2);
-      expect(hy / hz).toBeCloseTo(0.1, 2);
+      const apply = (p: { x: number; y: number }) => {
+        const hx = mat[0]! * p.x + mat[3]! * p.y + mat[6]!;
+        const hy = mat[1]! * p.x + mat[4]! * p.y + mat[7]!;
+        const hz = mat[2]! * p.x + mat[5]! * p.y + mat[8]!;
+        return { x: hx / hz, y: hy / hz };
+      };
+
+      const tl = apply(params.topLeft);
+      expect(tl.x).toBeCloseTo(0, 4);
+      expect(tl.y).toBeCloseTo(0, 4);
+      const br = apply(params.bottomRight);
+      expect(br.x).toBeCloseTo(1, 4);
+      expect(br.y).toBeCloseTo(1, 4);
+    });
+
+    it('PERSP-T017: grid overlay points land on the matching source UV of the rendered warp', () => {
+      // The overlay draws generatePerspectiveGrid() on top of the warped image.
+      // Every grid point (u, v) must show source pixel (u, v), otherwise the
+      // grid drifts away from the image while dragging a corner.
+      const params: PerspectiveCorrectionParams = {
+        enabled: true,
+        topLeft: { x: 0.25, y: 0.15 },
+        topRight: { x: 0.95, y: 0.05 },
+        bottomRight: { x: 0.8, y: 0.9 },
+        bottomLeft: { x: 0.05, y: 0.75 },
+        quality: 'bilinear',
+      };
+      const subdivisions = 4;
+      const grid = generatePerspectiveGrid(params, subdivisions);
+      const mat = computeInverseHomographyFloat32(params);
+
+      for (let j = 0; j <= subdivisions; j++) {
+        for (let i = 0; i <= subdivisions; i++) {
+          const p = grid[j]![i]!;
+          const hx = mat[0]! * p.x + mat[3]! * p.y + mat[6]!;
+          const hy = mat[1]! * p.x + mat[4]! * p.y + mat[7]!;
+          const hz = mat[2]! * p.x + mat[5]! * p.y + mat[8]!;
+          expect(hx / hz).toBeCloseTo(i / subdivisions, 4);
+          expect(hy / hz).toBeCloseTo(j / subdivisions, 4);
+        }
+      }
     });
   });
 
