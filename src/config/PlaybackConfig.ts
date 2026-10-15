@@ -10,6 +10,12 @@ import type { PlaybackMode } from '../core/types/session';
 /** Common playback speed presets available in the UI */
 export const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
 
+/**
+ * Speeds the J/L shuttle steps through, slowest first. Each press in the
+ * current direction moves one step up; reverse stops at MAX_REVERSE_SPEED.
+ */
+export const SHUTTLE_SPEEDS = [1, 2, 4, 8] as const;
+
 /** Default playback mode: realtime (frames may be skipped to maintain target FPS) */
 export const DEFAULT_PLAYBACK_MODE: PlaybackMode = 'realtime';
 

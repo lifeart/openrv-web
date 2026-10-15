@@ -350,6 +350,9 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   resetSpeed(): void {
     this._playbackEngine.resetSpeed();
   }
+  shuttle(direction: 1 | -1): void {
+    this._playbackEngine.shuttle(direction);
+  }
 
   // ---- A/B Compare methods ----
 

@@ -647,6 +647,14 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * J/L shuttle: start or turn around at 1x, or go one step faster when
+   * already playing in `direction`.
+   */
+  shuttle(direction: 1 | -1): void {
+    this._playback.shuttle(direction);
+  }
+
+  /**
    * Reset playback speed to 1x
    */
   resetSpeed(): void {

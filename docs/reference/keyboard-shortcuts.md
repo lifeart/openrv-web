@@ -16,9 +16,9 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Up Arrow` | Toggle playback direction (forward/reverse) |
 | `Home` | Go to first frame (or in point) |
 | `End` | Go to last frame (or out point) |
-| `J` | Decrease playback speed (previous preset) |
+| `J` | Shuttle backward; press again to go faster |
 | `K` | Pause playback |
-| `L` | Increase playback speed (next preset) |
+| `L` | Shuttle forward; press again to go faster |
 
 ## View and Navigation
 

@@ -23,8 +23,7 @@ export interface ActionSession {
   togglePlayDirection(): void;
   goToStart(): void;
   goToEnd(): void;
-  decreaseSpeed(): void;
-  increaseSpeed(): void;
+  shuttle(direction: 1 | -1): void;
   pause(): void;
   setInPoint(): void;
   setOutPoint(): void;
@@ -305,15 +304,15 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       }
       session.goToEnd();
     },
-    'playback.slower': () => session.decreaseSpeed(),
+    'playback.slower': () => session.shuttle(-1),
     'playback.stop': () => session.pause(),
     'playback.faster': () => {
-      // L key - increase speed, but in paint context, line tool takes precedence
+      // L key - shuttle forward, but in paint context, line tool takes precedence
       if (activeContextManager.isContextActive('paint')) {
         controls.paintToolbar.handleKeyboard('l');
         return;
       }
-      session.increaseSpeed();
+      session.shuttle(1);
     },
 
     // -- Timeline --------------------------------------------------------
@@ -344,7 +343,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'timeline.cycleLoopMode': () => {
       const modes: Array<'once' | 'loop' | 'pingpong'> = ['once', 'loop', 'pingpong'];
       const currentIndex = modes.indexOf(session.loopMode);
-      session.loopMode = modes[(currentIndex + 1) % modes.length]!;
+      session.loopMode = modes[(currentIndex + 1) % modes.length] ?? 'loop';
     },
     'timeline.toggleMagnifier': () => controls.timelineMagnifier.toggle(),
     'timeline.shiftRangeNext': () => {

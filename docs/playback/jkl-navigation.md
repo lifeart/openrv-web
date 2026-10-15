@@ -10,13 +10,17 @@ The J, K, and L keys map to standard industry conventions:
 
 | Key | Action | Binding |
 |-----|--------|---------|
-| `J` | Decrease playback speed (step to previous preset) | `playback.slower` |
+| `J` | Shuttle backward; press again to go faster | `playback.slower` |
 | `K` | Pause playback | `playback.stop` |
-| `L` | Increase playback speed (step to next preset) | `playback.faster` |
+| `L` | Shuttle forward; press again to go faster | `playback.faster` |
 
-Pressing `L` repeatedly steps through the forward speed presets: 1x, 2x, 4x, 8x. After reaching 8x, the next press wraps back to 1x. Pressing `J` steps backward through the presets: 1x, 0.5x, 0.25x, 0.1x.
+`L` starts forward playback at 1x. Each further press while playing forward goes one step faster: 2x, 4x, 8x, where it stays. `J` does the same in reverse: 1x, 2x, 4x (the reverse limit, see below).
 
-Pressing `K` at any speed immediately pauses playback, regardless of the current speed or direction.
+Pressing the opposite key while playing turns playback around at 1x, so `L L L J` plays forward at 4x and then reverse at 1x.
+
+Pressing `K` at any speed immediately pauses playback, regardless of the current speed or direction. The next `J` or `L` starts again at 1x.
+
+For slow motion (0.5x, 0.25x, 0.1x), use the speed button or its menu.
 
 ## Speed Presets
 
@@ -88,9 +92,9 @@ window.openrv.playback.seek(50);  // Go to frame 50
 
 | Key | Action |
 |-----|--------|
-| `J` | Decrease speed to previous preset |
+| `J` | Shuttle backward (1x, 2x, 4x) |
 | `K` | Pause playback |
-| `L` | Increase speed to next preset |
+| `L` | Shuttle forward (1x, 2x, 4x, 8x) |
 | `Space` | Toggle play/pause |
 | `Up Arrow` | Toggle forward/reverse direction |
 | `Left Arrow` | Step one frame backward |

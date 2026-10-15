@@ -74,9 +74,9 @@ The keyboard shortcuts feature is **fully implemented** with a comprehensive cen
 | playback.toggleDirection | ArrowUp | Toggle play direction |
 | playback.goToStart | Home | Go to first frame |
 | playback.goToEnd | End | Go to last frame |
-| playback.slower | J | Decrease playback speed |
+| playback.slower | J | Shuttle backward (press again to go faster) |
 | playback.stop | K | Stop playback |
-| playback.faster | L | Increase playback speed |
+| playback.faster | L | Shuttle forward (press again to go faster) |
 
 #### Timeline Controls
 | Action | Shortcut | Description |

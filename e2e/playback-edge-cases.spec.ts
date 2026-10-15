@@ -15,6 +15,7 @@ import {
   waitForLoopMode,
   waitForPlaybackSpeed,
   waitForCondition,
+  setPlaybackSpeed,
 } from './fixtures';
 
 // Mirrors src/config/PlaybackConfig.ts. Inlined to keep e2e specs from
@@ -46,11 +47,7 @@ test.describe('Playback Edge Cases', () => {
   test.describe('Extreme Playback Speeds', () => {
     test('EDGE-001: playback at 0.1x speed advances frames slowly', async ({ page }) => {
       // Set speed to 0.1x (slowest)
-      // Use J key multiple times to decrease speed
-      for (let i = 0; i < 10; i++) {
-        await page.keyboard.press('j');
-        await page.waitForTimeout(50);
-      }
+      await setPlaybackSpeed(page, 0.1);
 
       let state = await getSessionState(page);
       // Speed should be at or near minimum
@@ -77,10 +74,7 @@ test.describe('Playback Edge Cases', () => {
 
     test('EDGE-002: playback at 8x speed advances frames rapidly', async ({ page }) => {
       // Set speed to 8x (fastest)
-      for (let i = 0; i < 10; i++) {
-        await page.keyboard.press('l');
-        await page.waitForTimeout(50);
-      }
+      await setPlaybackSpeed(page, 8);
 
       let state = await getSessionState(page);
       expect(state.playbackSpeed).toBeGreaterThanOrEqual(4);
@@ -109,7 +103,7 @@ test.describe('Playback Edge Cases', () => {
       await waitForPlaybackState(page, true);
       await waitForFrameAtLeast(page, 3);
 
-      // Increase speed to 2x while playing
+      // Shuttle forward while playing forward: 1x -> 2x
       await page.keyboard.press('l');
       await waitForPlaybackSpeed(page, 2);
 
@@ -119,9 +113,8 @@ test.describe('Playback Edge Cases', () => {
       // Continue playback
       await waitForFrameAtLeast(page, state.currentFrame + 3);
 
-      // Decrease speed back to 1x
-      await page.keyboard.press('j');
-      await waitForPlaybackSpeed(page, 1);
+      // Back to 1x (J would reverse direction)
+      await setPlaybackSpeed(page, 1);
 
       const frameAfterDecrease = (await getSessionState(page)).currentFrame;
 
@@ -330,10 +323,7 @@ test.describe('Playback Edge Cases', () => {
   test.describe('Concurrent Operations', () => {
     test('EDGE-020: seek during high-speed playback works correctly', async ({ page }) => {
       // Set high speed
-      for (let i = 0; i < 3; i++) {
-        await page.keyboard.press('l');
-        await page.waitForTimeout(50);
-      }
+      await setPlaybackSpeed(page, 4);
 
       // Start playback
       await page.keyboard.press('Space');
@@ -362,10 +352,7 @@ test.describe('Playback Edge Cases', () => {
       await waitForFrame(page, 16);
 
       // Set high speed
-      await page.keyboard.press('l');
-      await waitForPlaybackSpeed(page, 2);
-      await page.keyboard.press('l');
-      await waitForPlaybackSpeed(page, 4);
+      await setPlaybackSpeed(page, 4);
 
       const startState = await getSessionState(page);
       const startFrame = startState.currentFrame;
