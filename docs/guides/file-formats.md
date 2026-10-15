@@ -8,8 +8,8 @@
 
 OpenRV Web supports a wide range of image, video, and session file formats, spanning professional VFX interchange formats, HDR photography formats, web-native media, and editorial interchange. Image decoding follows a **dual-path** architecture:
 
-- **Decoder-backed formats** (EXR, DPX, Cineon, Float TIFF, Radiance HDR, JPEG Gainmap HDR, HEIC/AVIF Gainmap HDR, JPEG XL HDR, HEIC SDR via WASM, JP2) are decoded into **Float32Array** pixel data in RGBA layout and stored as `IPImage` objects. This ensures full floating-point precision for HDR and professional VFX formats throughout the rendering pipeline.
-- **Browser-native formats** (PNG, JPEG, WebP, GIF, BMP, SVG, ICO, standard AVIF, standard TIFF, RAW preview (extracted by custom parser, then rendered via browser `<img>`)) are decoded by the browser's built-in `<img>` element and stored as **`HTMLImageElement`** sources -- no Float32Array conversion takes place. The browser handles color management and compositing for these standard formats directly.
+- **Decoder-backed formats** (EXR, DPX, Cineon, TIFF, TGA, SGI, Radiance HDR, JPEG Gainmap HDR, HEIC/AVIF Gainmap HDR, JPEG XL HDR, HEIC SDR via WASM, JP2) are decoded into **Float32Array** pixel data in RGBA layout and stored as `IPImage` objects. This ensures full floating-point precision for HDR and professional VFX formats throughout the rendering pipeline.
+- **Browser-native formats** (PNG, JPEG, WebP, GIF, BMP, SVG, ICO, standard AVIF, RAW preview (extracted by custom parser, then rendered via browser `<img>`)) are decoded by the browser's built-in `<img>` element and stored as **`HTMLImageElement`** sources -- no Float32Array conversion takes place. The browser handles color management and compositing for these standard formats directly.
 
 > **PNG `cICP` and wide-gamut ICC profiles**: when a local PNG has a `cICP` chunk that signals PQ or HLG, it is decoded without colour conversion and shown through the HDR path with the signalled transfer and primaries. 16-bit PNGs go through the PNG16 decoder and 8-bit PNGs through the browser. AVIF, JPEG XL and HEIC files are labelled with their `nclx` primaries (Rec.709, Rec.2020, Display P3, DCI-P3). AVIF files with a Display P3 or Rec.2020 ICC profile are labelled with those primaries instead of Rec.709. The profile is identified by its `cicp` tag, its colorant primaries or its description; no full ICC colour management is applied.
 
@@ -94,7 +94,7 @@ The Radiance High Dynamic Range format, also known as RGBE (Red-Green-Blue-Expon
 TIFF files with 32-bit floating-point sample format, commonly used for HDR compositing interchange:
 
 - **Decoder**: Pure JavaScript (`TIFFFloatDecoder.ts`)
-- **Detection**: The decoder specifically identifies TIFF files where SampleFormat=3 (IEEE floating-point) and BitsPerSample=16/32/64. Standard 8/16-bit integer TIFFs are handled by the browser's native `<img>` decoder instead
+- **Detection**: The decoder specifically identifies TIFF files where SampleFormat=3 (IEEE floating-point) and BitsPerSample=16/32/64. Integer TIFFs are handled by the integer TIFF decoder below
 - **Endianness**: Both Intel (II, little-endian) and Motorola (MM, big-endian) byte orders
 - **Channels**: Supports 1-channel (grayscale), 3-channel (RGB), and 4-channel (RGBA) float TIFF images
 
@@ -103,6 +103,40 @@ TIFF files with 32-bit floating-point sample format, commonly used for HDR compo
 **Color space**: Varies (typically linear or scene-referred). The file's color space tag, if present, is reported in metadata.
 
 **Typical usage**: Float TIFF is used in compositing pipelines as a universal floating-point interchange format. Many tools that cannot write EXR can write float TIFF, making it a useful bridge format. It is also common in scientific imaging, medical imaging, and geospatial applications where floating-point precision is required.
+
+### Integer TIFF (.tif, .tiff)
+
+8- and 16-bit TIFF is the most common delivery format for plates and stills, but only Safari can decode TIFF natively. OpenRV Web decodes integer TIFFs itself in every browser:
+
+- **Decoder**: Pure JavaScript (`decodeTIFFInteger` in `TIFFFloatDecoder.ts`)
+- **Samples**: Unsigned 1/2/4/8/16/32-bit; 16-bit data keeps full precision
+- **Layouts**: Grayscale (BlackIsZero and WhiteIsZero), RGB, RGBA, gray+alpha, palette; strips or tiles
+- **Compression**: None, LZW, Deflate, PackBits, with horizontal predictor
+- **Not supported**: Signed integers, CMYK, YCbCr, CIELab, planar (separate-plane) layout and JPEG compression. Those files fall back to the browser, which works in Safari
+- **Camera RAW**: TIFF-based RAW files whose first image is a thumbnail (NewSubfileType) or that carry a DNGVersion tag are left to the RAW preview decoder
+
+**Color space**: Display-referred, like PNG and JPEG. No HDR handling or tone mapping is applied.
+
+### TGA (.tga)
+
+Truevision Targa, still common for textures, matte passes and older pipelines:
+
+- **Decoder**: Pure JavaScript (`TGADecoder.ts`)
+- **Image types**: Color-mapped, true-color and grayscale, uncompressed or RLE
+- **Pixels**: 8-bit gray, 16-bit gray+alpha, 15/16-bit 5-5-5(+1), 24-bit and 32-bit; bottom-left or top-left origin
+- **Alpha**: Read from the TGA 2.0 extension area when present, otherwise from the header's alpha bits
+
+**Detection**: TGA has no magic number, so the header is validated strictly and TGA is the last format the registry tries.
+
+### SGI (.sgi, .rgb, .rgba, .bw)
+
+Silicon Graphics image format, read by desktop OpenRV:
+
+- **Decoder**: Pure JavaScript (`SGIDecoder.ts`)
+- **Channels**: 1-4 (gray, gray+alpha, RGB, RGBA), 8 or 16 bits each
+- **Storage**: Verbatim or RLE
+
+**Magic signature**: `0x01DA` (474) at offset 0, big-endian
 
 ---
 
@@ -190,7 +224,7 @@ Camera RAW files are detected by their TIFF-based container structure, and the l
 - **Decoder**: Pure JavaScript TIFF/IFD parser (`RAWPreviewDecoder.ts`)
 - **Approach**: Rather than decoding raw sensor data (which requires camera-specific demosaicing and color science), the decoder extracts the embedded JPEG preview image that every RAW file contains. This provides instant viewing without heavy processing
 - **EXIF metadata**: Camera make, model, ISO, and orientation are extracted
-- **Detection**: TIFF container header (II or MM + magic 42) that is NOT a 32-bit float TIFF (float TIFFs are handled by the Float TIFF decoder earlier in the chain)
+- **Detection**: TIFF container header (II or MM + magic 42) that neither TIFF decoder claims (float TIFFs and plain integer TIFFs are handled earlier in the chain)
 
 **Color space**: sRGB (embedded preview).
 
@@ -411,6 +445,8 @@ The following table compares format support between desktop OpenRV and OpenRV We
 | Cineon | .cin | Yes | Yes | JavaScript | No (log) |
 | Radiance HDR | .hdr | Yes | Yes | JavaScript | Yes |
 | Float TIFF | .tif | Yes | Yes | JavaScript | Yes |
+| Integer TIFF | .tif | Yes | Yes | JavaScript | No |
+| TGA | .tga | Yes | Yes | JavaScript | No |
 | JPEG XL | .jxl | No | Yes | WASM | Yes |
 | JPEG Gainmap | .jpg | No | Yes | JavaScript | Yes |
 | HEIC Gainmap | .heic | No | Yes | JS + WASM | Yes |
@@ -418,7 +454,7 @@ The following table compares format support between desktop OpenRV and OpenRV We
 | AVIF | .avif | No | Yes | Native | No |
 | JPEG 2000 / HTJ2K | .jp2, .j2k, .j2c, .jph, .jhc | No | Yes | WASM | No |
 | RAW Preview | .cr2, .nef, etc. | No | Yes | JavaScript | No |
-| SGI | .sgi, .rgb | Yes | No | -- | No |
+| SGI | .sgi, .rgb | Yes | Yes | JavaScript | No |
 | Softimage PIC | .pic | Yes | No | -- | No |
 | Alias PIX | .pix, .als | Yes | No | -- | No |
 | ACES Container | .aces | Yes | No | -- | Yes |

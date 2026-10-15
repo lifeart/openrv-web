@@ -1,8 +1,11 @@
 /**
- * TIFF Float Image Format Decoder
+ * TIFF Image Format Decoder
  *
  * Supports:
  * - 16-bit IEEE half-float, 32-bit float, and 64-bit double pixel data
+ *   (decodeTIFFFloat, scene-linear)
+ * - Unsigned 1/2/4/8/16/32-bit integer data: grayscale, RGB(A) and palette
+ *   (decodeTIFFInteger, display-referred)
  * - RGB and RGBA images
  * - Big-endian and little-endian byte order
  * - Uncompressed (1), LZW (5), Deflate/ZIP (8, 32946), and PackBits (32773) compression
@@ -11,77 +14,59 @@
  * - Tiled image organization (TileWidth, TileLength, TileOffsets, TileByteCounts)
  *
  * Not yet supported:
- * - Non-float sample formats
+ * - Signed integer samples, CMYK, YCbCr, CIELab
+ * - Planar (separate-plane) layout
+ * - JPEG compression
  *
  * Based on TIFF 6.0 specification.
  */
 
 import { validateImageDimensions } from './shared';
 import { DecoderError } from '../core/errors';
+import {
+  COMPRESSION_LZW,
+  COMPRESSION_NAMES,
+  COMPRESSION_NONE,
+  COMPRESSION_PACKBITS,
+  type IntegerLayout,
+  PHOTOMETRIC_PALETTE,
+  PHOTOMETRIC_RGB,
+  PHOTOMETRIC_WHITE_IS_ZERO,
+  PLANAR_CHUNKY,
+  PREDICTOR_FLOATING_POINT,
+  PREDICTOR_HORIZONTAL,
+  PREDICTOR_NONE,
+  SAMPLE_FORMAT_FLOAT,
+  SAMPLE_FORMAT_INT,
+  SAMPLE_FORMAT_UINT,
+  SUPPORTED_COMPRESSIONS,
+  TAG_BITS_PER_SAMPLE,
+  TAG_COLOR_MAP,
+  TAG_COMPRESSION,
+  TAG_IMAGE_LENGTH,
+  TAG_IMAGE_WIDTH,
+  TAG_PHOTOMETRIC,
+  TAG_PLANAR_CONFIGURATION,
+  TAG_PREDICTOR,
+  TAG_ROWS_PER_STRIP,
+  TAG_SAMPLES_PER_PIXEL,
+  TAG_SAMPLE_FORMAT,
+  TAG_STRIP_BYTE_COUNTS,
+  TAG_STRIP_OFFSETS,
+  TAG_TILE_BYTE_COUNTS,
+  TAG_TILE_LENGTH,
+  TAG_TILE_OFFSETS,
+  TAG_TILE_WIDTH,
+  TIFF_BE,
+  TIFF_LE,
+  TIFF_MAGIC,
+  describeIntegerLayout,
+  getTagMultipleValues,
+  getTagSingleValue,
+  parseIFD,
+} from './TIFFTags';
 
-// TIFF byte order marks
-const TIFF_LE = 0x4949; // "II" - Intel byte order (little-endian)
-const TIFF_BE = 0x4d4d; // "MM" - Motorola byte order (big-endian)
-const TIFF_MAGIC = 42;
-
-// TIFF Tag IDs
-const TAG_IMAGE_WIDTH = 256;
-const TAG_IMAGE_LENGTH = 257;
-const TAG_BITS_PER_SAMPLE = 258;
-const TAG_COMPRESSION = 259;
-// TAG_PHOTOMETRIC (262) is used for writing but not needed for decode
-const TAG_STRIP_OFFSETS = 273;
-const TAG_SAMPLES_PER_PIXEL = 277;
-const TAG_ROWS_PER_STRIP = 278;
-const TAG_STRIP_BYTE_COUNTS = 279;
-const TAG_TILE_WIDTH = 322;
-const TAG_TILE_LENGTH = 323;
-const TAG_TILE_OFFSETS = 324;
-const TAG_TILE_BYTE_COUNTS = 325;
-const TAG_SAMPLE_FORMAT = 339;
-
-// Sample format values
-const SAMPLE_FORMAT_UINT = 1;
-const SAMPLE_FORMAT_INT = 2;
-const SAMPLE_FORMAT_FLOAT = 3;
-
-// Compression values
-const COMPRESSION_NONE = 1;
-const COMPRESSION_LZW = 5;
-const COMPRESSION_DEFLATE = 8;
-const COMPRESSION_JPEG = 7;
-const COMPRESSION_ADOBE_DEFLATE = 32946;
-const COMPRESSION_PACKBITS = 32773;
-
-/** Human-readable names for known TIFF compression codes */
-const COMPRESSION_NAMES: Record<number, string> = {
-  [COMPRESSION_NONE]: 'Uncompressed',
-  2: 'CCITT Group 3',
-  3: 'CCITT T.4',
-  4: 'CCITT T.6',
-  [COMPRESSION_LZW]: 'LZW',
-  [COMPRESSION_JPEG]: 'JPEG',
-  [COMPRESSION_DEFLATE]: 'Deflate',
-  [COMPRESSION_PACKBITS]: 'PackBits',
-  [COMPRESSION_ADOBE_DEFLATE]: 'Adobe Deflate',
-};
-
-const TAG_PREDICTOR = 317;
-
-const PREDICTOR_NONE = 1;
-const PREDICTOR_HORIZONTAL = 2;
-const PREDICTOR_FLOATING_POINT = 3;
-
-/**
- * Maximum number of IFD entries allowed per directory.
- *
- * The TIFF spec stores the entry count as a uint16 (max 65535), but real TIFF
- * files rarely exceed ~50 entries. A count near the uint16 maximum in a
- * malformed or malicious file would waste CPU iterating over bogus entries.
- * We cap at 1024, which is far above any legitimate TIFF while still
- * rejecting clearly unreasonable values.
- */
-const MAX_IFD_ENTRIES = 1024;
+export { isTIFFFile, isIntegerTIFF } from './TIFFTags';
 
 export interface TIFFInfo {
   width: number;
@@ -98,32 +83,9 @@ export interface TIFFDecodeResult {
   height: number;
   data: Float32Array; // RGBA interleaved
   channels: number; // always 4
-  colorSpace: 'linear';
+  /** 'linear' for float data, 'srgb' (display-referred) for integer data */
+  colorSpace: 'linear' | 'srgb';
   metadata: Record<string, unknown>;
-}
-
-interface TIFFTag {
-  id: number;
-  type: number;
-  count: number;
-  valueOffset: number;
-}
-
-/**
- * Check if a buffer contains a TIFF file by checking magic number
- */
-export function isTIFFFile(buffer: ArrayBuffer): boolean {
-  if (buffer.byteLength < 4) {
-    return false;
-  }
-  const view = new DataView(buffer);
-  const byteOrder = view.getUint16(0, false);
-  if (byteOrder !== TIFF_LE && byteOrder !== TIFF_BE) {
-    return false;
-  }
-  const le = byteOrder === TIFF_LE;
-  const magic = view.getUint16(2, le);
-  return magic === TIFF_MAGIC;
 }
 
 /**
@@ -136,179 +98,6 @@ export function isFloatTIFF(buffer: ArrayBuffer): boolean {
     info.sampleFormat === 'float' &&
     (info.bitsPerSample === 16 || info.bitsPerSample === 32 || info.bitsPerSample === 64)
   );
-}
-
-/**
- * Parse IFD (Image File Directory) tags
- */
-function parseIFD(view: DataView, ifdOffset: number, le: boolean): Map<number, TIFFTag> {
-  const tags = new Map<number, TIFFTag>();
-
-  if (ifdOffset + 2 > view.byteLength) return tags;
-
-  const numEntries = view.getUint16(ifdOffset, le);
-
-  if (numEntries > MAX_IFD_ENTRIES) {
-    throw new DecoderError(
-      'TIFF',
-      `IFD entry count ${numEntries} exceeds maximum of ${MAX_IFD_ENTRIES}. File may be malformed.`,
-    );
-  }
-
-  let pos = ifdOffset + 2;
-
-  for (let i = 0; i < numEntries; i++) {
-    if (pos + 12 > view.byteLength) break;
-
-    const id = view.getUint16(pos, le);
-    const type = view.getUint16(pos + 2, le);
-    const count = view.getUint32(pos + 4, le);
-
-    const typeSize = getTypeSize(type);
-
-    // TIFF 6.0 Section 7: skip fields with unknown/unsupported type
-    if (typeSize === 0) {
-      pos += 12;
-      continue;
-    }
-
-    const totalSize = typeSize * count;
-
-    // If value fits in 4 bytes, it's stored inline at pos+8
-    // Otherwise, pos+8 contains a pointer to the data
-    const valueOffset = totalSize <= 4 ? pos + 8 : view.getUint32(pos + 8, le);
-
-    tags.set(id, { id, type, count, valueOffset });
-
-    pos += 12;
-  }
-
-  return tags;
-}
-
-/**
- * Get the byte size of a TIFF data type.
- * Covers all standard TIFF 6.0 types (1–12).
- * Returns 0 for unknown types so that callers can skip the entry
- * (TIFF 6.0 Section 7: "Readers should skip over fields containing
- * an unexpected field type.").
- */
-function getTypeSize(type: number): number {
-  switch (type) {
-    case 1:
-      return 1; // BYTE
-    case 2:
-      return 1; // ASCII
-    case 3:
-      return 2; // SHORT
-    case 4:
-      return 4; // LONG
-    case 5:
-      return 8; // RATIONAL (two LONGs)
-    case 6:
-      return 1; // SBYTE
-    case 7:
-      return 1; // UNDEFINED
-    case 8:
-      return 2; // SSHORT
-    case 9:
-      return 4; // SLONG
-    case 10:
-      return 8; // SRATIONAL (two SLONGs)
-    case 11:
-      return 4; // FLOAT (IEEE 32-bit)
-    case 12:
-      return 8; // DOUBLE (IEEE 64-bit)
-    default:
-      return 0; // Unknown type — caller should skip this entry
-  }
-}
-
-/**
- * Read a tag value that may be inline or at an offset
- */
-function getTagSingleValue(
-  view: DataView,
-  tags: Map<number, TIFFTag>,
-  tagId: number,
-  le: boolean,
-  defaultValue: number,
-): number {
-  const tag = tags.get(tagId);
-  if (!tag) return defaultValue;
-
-  const typeSize = getTypeSize(tag.type);
-  const totalSize = typeSize * tag.count;
-
-  if (totalSize <= 4) {
-    // Inline value
-    if (tag.type === 3) {
-      return view.getUint16(tag.valueOffset, le);
-    }
-    if (tag.type === 4) {
-      return view.getUint32(tag.valueOffset, le);
-    }
-    return view.getUint8(tag.valueOffset);
-  }
-
-  // Value at offset
-  if (tag.type === 3) {
-    return view.getUint16(tag.valueOffset, le);
-  }
-  if (tag.type === 4) {
-    return view.getUint32(tag.valueOffset, le);
-  }
-  return defaultValue;
-}
-
-/**
- * Read multiple values from a tag
- */
-function getTagMultipleValues(view: DataView, tags: Map<number, TIFFTag>, tagId: number, le: boolean): number[] {
-  const tag = tags.get(tagId);
-  if (!tag) return [];
-
-  const typeSize = getTypeSize(tag.type);
-  const totalSize = typeSize * tag.count;
-  const values: number[] = [];
-
-  if (tag.count === 1 && totalSize <= 4) {
-    // Single inline value
-    if (tag.type === 3) {
-      values.push(view.getUint16(tag.valueOffset, le));
-    } else if (tag.type === 4) {
-      values.push(view.getUint32(tag.valueOffset, le));
-    }
-    return values;
-  }
-
-  // For inline values (count=2 shorts)
-  if (totalSize <= 4) {
-    for (let i = 0; i < tag.count; i++) {
-      if (tag.type === 3) {
-        values.push(view.getUint16(tag.valueOffset + i * 2, le));
-      } else if (tag.type === 4) {
-        values.push(view.getUint32(tag.valueOffset + i * 4, le));
-      }
-    }
-    return values;
-  }
-
-  // Values at offset
-  const offset = tag.valueOffset;
-  for (let i = 0; i < tag.count; i++) {
-    if (tag.type === 3) {
-      if (offset + i * 2 + 2 <= view.byteLength) {
-        values.push(view.getUint16(offset + i * 2, le));
-      }
-    } else if (tag.type === 4) {
-      if (offset + i * 4 + 4 <= view.byteLength) {
-        values.push(view.getUint32(offset + i * 4, le));
-      }
-    }
-  }
-
-  return values;
 }
 
 /**
@@ -464,8 +253,9 @@ function decompressLZW(compressed: Uint8Array): Uint8Array {
       throw new DecoderError('TIFF', `LZW corruption: received code ${code} but next expected code is ${nextCode}`);
     }
 
-    // Increase code size when needed
-    if (nextCode > (1 << codeSize) - 1 && codeSize < 12) {
+    // Increase code size one code early ("early change"), as libtiff and
+    // every TIFF writer do: 10 bits once code 511 is assigned, not 512.
+    if (nextCode >= (1 << codeSize) - 1 && codeSize < 12) {
       codeSize++;
     }
 
@@ -818,6 +608,142 @@ function expandPixelToRGBA(
 }
 
 export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeResult> {
+  return decodeTIFFImage(buffer, 'float');
+}
+
+/**
+ * Decode an integer TIFF (1/2/4/8/16/32-bit unsigned) from an ArrayBuffer.
+ *
+ * Browsers other than Safari cannot decode TIFF at all, so 8- and 16-bit
+ * plates are decoded here. Samples are normalized to [0, 1] and stay
+ * display-referred (the returned colorSpace is 'srgb'), like the 8-bit
+ * browser path; only the precision differs.
+ *
+ * Supports grayscale (BlackIsZero / WhiteIsZero), RGB(A) and palette images,
+ * strips or tiles, with the same compressions and predictors as float TIFF.
+ */
+export async function decodeTIFFInteger(buffer: ArrayBuffer): Promise<TIFFDecodeResult> {
+  return decodeTIFFImage(buffer, 'integer');
+}
+
+type TIFFDecodeMode = 'float' | 'integer';
+
+/** Writes one source pixel to RGBA output. */
+type PixelWriter = (src: DataView, byteOffset: number, out: Float32Array, outIdx: number) => void;
+
+/**
+ * Build the pixel writer for an integer layout. Sub-byte samples arrive
+ * already unpacked to one byte each (see {@link unpackSubByteRows}).
+ */
+function createIntegerPixelWriter(layout: IntegerLayout, le: boolean, colorMap: number[]): PixelWriter {
+  const { bitsPerSample, samplesPerPixel, photometric } = layout;
+  const bytesPerSample = storedBytesPerSample(bitsPerSample);
+  const maxValue = bitsPerSample === 32 ? 4294967295 : 2 ** bitsPerSample - 1;
+  const read = (src: DataView, off: number): number =>
+    bytesPerSample === 1 ? src.getUint8(off) : bytesPerSample === 2 ? src.getUint16(off, le) : src.getUint32(off, le);
+
+  if (photometric === PHOTOMETRIC_PALETTE) {
+    // ColorMap holds all reds, then all greens, then all blues (16-bit each).
+    const entries = 2 ** bitsPerSample;
+    const palette = normalizeColorMap(colorMap);
+    return (src, off, out, idx) => {
+      const index = read(src, off);
+      out[idx] = palette[index] ?? 0;
+      out[idx + 1] = palette[entries + index] ?? 0;
+      out[idx + 2] = palette[2 * entries + index] ?? 0;
+      if (samplesPerPixel >= 2) out[idx + 3] = read(src, off + bytesPerSample) / maxValue;
+    };
+  }
+
+  if (photometric === PHOTOMETRIC_RGB) {
+    return (src, off, out, idx) => {
+      out[idx] = read(src, off) / maxValue;
+      out[idx + 1] = read(src, off + bytesPerSample) / maxValue;
+      out[idx + 2] = read(src, off + 2 * bytesPerSample) / maxValue;
+      if (samplesPerPixel >= 4) out[idx + 3] = read(src, off + 3 * bytesPerSample) / maxValue;
+    };
+  }
+
+  const invert = photometric === PHOTOMETRIC_WHITE_IS_ZERO;
+  return (src, off, out, idx) => {
+    const raw = read(src, off) / maxValue;
+    const v = invert ? 1 - raw : raw;
+    out[idx] = v;
+    out[idx + 1] = v;
+    out[idx + 2] = v;
+    if (samplesPerPixel >= 2) out[idx + 3] = read(src, off + bytesPerSample) / maxValue;
+  };
+}
+
+/**
+ * Scale 16-bit ColorMap entries to [0, 1].
+ *
+ * Many writers (Pillow among them) store 8-bit palettes as v * 256, and old
+ * ones store plain 8-bit values; like libtiff's colormap check, those are
+ * read back as 8-bit so 255 stays exactly 1.0.
+ */
+function normalizeColorMap(colorMap: number[]): Float32Array {
+  const out = new Float32Array(colorMap.length);
+  if (colorMap.every((v) => v < 256)) {
+    colorMap.forEach((v, i) => (out[i] = v / 255));
+  } else if (colorMap.every((v) => (v & 0xff) === 0 || (v & 0xff) === v >> 8)) {
+    colorMap.forEach((v, i) => (out[i] = (v >> 8) / 255));
+  } else {
+    colorMap.forEach((v, i) => (out[i] = v / 65535));
+  }
+  return out;
+}
+
+/** Bytes per sample after unpacking: sub-byte samples take one byte each. */
+function storedBytesPerSample(bitsPerSample: number): number {
+  return bitsPerSample < 8 ? 1 : bitsPerSample / 8;
+}
+
+/**
+ * Expand 1/2/4-bit samples to one byte per sample. TIFF packs them MSB-first
+ * and pads every row to a byte boundary.
+ */
+function unpackSubByteRows(
+  data: Uint8Array,
+  bitsPerSample: number,
+  samplesPerRow: number,
+  rowCount: number,
+): Uint8Array {
+  const packedRowBytes = Math.ceil((samplesPerRow * bitsPerSample) / 8);
+  const out = new Uint8Array(samplesPerRow * rowCount);
+  const mask = (1 << bitsPerSample) - 1;
+  for (let row = 0; row < rowCount; row++) {
+    const rowStart = row * packedRowBytes;
+    for (let i = 0; i < samplesPerRow; i++) {
+      const bit = i * bitsPerSample;
+      const byte = data[rowStart + (bit >> 3)] ?? 0;
+      out[row * samplesPerRow + i] = (byte >> (8 - bitsPerSample - (bit & 7))) & mask;
+    }
+  }
+  return out;
+}
+
+/** Decompress one strip or tile with the file's compression. */
+async function decompressBlock(
+  compressed: Uint8Array,
+  compression: number,
+  expectedBytes: number,
+): Promise<Uint8Array> {
+  if (compression === COMPRESSION_NONE) {
+    // Copy so the predictor can work in place
+    return compressed.slice();
+  }
+  if (compression === COMPRESSION_LZW) {
+    return decompressLZW(compressed);
+  }
+  if (compression === COMPRESSION_PACKBITS) {
+    return decompressPackBits(compressed, expectedBytes);
+  }
+  // Deflate or Adobe Deflate
+  return decompressDeflate(compressed);
+}
+
+async function decodeTIFFImage(buffer: ArrayBuffer, mode: TIFFDecodeMode): Promise<TIFFDecodeResult> {
   const view = new DataView(buffer);
   const byteOrder = view.getUint16(0, false);
 
@@ -847,7 +773,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
   const width = getTagSingleValue(view, tags, TAG_IMAGE_WIDTH, le, 0);
   const height = getTagSingleValue(view, tags, TAG_IMAGE_LENGTH, le, 0);
-  const bitsPerSample = getTagSingleValue(view, tags, TAG_BITS_PER_SAMPLE, le, 8);
+  const bitsPerSample = getTagSingleValue(view, tags, TAG_BITS_PER_SAMPLE, le, mode === 'float' ? 8 : 1);
   const compression = getTagSingleValue(view, tags, TAG_COMPRESSION, le, 1);
   const samplesPerPixel = getTagSingleValue(view, tags, TAG_SAMPLES_PER_PIXEL, le, 1);
   const rowsPerStrip = getTagSingleValue(view, tags, TAG_ROWS_PER_STRIP, le, height);
@@ -857,30 +783,44 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   // Validate dimensions
   validateImageDimensions(width, height, 'TIFF');
 
-  if (sampleFormatValue !== SAMPLE_FORMAT_FLOAT) {
-    throw new DecoderError(
-      'TIFF',
-      `Not a float TIFF: sample format is ${sampleFormatValue}, expected ${SAMPLE_FORMAT_FLOAT} (IEEE float)`,
-    );
+  let writePixel: PixelWriter;
+  let photometric: number | undefined;
+  if (mode === 'float') {
+    if (sampleFormatValue !== SAMPLE_FORMAT_FLOAT) {
+      throw new DecoderError(
+        'TIFF',
+        `Not a float TIFF: sample format is ${sampleFormatValue}, expected ${SAMPLE_FORMAT_FLOAT} (IEEE float)`,
+      );
+    }
+
+    if (bitsPerSample !== 16 && bitsPerSample !== 32 && bitsPerSample !== 64) {
+      throw new DecoderError(
+        'TIFF',
+        `Unsupported float bits per sample: ${bitsPerSample}. Supported: 16-bit half-float, 32-bit float, 64-bit double.`,
+      );
+    }
+    // For 5+ channels, we only read the first 4 (RGBA) and ignore extras
+    const readChannels = Math.min(samplesPerPixel, 4);
+    const bytes = bitsPerSample / 8;
+    writePixel = (src, off, out, idx) => expandPixelToRGBA(src, off, out, idx, readChannels, le, bytes);
+  } else {
+    const layout = describeIntegerLayout(view, tags, le);
+    if (!layout) {
+      throw new DecoderError(
+        'TIFF',
+        `Unsupported integer TIFF: ${bitsPerSample}-bit, sample format ${sampleFormatValue}, ` +
+          `photometric ${getTagSingleValue(view, tags, TAG_PHOTOMETRIC, le, -1)}, ` +
+          `planar configuration ${getTagSingleValue(view, tags, TAG_PLANAR_CONFIGURATION, le, PLANAR_CHUNKY)}. ` +
+          'Supported: unsigned 1/2/4/8/16/32-bit grayscale, 8/16/32-bit RGB(A) and palette, chunky layout.',
+      );
+    }
+    photometric = layout.photometric;
+    const colorMap =
+      layout.photometric === PHOTOMETRIC_PALETTE ? getTagMultipleValues(view, tags, TAG_COLOR_MAP, le) : [];
+    writePixel = createIntegerPixelWriter(layout, le, colorMap);
   }
 
-  if (bitsPerSample !== 16 && bitsPerSample !== 32 && bitsPerSample !== 64) {
-    throw new DecoderError(
-      'TIFF',
-      `Unsupported float bits per sample: ${bitsPerSample}. Supported: 16-bit half-float, 32-bit float, 64-bit double.`,
-    );
-  }
-
-  const bytesPerSample = bitsPerSample / 8;
-
-  const supportedCompressions = [
-    COMPRESSION_NONE,
-    COMPRESSION_LZW,
-    COMPRESSION_DEFLATE,
-    COMPRESSION_ADOBE_DEFLATE,
-    COMPRESSION_PACKBITS,
-  ];
-  if (!supportedCompressions.includes(compression)) {
+  if (!SUPPORTED_COMPRESSIONS.includes(compression)) {
     const compressionName = COMPRESSION_NAMES[compression] ?? 'unknown';
     const msg =
       `Unsupported TIFF compression: ${compression} (${compressionName}). ` +
@@ -902,8 +842,25 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
     );
   }
 
-  // For 5+ channels, we only read the first 4 (RGBA) and ignore extras
-  const readChannels = Math.min(samplesPerPixel, 4);
+  const block: BlockFormat = {
+    bitsPerSample,
+    samplesPerPixel,
+    compression,
+    predictor,
+    le,
+    writePixel,
+  };
+
+  const metadata: Record<string, unknown> = {
+    format: 'tiff',
+    bitsPerSample,
+    sampleFormat: mode === 'float' ? 'float' : 'uint',
+    compression,
+    bigEndian,
+    originalChannels: samplesPerPixel,
+    ...(photometric !== undefined ? { photometric } : {}),
+  };
+  const colorSpace: TIFFDecodeResult['colorSpace'] = mode === 'float' ? 'linear' : 'srgb';
 
   // Detect tiled vs strip layout
   const tileWidth = getTagSingleValue(view, tags, TAG_TILE_WIDTH, le, 0);
@@ -913,23 +870,33 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
   const isTiled = tileWidth > 0 && tileLength > 0 && tileOffsets.length > 0;
 
+  const outputData = new Float32Array(width * height * 4); // Always RGBA
+  // Initialize alpha to 1.0; writers overwrite it when the file has alpha.
+  for (let i = 3; i < outputData.length; i += 4) {
+    outputData[i] = 1.0;
+  }
+
   if (isTiled) {
-    return decodeTiledTIFF(
+    await decodeTiles(
       buffer,
       view,
-      le,
+      block,
+      outputData,
       width,
       height,
       tileWidth,
       tileLength,
       tileOffsets,
       tileByteCounts,
-      samplesPerPixel,
-      compression,
-      predictor,
-      bitsPerSample,
-      bigEndian,
     );
+    return {
+      width,
+      height,
+      data: outputData,
+      channels: 4,
+      colorSpace,
+      metadata: { ...metadata, tiled: true, tileWidth, tileLength },
+    };
   }
 
   // Read strip offsets and byte counts
@@ -940,85 +907,19 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
     throw new DecoderError('TIFF', 'Invalid TIFF: no strip offsets and no tile offsets found');
   }
 
-  // Read float data from strips
-  const totalPixels = width * height;
-  const outputData = new Float32Array(totalPixels * 4); // Always RGBA
-
-  // Initialize alpha to 1.0 if input has no alpha channel (1, 2, or 3 channels)
-  if (readChannels < 4) {
-    for (let i = 3; i < outputData.length; i += 4) {
-      outputData[i] = 1.0;
-    }
-  }
-
   let currentRow = 0;
-  const bytesPerPixel = samplesPerPixel * bytesPerSample;
-
-  for (let stripIdx = 0; stripIdx < stripOffsets.length; stripIdx++) {
-    const stripOffset = stripOffsets[stripIdx] ?? 0;
+  for (let stripIdx = 0; stripIdx < stripOffsets.length && currentRow < height; stripIdx++) {
     const stripRows = Math.min(rowsPerStrip, height - currentRow);
-    const stripPixels = stripRows * width;
-
-    const expectedStripBytes = stripPixels * bytesPerPixel;
-    const stripByteCount = stripByteCounts[stripIdx] ?? expectedStripBytes;
-
-    if (compression === COMPRESSION_NONE && predictor === PREDICTOR_NONE) {
-      // Uncompressed path (original logic)
-      const maxPixelsInStrip = Math.floor(stripByteCount / bytesPerPixel);
-      const pixelsToRead = Math.min(stripPixels, maxPixelsInStrip);
-
-      for (let p = 0; p < pixelsToRead; p++) {
-        const srcByteOffset = stripOffset + p * bytesPerPixel;
-        const row = currentRow + Math.floor(p / width);
-        const col = p % width;
-        const outputIdx = (row * width + col) * 4;
-
-        if (srcByteOffset + bytesPerPixel > buffer.byteLength) break;
-
-        expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
-      }
-    } else {
-      // Compressed path — validate buffer bounds
-      if (stripOffset + stripByteCount > buffer.byteLength) {
-        continue; // Skip truncated strip
-      }
-      const compressedBytes = new Uint8Array(buffer, stripOffset, stripByteCount);
-
-      let decompressed: Uint8Array;
-      if (compression === COMPRESSION_NONE) {
-        // Uncompressed but predicted: copy so the predictor can work in place
-        decompressed = compressedBytes.slice();
-      } else if (compression === COMPRESSION_LZW) {
-        decompressed = decompressLZW(compressedBytes);
-      } else if (compression === COMPRESSION_PACKBITS) {
-        decompressed = decompressPackBits(compressedBytes, expectedStripBytes);
-      } else {
-        // Deflate or Adobe Deflate
-        decompressed = await decompressDeflate(compressedBytes);
-      }
-
-      // Apply predictor if needed
-      if (predictor !== PREDICTOR_NONE) {
-        decompressed = applyPredictor(decompressed, predictor, width, samplesPerPixel, bytesPerSample, stripRows, le);
-      }
-
-      // Parse floats from decompressed data
-      const stripView = new DataView(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength);
-      const maxPixelsInStrip = Math.floor(decompressed.length / bytesPerPixel);
-      const pixelsToRead = Math.min(stripPixels, maxPixelsInStrip);
-
-      for (let p = 0; p < pixelsToRead; p++) {
-        const srcByteOffset = p * bytesPerPixel;
-        const row = currentRow + Math.floor(p / width);
-        const col = p % width;
-        const outputIdx = (row * width + col) * 4;
-
-        if (srcByteOffset + bytesPerPixel > decompressed.length) break;
-
-        expandPixelToRGBA(stripView, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
-      }
-    }
-
+    await decodeBlock(buffer, view, block, outputData, width, {
+      offset: stripOffsets[stripIdx] ?? 0,
+      byteCount: stripByteCounts[stripIdx],
+      blockWidth: width,
+      blockRows: stripRows,
+      outX: 0,
+      outY: currentRow,
+      copyWidth: width,
+      copyRows: stripRows,
+    });
     currentRow += stripRows;
   }
 
@@ -1027,168 +928,132 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
     height,
     data: outputData,
     channels: 4,
-    colorSpace: 'linear',
-    metadata: {
-      format: 'tiff',
-      bitsPerSample,
-      sampleFormat: 'float',
-      compression,
-      bigEndian,
-      originalChannels: samplesPerPixel,
-    },
+    colorSpace,
+    metadata,
   };
 }
 
+/** Per-image values shared by every strip or tile. */
+interface BlockFormat {
+  bitsPerSample: number;
+  samplesPerPixel: number;
+  compression: number;
+  predictor: number;
+  le: boolean;
+  writePixel: PixelWriter;
+}
+
+/** Where one strip or tile sits in the file and in the output image. */
+interface BlockPlacement {
+  offset: number;
+  /** Stored byte count; undefined when the file omits it. */
+  byteCount: number | undefined;
+  /** Stored row width in pixels (tile width for tiles, image width for strips). */
+  blockWidth: number;
+  /** Stored row count (full tile length for tiles). */
+  blockRows: number;
+  outX: number;
+  outY: number;
+  /** Pixels per row that land inside the image (edge tiles are partial). */
+  copyWidth: number;
+  copyRows: number;
+}
+
 /**
- * Decode a tiled float TIFF file.
- *
- * Tiles are stored left-to-right, top-to-bottom in the tile offset array.
- * Partial tiles at the right and bottom edges are handled by clamping the
- * number of pixels read from those tiles.
+ * Decode one strip or tile into the RGBA output.
  */
-async function decodeTiledTIFF(
+async function decodeBlock(
   buffer: ArrayBuffer,
   view: DataView,
-  le: boolean,
+  fmt: BlockFormat,
+  outputData: Float32Array,
+  imageWidth: number,
+  p: BlockPlacement,
+): Promise<void> {
+  const { bitsPerSample, samplesPerPixel, compression, predictor, le, writePixel } = fmt;
+  const subByte = bitsPerSample < 8;
+  const bytesPerPixel = samplesPerPixel * storedBytesPerSample(bitsPerSample);
+  const packedRowBytes = Math.ceil((p.blockWidth * samplesPerPixel * bitsPerSample) / 8);
+  const expectedBytes = packedRowBytes * p.blockRows;
+  const byteCount = p.byteCount ?? expectedBytes;
+
+  let src: DataView;
+  let base: number;
+  let srcLength: number;
+
+  if (compression === COMPRESSION_NONE && predictor === PREDICTOR_NONE && !subByte) {
+    // Uncompressed: read straight from the file buffer
+    src = view;
+    base = p.offset;
+    srcLength = Math.min(buffer.byteLength, p.offset + byteCount);
+  } else {
+    // Compressed path — validate buffer bounds
+    if (p.offset + byteCount > buffer.byteLength) {
+      return; // Skip truncated block
+    }
+    let data = await decompressBlock(new Uint8Array(buffer, p.offset, byteCount), compression, expectedBytes);
+    if (predictor !== PREDICTOR_NONE && !subByte) {
+      data = applyPredictor(data, predictor, p.blockWidth, samplesPerPixel, bitsPerSample / 8, p.blockRows, le);
+    }
+    if (subByte) {
+      data = unpackSubByteRows(data, bitsPerSample, p.blockWidth * samplesPerPixel, p.blockRows);
+    }
+    src = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    base = 0;
+    srcLength = data.byteLength;
+  }
+
+  for (let y = 0; y < p.copyRows; y++) {
+    for (let x = 0; x < p.copyWidth; x++) {
+      const srcByteOffset = base + (y * p.blockWidth + x) * bytesPerPixel;
+      if (srcByteOffset + bytesPerPixel > srcLength) return;
+      const outputIdx = ((p.outY + y) * imageWidth + p.outX + x) * 4;
+      writePixel(src, srcByteOffset, outputData, outputIdx);
+    }
+  }
+}
+
+/**
+ * Decode a tiled TIFF.
+ *
+ * Tiles are stored left-to-right, top-to-bottom in the tile offset array.
+ * Every tile is stored full-size, so partial tiles at the right and bottom
+ * edges only copy the pixels that land inside the image.
+ */
+async function decodeTiles(
+  buffer: ArrayBuffer,
+  view: DataView,
+  fmt: BlockFormat,
+  outputData: Float32Array,
   width: number,
   height: number,
   tileWidth: number,
   tileLength: number,
   tileOffsets: number[],
   tileByteCounts: number[],
-  samplesPerPixel: number,
-  compression: number,
-  predictor: number,
-  bitsPerSample: number,
-  bigEndian: boolean,
-): Promise<TIFFDecodeResult> {
-  const totalPixels = width * height;
-  const outputData = new Float32Array(totalPixels * 4); // Always RGBA
-  const bytesPerSample = bitsPerSample / 8;
-  const bytesPerPixel = samplesPerPixel * bytesPerSample;
-  const readChannels = Math.min(samplesPerPixel, 4);
-
-  // Initialize alpha to 1.0 if input has no alpha channel
-  if (readChannels < 4) {
-    for (let i = 3; i < outputData.length; i += 4) {
-      outputData[i] = 1.0;
-    }
-  }
-
-  // Calculate tile grid dimensions
+): Promise<void> {
   const tilesAcross = Math.ceil(width / tileWidth);
   const tilesDown = Math.ceil(height / tileLength);
 
-  // Iterate over tiles (left-to-right, top-to-bottom)
   for (let tileRow = 0; tileRow < tilesDown; tileRow++) {
     for (let tileCol = 0; tileCol < tilesAcross; tileCol++) {
       const tileIdx = tileRow * tilesAcross + tileCol;
+      if (tileIdx >= tileOffsets.length) return;
 
-      if (tileIdx >= tileOffsets.length) break;
+      const copyWidth = Math.min(tileWidth, width - tileCol * tileWidth);
+      const copyRows = Math.min(tileLength, height - tileRow * tileLength);
+      if (copyWidth <= 0 || copyRows <= 0) continue;
 
-      const tileOffset = tileOffsets[tileIdx] ?? 0;
-
-      // Actual pixel dimensions of this tile (handle partial tiles at edges)
-      const actualTileW = Math.min(tileWidth, width - tileCol * tileWidth);
-      const actualTileH = Math.min(tileLength, height - tileRow * tileLength);
-
-      if (actualTileW <= 0 || actualTileH <= 0) continue;
-
-      // The tile data size in bytes (full tile, even for partial edge tiles -
-      // TIFF spec requires all tiles to be full-sized in the file, but we
-      // only read pixels that map to the image)
-      const expectedTileBytes = tileWidth * tileLength * bytesPerPixel;
-      const tileByteCount = tileByteCounts[tileIdx] ?? expectedTileBytes;
-
-      if (compression === COMPRESSION_NONE && predictor === PREDICTOR_NONE) {
-        // Uncompressed tiles
-        // Note: data in file is stored as tileWidth * tileLength even for partial tiles
-        for (let ty = 0; ty < actualTileH; ty++) {
-          for (let tx = 0; tx < actualTileW; tx++) {
-            // Source position within the full tile
-            const srcByteOffset = tileOffset + (ty * tileWidth + tx) * bytesPerPixel;
-
-            // Destination position in the output image
-            const outX = tileCol * tileWidth + tx;
-            const outY = tileRow * tileLength + ty;
-            const outputIdx = (outY * width + outX) * 4;
-
-            if (srcByteOffset + bytesPerPixel > buffer.byteLength) continue;
-
-            expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
-          }
-        }
-      } else {
-        // Compressed tiles — validate buffer bounds
-        if (tileOffset + tileByteCount > buffer.byteLength) {
-          continue; // Skip truncated tile
-        }
-        const compressedBytes = new Uint8Array(buffer, tileOffset, tileByteCount);
-
-        let decompressed: Uint8Array;
-        if (compression === COMPRESSION_NONE) {
-          // Uncompressed but predicted: copy so the predictor can work in place
-          decompressed = compressedBytes.slice();
-        } else if (compression === COMPRESSION_LZW) {
-          decompressed = decompressLZW(compressedBytes);
-        } else if (compression === COMPRESSION_PACKBITS) {
-          decompressed = decompressPackBits(compressedBytes, expectedTileBytes);
-        } else {
-          // Deflate or Adobe Deflate
-          decompressed = await decompressDeflate(compressedBytes);
-        }
-
-        // Apply predictor if needed
-        // For predictors, we use tileWidth as the row width and tileLength as the row count,
-        // since the tile data is stored as a full-sized tile
-        if (predictor !== PREDICTOR_NONE) {
-          decompressed = applyPredictor(
-            decompressed,
-            predictor,
-            tileWidth,
-            samplesPerPixel,
-            bytesPerSample,
-            tileLength,
-            le,
-          );
-        }
-
-        const tileView = new DataView(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength);
-
-        for (let ty = 0; ty < actualTileH; ty++) {
-          for (let tx = 0; tx < actualTileW; tx++) {
-            // Source position within the full (decompressed) tile
-            const srcByteOffset = (ty * tileWidth + tx) * bytesPerPixel;
-
-            const outX = tileCol * tileWidth + tx;
-            const outY = tileRow * tileLength + ty;
-            const outputIdx = (outY * width + outX) * 4;
-
-            if (srcByteOffset + bytesPerPixel > decompressed.length) continue;
-
-            expandPixelToRGBA(tileView, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
-          }
-        }
-      }
+      await decodeBlock(buffer, view, fmt, outputData, width, {
+        offset: tileOffsets[tileIdx] ?? 0,
+        byteCount: tileByteCounts[tileIdx],
+        blockWidth: tileWidth,
+        blockRows: tileLength,
+        outX: tileCol * tileWidth,
+        outY: tileRow * tileLength,
+        copyWidth,
+        copyRows,
+      });
     }
   }
-
-  return {
-    width,
-    height,
-    data: outputData,
-    channels: 4,
-    colorSpace: 'linear',
-    metadata: {
-      format: 'tiff',
-      bitsPerSample,
-      sampleFormat: 'float',
-      compression,
-      bigEndian,
-      originalChannels: samplesPerPixel,
-      tiled: true,
-      tileWidth,
-      tileLength,
-    },
-  };
 }

@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { FileSourceNode } from './FileSourceNode';
 import { EXRCompression, EXRPixelType } from '../../formats/EXRDecoder';
 import { PNG16_REFERENCE_FILES, PNG8_FILE } from '../../../test/fixtures/png16ReferenceFiles';
+import { loadStillFixture } from '../../formats/__tests__/stillFormatFixtures';
 
 // EXR magic number
 const EXR_MAGIC = 0x01312f76;
@@ -294,6 +295,40 @@ describe('FileSourceNode', () => {
       await loadPromise;
 
       expect(node.isReady()).toBe(true);
+    });
+  });
+
+  describe('integer TIFF, TGA and SGI', () => {
+    function fixture(name: string, type = ''): File {
+      return new File([loadStillFixture(name)], name, { type });
+    }
+
+    it.each([
+      ['rgb16-tiled.tif', 'tiff-int', 'image/tiff'],
+      ['rgba8-packbits.tif', 'tiff-int', 'image/tiff'],
+      ['rgba32-rle.tga', 'tga', ''],
+      ['rgb16-rle.sgi', 'sgi', ''],
+      ['gray8.bw', 'sgi', ''],
+    ])('FSN-STILL-001: %s loads as display-referred float (%s)', async (name, format, type) => {
+      await node.loadFile(fixture(name, type));
+
+      expect(node.isReady()).toBe(true);
+      expect(node.formatName).toBe(format);
+      expect(node.isHDR()).toBe(false);
+      expect(node.properties.getValue('width')).toBe(20);
+      expect(node.properties.getValue('height')).toBe(18);
+
+      const image = node.evaluate({ frame: 1, width: 1920, height: 1080, quality: 'full' as const });
+      expect(image?.dataType).toBe('float32');
+      expect(image?.metadata.transferFunction).toBeUndefined();
+    });
+
+    it('FSN-STILL-002: 16-bit TIFF keeps full precision', async () => {
+      await node.loadFile(fixture('gray16-none.tif', 'image/tiff'));
+      const image = node.evaluate({ frame: 1, width: 1920, height: 1080, quality: 'full' as const });
+      const data = image ? new Float32Array(image.data) : new Float32Array(0);
+      // Pixel (1, 0) is 3001 / 65535, which 8 bits cannot represent
+      expect(data[4]).toBeCloseTo(3001 / 65535, 6);
     });
   });
 

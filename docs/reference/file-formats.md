@@ -19,7 +19,10 @@ This page lists all file formats supported by OpenRV Web.
 | DPX | `.dpx` | Custom decoder | Yes | Log-to-linear conversion |
 | Cineon | `.cin`, `.cineon` | Custom decoder | Yes | Configurable film gamma |
 | Radiance HDR | `.hdr`, `.pic` | Custom decoder | Yes | RGBE encoding |
-| Float TIFF | `.tiff`, `.tif` | Custom decoder | Yes | Float samples only (16/32/64-bit); JPEG compression not supported |
+| Float TIFF | `.tiff`, `.tif` | Custom decoder | Yes | Float samples (16/32/64-bit); JPEG compression not supported |
+| Integer TIFF | `.tiff`, `.tif` | Custom decoder | No | 1/2/4/8/16/32-bit gray, RGB(A) and palette; full 16-bit precision in every browser; CMYK, YCbCr, planar and JPEG compression not supported |
+| TGA | `.tga` | Custom decoder | No | Color-mapped, true-color and grayscale, uncompressed or RLE |
+| SGI | `.sgi`, `.rgb`, `.rgba`, `.bw` | Custom decoder | No | 8/16-bit, 1-4 channels, verbatim or RLE |
 | JPEG XL | `.jxl` | WASM (libjxl) + browser native HDR | Yes | Modern HDR format |
 | JPEG 2000 | `.jp2`, `.j2k`, `.j2c` | OpenJPEG WASM | No | Wavelet compression; greyscale or RGB (1 or 3 components) |
 | HTJ2K | `.jph`, `.jhc` (also HTJ2K in `.j2c`/`.jp2`) | OpenJPH WASM (OpenJPEG fallback) | No | High-throughput JPEG 2000; any component count |

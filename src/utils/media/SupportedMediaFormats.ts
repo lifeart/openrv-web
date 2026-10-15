@@ -40,6 +40,12 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
   'j2c',
   'jph',
   'jhc',
+  // TGA / SGI (decoded by the app; browsers have no native support)
+  'tga',
+  'sgi',
+  'rgb',
+  'rgba',
+  'bw',
   // RAW formats (TIFF-based preview extraction only)
   'cr2',
   'nef',
@@ -117,6 +123,12 @@ const DECODER_BACKED_EXTENSIONS = new Set<string>([
   'j2c',
   'jph',
   'jhc',
+  // TGA / SGI (decoded by the app; browsers have no native support)
+  'tga',
+  'sgi',
+  'rgb',
+  'rgba',
+  'bw',
   // RAW formats
   'cr2',
   'nef',
@@ -315,6 +327,6 @@ export const SUPPORTED_PROJECT_ACCEPT = [
  * Viewer placeholder support lines (rendered as multiline helper text).
  */
 export const VIEWER_PLACEHOLDER_SUPPORT_LINES = [
-  'Images: EXR, DPX/CIN, HDR, AVIF, JXL, HEIC, JP2/HTJ2K, RAW, PNG/JPEG/WebP/TIFF',
+  'Images: EXR, DPX/CIN, HDR, AVIF, JXL, HEIC, JP2/HTJ2K, RAW, PNG/JPEG/WebP/TIFF, TGA, SGI',
   'Video: MP4/M4V/3GP, MOV/QT, MKV/WebM, OGG/OGV, MXF, MPEG-TS (AVI fallback)',
 ] as const;

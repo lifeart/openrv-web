@@ -62,6 +62,15 @@ function isTIFFExtension(filename: string): boolean {
 }
 
 /**
+ * Check if a filename has a TGA or SGI extension. Browsers decode neither,
+ * so these always go through the decoder registry.
+ */
+function isTGAOrSGIExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'tga' || ext === 'sgi' || ext === 'rgb' || ext === 'rgba' || ext === 'bw';
+}
+
+/**
  * Check if a filename has a Radiance HDR extension.
  * Note: .pic is ambiguous (also used by Softimage PIC, Apple PICT, etc.)
  * but magic-byte validation in the decoder prevents silent mis-decode.
@@ -569,18 +578,33 @@ export class FileSourceNode extends BaseSourceNode {
       return;
     }
 
-    // Check if this is a TIFF file - need to fetch and check if it's float
+    // TGA / SGI: no browser decodes them
+    if (isTGAOrSGIExtension(filename)) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${url}`);
+      }
+      await this.loadDisplayReferredFromBuffer(await response.arrayBuffer(), filename, url, originalUrl);
+      return;
+    }
+
+    // Check if this is a TIFF file - fetch it and pick the float or integer decoder
     if (isTIFFExtension(filename)) {
       try {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          if (decoderRegistry.detectFormat(buffer) === 'TIFF') {
+          const format = decoderRegistry.detectFormat(buffer);
+          if (format === 'TIFF') {
             await this.loadHDRFromBuffer(buffer, filename, url, originalUrl);
             return;
           }
+          if (format === 'tiff-int') {
+            await this.loadDisplayReferredFromBuffer(buffer, filename, url, originalUrl);
+            return;
+          }
         }
-        // Non-float TIFF or fetch failed - fall through to standard image loading
+        // Unsupported TIFF variant or fetch failed - fall through to standard image loading
       } catch (err) {
         // Float-TIFF probe failed (likely a non-float / non-TIFF file with .tif extension).
         // Fall through to standard image loading; if that also fails the <img> error
@@ -1724,15 +1748,41 @@ export class FileSourceNode extends BaseSourceNode {
       return;
     }
 
-    // Check if this is a TIFF file - only use HDR path for float TIFFs
+    // TGA / SGI: no browser decodes them
+    if (isTGAOrSGIExtension(file.name)) {
+      const buffer = await file.arrayBuffer();
+      const url = URL.createObjectURL(file);
+      try {
+        await this.loadDisplayReferredFromBuffer(buffer, file.name, url);
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        throw err;
+      }
+      return;
+    }
+
+    // TIFF: float TIFFs take the HDR path, integer TIFFs are decoded here
+    // because only Safari can decode TIFF natively.
     if (isTIFFExtension(file.name)) {
       const buffer = await file.arrayBuffer();
-      if (decoderRegistry.detectFormat(buffer) === 'TIFF') {
+      const format = decoderRegistry.detectFormat(buffer);
+      if (format === 'TIFF') {
         const url = URL.createObjectURL(file);
         await this.loadHDRFromBuffer(buffer, file.name, url);
         return;
       }
-      // Non-float TIFF - fall through to standard image loading (no URL leak)
+      if (format === 'tiff-int') {
+        const url = URL.createObjectURL(file);
+        try {
+          await this.loadDisplayReferredFromBuffer(buffer, file.name, url);
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          throw err;
+        }
+        return;
+      }
+      // Other TIFF variants (CMYK, JPEG-compressed, ...) - fall through to
+      // standard image loading, which works in Safari (no URL leak)
     }
 
     // Check if this is a JPEG HDR file with gainmap
@@ -1927,6 +1977,65 @@ export class FileSourceNode extends BaseSourceNode {
     // Standard image loading
     const url = URL.createObjectURL(file);
     await this.load(url, file.name);
+  }
+
+  /**
+   * Load a display-referred still decoded by the registry (integer TIFF, TGA,
+   * SGI). Like 16-bit PNG, the float values are already display-encoded, so
+   * no HDR handling or tone mapping applies.
+   */
+  private async loadDisplayReferredFromBuffer(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string,
+  ): Promise<void> {
+    const result = await decoderRegistry.detectAndDecode(buffer);
+    if (!result) {
+      throw new Error(`Unsupported or invalid image file: ${name}`);
+    }
+    const { formatName, ...decodeResult } = result;
+
+    this.cachedIPImage = new IPImage({
+      width: decodeResult.width,
+      height: decodeResult.height,
+      channels: decodeResult.channels,
+      dataType: 'float32',
+      data: decodeResult.data.buffer as ArrayBuffer,
+      metadata: {
+        sourcePath: originalUrl ?? url,
+        frameNumber: 1,
+        attributes: {
+          ...decodeResult.metadata,
+          formatName,
+        },
+      },
+    });
+
+    this.url = url;
+    if (originalUrl) {
+      this.originalUrl = originalUrl;
+    }
+    this.isEXR = false;
+    this._isHDRFormat = false;
+    this._formatName = formatName;
+    this._isDisplayReferredFloat = true;
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: decodeResult.width,
+      height: decodeResult.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('width', decodeResult.width);
+    this.properties.setValue('height', decodeResult.height);
+    this.properties.setValue('isHDR', false);
+
+    this.canvasDirty = true;
+    this.markDirty();
   }
 
   /**

@@ -44,9 +44,13 @@ export {
   isFloatTIFF,
   getTIFFInfo,
   decodeTIFFFloat,
+  decodeTIFFInteger,
+  isIntegerTIFF,
   type TIFFInfo,
   type TIFFDecodeResult,
 } from './TIFFFloatDecoder';
+export { isTGAFile, getTGAInfo, decodeTGA, type TGAInfo, type TGADecodeResult } from './TGADecoder';
+export { isSGIFile, getSGIInfo, decodeSGI, type SGIInfo, type SGIDecodeResult } from './SGIDecoder';
 export {
   DecoderRegistry,
   decoderRegistry,
