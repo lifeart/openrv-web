@@ -1399,4 +1399,48 @@ describe('KeyboardManager double-fire / precedence fixes', () => {
     expect(builtIn).toHaveBeenCalledTimes(1);
     expect(plain).not.toHaveBeenCalled();
   });
+
+  it('KBM-LAYOUT-001: letter shortcuts follow the layout (AZERTY A is physical KeyQ)', () => {
+    const a = vi.fn();
+    const q = vi.fn();
+    km.register({ code: 'KeyA' }, a);
+    km.register({ code: 'KeyQ' }, q);
+
+    press(root, 'KeyQ', 'a');
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(q).not.toHaveBeenCalled();
+  });
+
+  it('KBM-LAYOUT-002: QWERTZ Z (physical KeyY) with Ctrl triggers Ctrl+Z', () => {
+    const undo = vi.fn();
+    const redo = vi.fn();
+    km.register({ code: 'KeyZ', ctrl: true }, undo);
+    km.register({ code: 'KeyY', ctrl: true }, redo);
+
+    press(root, 'KeyY', 'z', { ctrlKey: true });
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(redo).not.toHaveBeenCalled();
+  });
+
+  it('KBM-LAYOUT-003: Shift+letter matches with an upper-case key', () => {
+    const handler = vi.fn();
+    km.register({ code: 'KeyM', shift: true }, handler);
+    // AZERTY M sits on the QWERTY semicolon key
+    press(root, 'Semicolon', 'M', { shiftKey: true });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('KBM-LAYOUT-004: non-Latin layouts keep the physical QWERTY position', () => {
+    const handler = vi.fn();
+    km.register({ code: 'KeyL' }, handler);
+    press(root, 'KeyL', 'д'); // Russian layout
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('KBM-LAYOUT-005: digits keep their physical key (AZERTY needs Shift for digits)', () => {
+    const handler = vi.fn();
+    km.register({ code: 'Digit1' }, handler);
+    press(root, 'Digit1', '&');
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
 });

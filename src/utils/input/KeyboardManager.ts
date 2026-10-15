@@ -16,6 +16,7 @@ export interface KeyCombination {
 import type { ContextualKeyboardManager } from './ContextualKeyboardManager';
 import type { BindingContext } from './ActiveContextManager';
 import { probe } from '../probe';
+import { shortcutCode } from './shortcutCode';
 
 export interface KeyBinding {
   combo: KeyCombination;
@@ -282,7 +283,8 @@ export class KeyboardManager {
     // Check key suppression FIRST, before any other processing.
     // This allows the virtual slider (and other external systems) to
     // prevent specific keys from triggering bindings.
-    if (this.allKeysSuppressed || this.suppressedKeys.has(e.code)) {
+    const code = shortcutCode(e);
+    if (this.allKeysSuppressed || this.suppressedKeys.has(code)) {
       return;
     }
 
@@ -294,7 +296,7 @@ export class KeyboardManager {
     if (this.shouldSkipEvent(e)) return;
 
     const combo: KeyCombination = {
-      code: e.code,
+      code,
       ctrl: e.ctrlKey || e.metaKey, // Treat meta as ctrl for cross-platform
       shift: e.shiftKey,
       alt: e.altKey,
