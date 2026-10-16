@@ -15,6 +15,9 @@ import type { CineonDecodeOptions } from './CineonDecoder';
 import type { EXRDecodeOptions } from './EXRDecoder';
 import type { JP2DecodeOptions } from './JP2Decoder';
 import type { ColorPrimaries } from '../core/image/Image';
+import { isIntegerTIFF } from './TIFFTags';
+import { isTGAFile, decodeTGA } from './TGADecoder';
+import { isSGIFile, decodeSGI } from './SGIDecoder';
 
 /** Built-in format names (autocomplete-friendly) */
 export type BuiltinFormatName =
@@ -22,6 +25,7 @@ export type BuiltinFormatName =
   | 'DPX'
   | 'Cineon'
   | 'TIFF'
+  | 'tiff-int'
   | 'jpeg-gainmap'
   | 'heic-gainmap'
   | 'avif-gainmap'
@@ -30,7 +34,9 @@ export type BuiltinFormatName =
   | 'hdr'
   | 'jxl'
   | 'jp2'
-  | 'png16';
+  | 'png16'
+  | 'sgi'
+  | 'tga';
 // Note: 'mxf' is intentionally excluded — MXF is a container format, not a
 // still-image format.  Use isMXFFile / parseMXFHeader from MXFDemuxer instead.
 /** Format name type: includes built-in names plus any string for plugin formats */
@@ -43,6 +49,7 @@ export interface DecoderOptionsMap {
   DPX: DPXDecodeOptions;
   Cineon: CineonDecodeOptions;
   TIFF: NoDecoderOptions;
+  'tiff-int': NoDecoderOptions;
   'jpeg-gainmap': NoDecoderOptions;
   'heic-gainmap': NoDecoderOptions;
   'avif-gainmap': NoDecoderOptions;
@@ -52,6 +59,8 @@ export interface DecoderOptionsMap {
   jxl: NoDecoderOptions;
   jp2: JP2DecodeOptions;
   png16: NoDecoderOptions;
+  sgi: NoDecoderOptions;
+  tga: NoDecoderOptions;
 }
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
@@ -360,8 +369,8 @@ function isRAWPreviewFile(buffer: ArrayBuffer): boolean {
   const le = byteOrder === RAW_TIFF_LE;
   if (view.getUint16(2, le) !== 42) return false;
 
-  // Exclude float TIFFs (already handled by tiffDecoder above in the chain)
-  if (isTIFFAndFloat(buffer)) return false;
+  // Exclude float and integer TIFFs (handled by the TIFF decoders above in the chain)
+  if (isTIFFAndFloat(buffer) || isIntegerTIFF(buffer)) return false;
 
   return true;
 }
@@ -834,6 +843,46 @@ const avifDecoder: FormatDecoder = {
 };
 
 /**
+ * Integer TIFF decoder adapter (8/16-bit plates; browsers other than Safari
+ * cannot decode TIFF). Display-referred, like the browser image path.
+ */
+const tiffIntDecoder: FormatDecoder = {
+  formatName: 'tiff-int',
+  canDecode: isIntegerTIFF,
+  async decode(buffer: ArrayBuffer) {
+    const { decodeTIFFInteger } = await import('./TIFFFloatDecoder');
+    const result = await decodeTIFFInteger(buffer);
+    return {
+      width: result.width,
+      height: result.height,
+      data: result.data,
+      channels: result.channels,
+      colorSpace: result.colorSpace,
+      metadata: result.metadata,
+    };
+  },
+};
+
+/**
+ * SGI image decoder adapter (.sgi/.rgb/.rgba/.bw)
+ */
+const sgiDecoder: FormatDecoder = {
+  formatName: 'sgi',
+  canDecode: isSGIFile,
+  decode: decodeSGI,
+};
+
+/**
+ * TGA decoder adapter. TGA has no leading magic number, so it is detected
+ * by strict header validation and registered last.
+ */
+const tgaDecoder: FormatDecoder = {
+  formatName: 'tga',
+  canDecode: isTGAFile,
+  decode: decodeTGA,
+};
+
+/**
  * 16-bit PNG decoder adapter (8-bit PNGs are not claimed)
  */
 const png16Decoder: FormatDecoder = {
@@ -855,13 +904,14 @@ export class DecoderRegistry {
 
   constructor() {
     // Register built-in decoders in detection order.
-    // EXR first (most common in VFX), then DPX, Cineon, TIFF (float only),
-    // RAW preview (TIFF-based but non-float), JPEG Gainmap, HEIC/AVIF Gainmap,
+    // EXR first (most common in VFX), then DPX, Cineon, TIFF (float, then integer),
+    // RAW preview (TIFF-based, neither float nor a plain integer image), JPEG Gainmap, HEIC/AVIF Gainmap,
     // plain AVIF (after gainmap), RAW, HDR, etc.
     this.decoders.push(exrDecoder);
     this.decoders.push(dpxDecoder);
     this.decoders.push(cineonDecoder);
     this.decoders.push(tiffDecoder);
+    this.decoders.push(tiffIntDecoder);
     this.decoders.push(rawPreviewDecoder);
     this.decoders.push(jpegGainmapDecoder);
     this.decoders.push(heicGainmapDecoder);
@@ -871,6 +921,9 @@ export class DecoderRegistry {
     this.decoders.push(jxlDecoder);
     this.decoders.push(jp2Decoder);
     this.decoders.push(png16Decoder);
+    this.decoders.push(sgiDecoder);
+    // TGA last: it is the only format detected without a magic number.
+    this.decoders.push(tgaDecoder);
     // MXF is intentionally NOT registered here — it routes through
     // video/container classification instead of the still-image decode path.
   }

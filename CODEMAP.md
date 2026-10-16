@@ -320,7 +320,7 @@ openrv-web/
 │   │   ├── EXRDecoder.ts        # OpenEXR decoder (via exr.js)
 │   │   ├── JPEGGainmapDecoder.ts # JPEG gainmap HDR decoder
 │   │   ├── LogLinear.ts         # Log-to-linear conversion
-│   │   ├── TIFFFloatDecoder.ts  # Float TIFF decoder
+│   │   ├── TIFFFloatDecoder.ts  # TIFF decoder (float and integer)
 │   │   └── index.ts             # Decoder registration + exports
 │   │
 │   ├── handlers/                # Event and state handlers
@@ -754,7 +754,9 @@ openrv-web/
 | IOexr | `src/formats/EXRDecoder.ts` | OpenEXR decoder |
 | IOdpx | `src/formats/DPXDecoder.ts` | DPX format decoder |
 | IOcineon | `src/formats/CineonDecoder.ts` | Cineon format decoder |
-| IOtiff | `src/formats/TIFFFloatDecoder.ts` | Float TIFF decoder |
+| IOtiff | `src/formats/TIFFFloatDecoder.ts` | TIFF decoder (float and integer) |
+| IOtarga | `src/formats/TGADecoder.ts` | TGA decoder |
+| IOsgi | `src/formats/SGIDecoder.ts` | SGI decoder |
 | JPEG Gainmap | `src/formats/JPEGGainmapDecoder.ts` | JPEG gainmap HDR decoder |
 | `DecoderRegistry` | `src/formats/DecoderRegistry.ts` | Format decoder registry |
 | Timeline UI | `src/ui/components/Timeline.ts` | Custom canvas timeline |

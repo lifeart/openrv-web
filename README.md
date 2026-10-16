@@ -23,7 +23,8 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - **DPX** -- Digital Picture Exchange format with log-to-linear conversion
 - **Cineon** -- Kodak Cineon format with configurable film gamma
 - **Radiance HDR** (.hdr/.pic) -- RGBE encoding with adaptive RLE decompression
-- **Float TIFF** -- 16/32/64-bit floating-point TIFF images
+- **TIFF** -- 8/16-bit integer (decoded in every browser, not just Safari) and 16/32/64-bit floating-point TIFF images
+- **TGA and SGI** -- uncompressed and RLE, 8/16-bit
 - **JPEG XL** (.jxl) -- modern HDR-capable format via WASM decoder and browser-native HDR path
 - **JPEG 2000 / HTJ2K** (.jp2/.j2k/.j2c/.jph/.jhc) -- via lazy-loaded OpenJPEG (classic) and OpenJPH (HTJ2K) WASM decoders
 - **JPEG Gainmap HDR** -- MPF parsing, XMP headroom extraction, sRGB-to-linear + gain reconstruction
@@ -547,7 +548,10 @@ src/
 │   ├── DPXDecoder.ts            # DPX format decoder
 │   ├── CineonDecoder.ts         # Cineon format decoder
 │   ├── HDRDecoder.ts            # Radiance HDR decoder with RLE support
-│   ├── TIFFFloatDecoder.ts      # Float TIFF decoder
+│   ├── TIFFFloatDecoder.ts      # TIFF decoder (float and integer)
+│   ├── TIFFTags.ts              # TIFF tag parsing and format checks
+│   ├── TGADecoder.ts            # TGA decoder
+│   ├── SGIDecoder.ts            # SGI decoder
 │   ├── JXLDecoder.ts            # JPEG XL decoder (WASM + browser-native HDR)
 │   ├── JP2Decoder.ts            # JPEG 2000 / HTJ2K decoder
 │   ├── JPEGGainmapDecoder.ts    # JPEG HDR gainmap decoder

@@ -141,7 +141,8 @@ Sequences can consist of files in any supported image format:
 
 - PNG, JPEG, WebP, GIF, BMP
 - EXR (with HDR precision and multi-layer support)
-- TIFF (float 32-bit)
+- TIFF (8/16-bit integer and float)
+- TGA, SGI
 - DPX, Cineon
 - Radiance HDR
 - JPEG XL, JPEG 2000

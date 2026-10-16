@@ -1174,9 +1174,10 @@ describe('TIFFFloatDecoder', () => {
           nextCode++;
         }
 
-        // Increase code size — encoder uses (1 << codeSize) because its table
-        // is one entry ahead of decoder's (first code after CLEAR adds no decoder entry)
-        if (nextCode > 1 << codeSize && codeSize < 12) {
+        // Increase code size as libtiff's encoder does: once the next free
+        // code no longer fits. The encoder's table is one entry ahead of the
+        // decoder's, so the decoder switches one code early ("early change").
+        if (nextCode > (1 << codeSize) - 1 && codeSize < 12) {
           codeSize++;
         }
 
@@ -2121,7 +2122,8 @@ describe('TIFFFloatDecoder', () => {
       for (let i = 0; i < targetEntries; i++) {
         codes.push([nextCode, codeSize]);
         nextCode++;
-        if (nextCode > (1 << codeSize) - 1 && codeSize < 12) {
+        // Decoder-side early change: switch once code 511 is assigned
+        if (nextCode >= (1 << codeSize) - 1 && codeSize < 12) {
           codeSize++;
         }
       }

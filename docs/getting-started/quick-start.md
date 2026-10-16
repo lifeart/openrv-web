@@ -29,7 +29,7 @@ To load an image sequence, select multiple numbered image files (e.g., `frame_00
 
 Click the **Open** button (folder icon) in the header bar to open the file picker. Select one or more files. Supported formats include:
 
-- **Images**: PNG, JPEG, WebP, GIF, BMP, AVIF, HEIC, EXR, DPX, Cineon, Radiance HDR, Float TIFF, JPEG XL, JPEG 2000, JPEG/HEIC/AVIF Gainmap HDR
+- **Images**: PNG, JPEG, WebP, GIF, BMP, AVIF, HEIC, EXR, DPX, Cineon, Radiance HDR, TIFF (integer and float), TGA, SGI, JPEG XL, JPEG 2000, JPEG/HEIC/AVIF Gainmap HDR
 - **Video**: MP4, MOV, MKV, WebM, OGG, AVI, MXF
 - **Sessions**: `.rv`, `.gto` (OpenRV session files), `.orvproject` (OpenRV Web projects)
 
