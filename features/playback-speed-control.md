@@ -101,9 +101,9 @@ export const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
 **J/K/L Speed Controls** (Professional editing standard):
 | Key | Action | Binding Name |
 |-----|--------|--------------|
-| J | Decrease playback speed | `playback.slower` |
+| J | Shuttle backward (press again to go faster) | `playback.slower` |
 | K | Stop playback (pause) | `playback.stop` |
-| L | Increase playback speed | `playback.faster` |
+| L | Shuttle forward (press again to go faster) | `playback.faster` |
 
 **Note**: L key alone triggers `playback.faster`. `Ctrl+L` is used for `timeline.cycleLoopMode`.
 

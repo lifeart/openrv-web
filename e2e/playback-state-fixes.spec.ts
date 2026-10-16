@@ -18,6 +18,8 @@ import {
   waitForMediaLoaded,
   waitForFrameAtEnd,
   waitForFrameAtMost,
+  waitForPlaybackSpeed,
+  setPlaybackSpeed,
 } from './fixtures';
 
 /**
@@ -535,53 +537,39 @@ test.describe('Playback State Fixes', () => {
   });
 
   test.describe('Speed Control', () => {
-    test('PLAY-STATE-060: speed change updates playback rate', async ({ page }) => {
-      // Get initial speed
-      let state = await getSessionState(page);
-      const initialSpeed = state.playbackSpeed;
-      expect(initialSpeed).toBe(1);
+    test('PLAY-STATE-060: J/K/L shuttle starts, speeds up, reverses and stops', async ({ page }) => {
+      await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
+      expect((await getSessionState(page)).playbackSpeed).toBe(1);
 
-      // Increase speed with L key
+      // L from stopped: play forward at 1x
       await page.keyboard.press('l');
-      await page.waitForFunction(
-        () => {
-          const state = (window as any).__OPENRV_TEST__?.getSessionState();
-          return state?.playbackSpeed > 1;
-        },
-        undefined,
-        { timeout: 2000 },
-      );
+      await waitForPlaybackState(page, true);
+      let state = await getSessionState(page);
+      expect(state.playDirection).toBe(1);
+      expect(state.playbackSpeed).toBe(1);
 
-      state = await getSessionState(page);
-      expect(state.playbackSpeed).toBeGreaterThan(1);
+      // L again: 2x, still forward
+      await page.keyboard.press('l');
+      await waitForPlaybackSpeed(page, 2);
+      await waitForFrameAtLeast(page, 5);
 
-      // Decrease speed with J key
+      // J while going forward: reverse at 1x
       await page.keyboard.press('j');
-      await page.keyboard.press('j');
-      await page.waitForFunction(
-        () => {
-          const state = (window as any).__OPENRV_TEST__?.getSessionState();
-          return state?.playbackSpeed < 1;
-        },
-        undefined,
-        { timeout: 2000 },
-      );
+      await waitForPlayDirection(page, -1);
+      await waitForPlaybackSpeed(page, 1);
+      expect((await getSessionState(page)).isPlaying).toBe(true);
 
+      // K stops
+      await page.keyboard.press('k');
+      await waitForPlaybackState(page, false);
       state = await getSessionState(page);
-      expect(state.playbackSpeed).toBeLessThan(1);
+      expect(state.isPlaying).toBe(false);
     });
 
     test('PLAY-STATE-061: playback respects speed setting', async ({ page }) => {
       // Set speed to 2x
-      await page.keyboard.press('l');
-      await page.waitForFunction(
-        () => {
-          const state = (window as any).__OPENRV_TEST__?.getSessionState();
-          return state?.playbackSpeed > 1;
-        },
-        undefined,
-        { timeout: 2000 },
-      );
+      await setPlaybackSpeed(page, 2);
 
       // Go to start
       await page.keyboard.press('Home');

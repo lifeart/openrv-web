@@ -47,10 +47,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Go to last frame',
   },
 
-  // Speed controls (JKL system)
+  // J/K/L shuttle
   'playback.slower': {
     code: 'KeyJ',
-    description: 'Decrease playback speed',
+    description: 'Shuttle backward (press again to go faster)',
   },
   'playback.stop': {
     code: 'KeyK',
@@ -58,7 +58,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'playback.faster': {
     code: 'KeyL',
-    description: 'Increase playback speed',
+    description: 'Shuttle forward (press again to go faster)',
   },
 
   // Timeline controls

@@ -340,9 +340,9 @@ export class App {
     this.contextualKeyboardManager.register(
       'playback.faster',
       { code: 'KeyL' },
-      () => this.session.increaseSpeed(),
+      () => this.session.shuttle(1),
       'global',
-      'Increase playback speed',
+      'Shuttle forward (press again to go faster)',
     );
     this.contextualKeyboardManager.register(
       'paint.line',

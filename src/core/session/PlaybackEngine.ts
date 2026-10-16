@@ -6,7 +6,13 @@ type VideoSourceNode = NonNullable<MediaSource['videoSourceNode']>;
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 import type { TimingState } from './PlaybackTimingController';
-import { PLAYBACK_SPEED_PRESETS, DEFAULT_PLAYBACK_MODE, type PlaybackSpeedPreset } from '../../config/PlaybackConfig';
+import {
+  PLAYBACK_SPEED_PRESETS,
+  DEFAULT_PLAYBACK_MODE,
+  MAX_REVERSE_SPEED,
+  SHUTTLE_SPEEDS,
+  type PlaybackSpeedPreset,
+} from '../../config/PlaybackConfig';
 import { PLAY_ALL_FRAMES_ABSOLUTE_TIMEOUT_MS } from '../../config/TimingConfig';
 import { Logger } from '../../utils/Logger';
 import { PerfTrace } from '../../utils/PerfTrace';
@@ -389,6 +395,30 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
 
   resetSpeed(): void {
     this.playbackSpeed = 1;
+  }
+
+  /**
+   * J/L shuttle, as in RV and NLEs. Pressing in the direction already
+   * playing goes one step faster (1x, 2x, 4x, 8x; reverse stops at
+   * MAX_REVERSE_SPEED). Otherwise playback starts, or turns around, at 1x.
+   */
+  shuttle(direction: 1 | -1): void {
+    if (this._isPlaying && this._playDirection === direction) {
+      const max = direction < 0 ? MAX_REVERSE_SPEED : Infinity;
+      const next = SHUTTLE_SPEEDS.find((s) => s > this._playbackSpeed && s <= max);
+      if (next !== undefined) {
+        this.playbackSpeed = next;
+      }
+      return;
+    }
+
+    this.playbackSpeed = 1;
+    if (this._playDirection !== direction) {
+      this.applyPlayDirection(direction);
+    }
+    if (!this._isPlaying) {
+      this.play();
+    }
   }
 
   // ---------------------------------------------------------------

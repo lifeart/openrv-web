@@ -2592,6 +2592,15 @@ export async function waitForPlaybackSpeed(page: Page, speed: number, timeout = 
   );
 }
 
+/**
+ * Set the playback speed through the public API (J/L are a shuttle, so
+ * they no longer pick an arbitrary preset) and wait for it to apply.
+ */
+export async function setPlaybackSpeed(page: Page, speed: number): Promise<void> {
+  await page.evaluate((s) => (window as any).openrv.playback.setSpeed(s), speed);
+  await waitForPlaybackSpeed(page, speed);
+}
+
 // ── Generic condition helper ───────────────────────────────────────────
 
 /**

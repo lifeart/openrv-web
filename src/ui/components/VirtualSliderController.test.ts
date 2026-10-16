@@ -187,6 +187,37 @@ describe('VirtualSliderController', () => {
       document.dispatchEvent(createKeyboardEvent('keyup', 'KeyE'));
       expect(keyboardManager.isKeySuppressed('KeyE')).toBe(false);
     });
+
+    it('replays a tapped activator key so its shortcut fires (K pauses)', () => {
+      const seen: Array<{ code: string; shift: boolean; prevented: boolean }> = [];
+      const listener = (e: KeyboardEvent) =>
+        seen.push({ code: e.code, shift: e.shiftKey, prevented: e.defaultPrevented });
+      document.addEventListener('keydown', listener);
+      try {
+        document.dispatchEvent(createKeyboardEvent('keydown', 'KeyK', { shiftKey: true }));
+        // Arming consumed the original keydown
+        expect(seen).toEqual([]);
+        document.dispatchEvent(createKeyboardEvent('keyup', 'KeyK'));
+        expect(seen).toEqual([{ code: 'KeyK', shift: true, prevented: false }]);
+        // The replay must not arm the slider again
+        expect(controller.getState()).toBe(VirtualSliderState.IDLE);
+      } finally {
+        document.removeEventListener('keydown', listener);
+      }
+    });
+
+    it('does not replay the key after a slider drag', () => {
+      const listener = vi.fn();
+      document.addEventListener('keydown', listener);
+      try {
+        document.dispatchEvent(createKeyboardEvent('keydown', 'KeyK'));
+        container.dispatchEvent(createPointerEvent('pointermove', { movementX: 5 }));
+        document.dispatchEvent(createKeyboardEvent('keyup', 'KeyK'));
+        expect(listener).not.toHaveBeenCalled();
+      } finally {
+        document.removeEventListener('keydown', listener);
+      }
+    });
   });
 
   // -----------------------------------------------------------------------

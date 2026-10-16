@@ -61,7 +61,7 @@ Click anywhere on the timeline to jump to that frame. Click and drag to scrub th
 
 ### Playback Speed
 
-Press `L` to increase playback speed through presets: 1x, 2x, 4x, 8x. Press `J` to decrease speed: 1x, 0.5x, 0.25x, 0.1x. Press `K` to pause. The speed button in the header bar displays the current speed and highlights when the speed differs from 1x.
+Press `L` to play forward and press it again to go faster: 1x, 2x, 4x, 8x. `J` does the same in reverse, and `K` pauses. Slow-motion speeds are in the speed button's menu. The speed button in the header bar displays the current speed and highlights when the speed differs from 1x.
 
 ### Loop Modes
 

@@ -36,8 +36,7 @@ function createMockSession() {
     togglePlayDirection: vi.fn(),
     goToStart: vi.fn(),
     goToEnd: vi.fn(),
-    decreaseSpeed: vi.fn(),
-    increaseSpeed: vi.fn(),
+    shuttle: vi.fn(),
     pause: vi.fn(),
     setInPoint: vi.fn(),
     setOutPoint: vi.fn(),
@@ -272,9 +271,9 @@ describe('buildActionHandlers', () => {
     expect(deps.session.pause).toHaveBeenCalledOnce();
   });
 
-  it('playback.slower calls session.decreaseSpeed', () => {
+  it('playback.slower shuttles backward (J)', () => {
     handlers['playback.slower']!();
-    expect(deps.session.decreaseSpeed).toHaveBeenCalledOnce();
+    expect(deps.session.shuttle).toHaveBeenCalledExactlyOnceWith(-1);
   });
 
   // -- Navigation: goToStart / goToEnd -----------------------------------
@@ -308,10 +307,10 @@ describe('buildActionHandlers', () => {
 
   // -- Context-sensitive: L key (playback.faster) -------------------------
 
-  it('playback.faster calls session.increaseSpeed in global context', () => {
+  it('playback.faster shuttles forward in global context (L)', () => {
     (deps.activeContextManager.isContextActive as ReturnType<typeof vi.fn>).mockReturnValue(false);
     handlers['playback.faster']!();
-    expect(deps.session.increaseSpeed).toHaveBeenCalledOnce();
+    expect(deps.session.shuttle).toHaveBeenCalledExactlyOnceWith(1);
     expect(deps.controls.paintToolbar.handleKeyboard).not.toHaveBeenCalled();
   });
 
@@ -319,7 +318,7 @@ describe('buildActionHandlers', () => {
     (deps.activeContextManager.isContextActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
     handlers['playback.faster']!();
     expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('l');
-    expect(deps.session.increaseSpeed).not.toHaveBeenCalled();
+    expect(deps.session.shuttle).not.toHaveBeenCalled();
   });
 
   // -- Context-sensitive: O key (timeline.setOutPoint) --------------------

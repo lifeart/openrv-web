@@ -35,6 +35,10 @@ export class VirtualSliderController {
   private state: VirtualSliderState = VirtualSliderState.IDLE;
   private activeParam: VirtualSliderParam | null = null;
   private activatorCode: string | null = null;
+  // The activator keydown that armed the slider, replayed if the key is tapped
+  private armedKeyEvent: KeyboardEvent | null = null;
+  // True while that keydown is being replayed, so it is not armed again
+  private replaying = false;
   private currentValue = 0;
   private preActivationValue = 0;
   private preActivationAdjustments: ColorAdjustments | null = null;
@@ -170,7 +174,7 @@ export class VirtualSliderController {
   // -----------------------------------------------------------------------
 
   private onKeyDown(e: KeyboardEvent): void {
-    if (this.disposed) return;
+    if (this.disposed || this.replaying) return;
 
     // Ignore repeat events from held keys
     if (e.repeat) {
@@ -193,7 +197,7 @@ export class VirtualSliderController {
       if (VIRTUAL_SLIDER_KEYS.has(e.code) && e.code !== this.activatorCode) {
         // Switch to new parameter
         this.clearArmedState();
-        this.keyboardManager.releaseKey(this.activatorCode!);
+        if (this.activatorCode) this.keyboardManager.releaseKey(this.activatorCode);
         this.armKey(e);
         return;
       }
@@ -221,12 +225,14 @@ export class VirtualSliderController {
     if (this.disposed) return;
 
     if (this.state === VirtualSliderState.ARMED && e.code === this.activatorCode) {
-      // Key released during ARMED window -> let the original shortcut fire
+      // Key released during ARMED window -> it was a tap: let the original
+      // shortcut fire (K pauses, E/Y/B/H/S keep their bindings).
       this.clearArmedState();
-      this.keyboardManager.releaseKey(this.activatorCode!);
+      this.keyboardManager.releaseKey(e.code);
       this.activatorCode = null;
       this.activeParam = null;
       this.state = VirtualSliderState.IDLE;
+      this.replayArmedKey();
       return;
     }
 
@@ -272,7 +278,7 @@ export class VirtualSliderController {
     // Cancel ARMED state on mouse click too
     if (this.state === VirtualSliderState.ARMED) {
       this.clearArmedState();
-      this.keyboardManager.releaseKey(this.activatorCode!);
+      if (this.activatorCode) this.keyboardManager.releaseKey(this.activatorCode);
       this.activatorCode = null;
       this.activeParam = null;
       this.state = VirtualSliderState.IDLE;
@@ -301,6 +307,7 @@ export class VirtualSliderController {
 
     this.state = VirtualSliderState.ARMED;
     this.activatorCode = e.code;
+    this.armedKeyEvent = e;
     this.activeParam = param;
     this.armedCumulativeDisplacement = 0;
 
@@ -318,6 +325,35 @@ export class VirtualSliderController {
         this.transitionToActive();
       }
     }, ARMED_TIMEOUT_MS);
+  }
+
+  /**
+   * Re-dispatch the keydown that armed the slider. Arming consumed it
+   * (preventDefault + stopPropagation), so without this a quick tap of an
+   * activator key would never reach its normal shortcut.
+   */
+  private replayArmedKey(): void {
+    const original = this.armedKeyEvent;
+    this.armedKeyEvent = null;
+    if (!original) return;
+    const target = original.target ?? document;
+    const replay = new KeyboardEvent('keydown', {
+      key: original.key,
+      code: original.code,
+      shiftKey: original.shiftKey,
+      ctrlKey: original.ctrlKey,
+      altKey: original.altKey,
+      metaKey: original.metaKey,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+    this.replaying = true;
+    try {
+      target.dispatchEvent(replay);
+    } finally {
+      this.replaying = false;
+    }
   }
 
   private clearArmedState(): void {
@@ -633,6 +669,7 @@ export class VirtualSliderController {
     this.state = VirtualSliderState.IDLE;
     this.activeParam = null;
     this.activatorCode = null;
+    this.armedKeyEvent = null;
     this.currentValue = 0;
     this.preActivationValue = 0;
     this.preActivationAdjustments = null;

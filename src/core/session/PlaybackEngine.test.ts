@@ -234,6 +234,77 @@ describe('PlaybackEngine', () => {
   });
 
   // ---------------------------------------------------------------
+  // J/L shuttle
+  // ---------------------------------------------------------------
+  describe('Shuttle (J/L)', () => {
+    it('PE-SH-001: L from stopped plays forward at 1x', () => {
+      engine.playbackSpeed = 0.5;
+      engine.shuttle(1);
+      expect(engine.isPlaying).toBe(true);
+      expect(engine.playDirection).toBe(1);
+      expect(engine.playbackSpeed).toBe(1);
+    });
+
+    it('PE-SH-002: repeated L steps 1x, 2x, 4x, 8x and holds at 8x', () => {
+      const speeds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        engine.shuttle(1);
+        speeds.push(engine.playbackSpeed);
+      }
+      expect(speeds).toEqual([1, 2, 4, 8, 8]);
+      expect(engine.playDirection).toBe(1);
+    });
+
+    it('PE-SH-003: J from stopped plays in reverse at 1x', () => {
+      engine.currentFrame = 50;
+      engine.shuttle(-1);
+      expect(engine.isPlaying).toBe(true);
+      expect(engine.playDirection).toBe(-1);
+      expect(engine.playbackSpeed).toBe(1);
+    });
+
+    it('PE-SH-004: repeated J stops at the reverse speed limit', () => {
+      const speeds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        engine.shuttle(-1);
+        speeds.push(engine.playbackSpeed);
+      }
+      expect(speeds).toEqual([1, 2, 4, 4, 4]);
+    });
+
+    it('PE-SH-005: J while shuttling forward turns around at 1x', () => {
+      engine.shuttle(1);
+      engine.shuttle(1);
+      engine.shuttle(1);
+      expect(engine.playbackSpeed).toBe(4);
+
+      const directionListener = vi.fn();
+      engine.on('playDirectionChanged', directionListener);
+      engine.shuttle(-1);
+      expect(engine.isPlaying).toBe(true);
+      expect(engine.playDirection).toBe(-1);
+      expect(engine.playbackSpeed).toBe(1);
+      expect(directionListener).toHaveBeenCalledWith(-1);
+    });
+
+    it('PE-SH-006: L after K starts again at 1x', () => {
+      engine.shuttle(1);
+      engine.shuttle(1);
+      engine.pause();
+      engine.shuttle(1);
+      expect(engine.isPlaying).toBe(true);
+      expect(engine.playbackSpeed).toBe(1);
+    });
+
+    it('PE-SH-007: L while paused in reverse direction plays forward', () => {
+      engine.togglePlayDirection();
+      engine.shuttle(1);
+      expect(engine.playDirection).toBe(1);
+      expect(engine.isPlaying).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------
   // Play/pause lifecycle
   // ---------------------------------------------------------------
   describe('Play/pause lifecycle', () => {
