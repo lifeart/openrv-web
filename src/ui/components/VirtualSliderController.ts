@@ -22,6 +22,7 @@ import {
 } from './VirtualSliderConfig';
 import { getGlobalHistoryManager } from '../../utils/HistoryManager';
 import type { ColorAdjustments } from '../../core/types/color';
+import { shortcutCode } from '../../utils/input/shortcutCode';
 
 /**
  * Optional context for checking whether the viewer is in the middle
@@ -194,7 +195,8 @@ export class VirtualSliderController {
 
     // During ARMED: if a different activator key is pressed, switch to it
     if (this.state === VirtualSliderState.ARMED) {
-      if (VIRTUAL_SLIDER_KEYS.has(e.code) && e.code !== this.activatorCode) {
+      const code = shortcutCode(e);
+      if (VIRTUAL_SLIDER_KEYS.has(code) && code !== this.activatorCode) {
         // Switch to new parameter
         this.clearArmedState();
         if (this.activatorCode) this.keyboardManager.releaseKey(this.activatorCode);
@@ -207,7 +209,7 @@ export class VirtualSliderController {
     }
 
     // IDLE: check if this is an activator key
-    if (this.state === VirtualSliderState.IDLE && VIRTUAL_SLIDER_KEYS.has(e.code)) {
+    if (this.state === VirtualSliderState.IDLE && VIRTUAL_SLIDER_KEYS.has(shortcutCode(e))) {
       // Skip if modifier keys are held (Ctrl, Alt, Meta) - allow normal shortcuts
       if (e.ctrlKey || e.altKey || e.metaKey) return;
 
@@ -224,11 +226,11 @@ export class VirtualSliderController {
   private onKeyUp(e: KeyboardEvent): void {
     if (this.disposed) return;
 
-    if (this.state === VirtualSliderState.ARMED && e.code === this.activatorCode) {
+    if (this.state === VirtualSliderState.ARMED && shortcutCode(e) === this.activatorCode) {
       // Key released during ARMED window -> it was a tap: let the original
       // shortcut fire (K pauses, E/Y/B/H/S keep their bindings).
       this.clearArmedState();
-      this.keyboardManager.releaseKey(e.code);
+      this.keyboardManager.releaseKey(shortcutCode(e));
       this.activatorCode = null;
       this.activeParam = null;
       this.state = VirtualSliderState.IDLE;
@@ -236,7 +238,7 @@ export class VirtualSliderController {
       return;
     }
 
-    if (this.state === VirtualSliderState.ACTIVE && e.code === this.activatorCode) {
+    if (this.state === VirtualSliderState.ACTIVE && shortcutCode(e) === this.activatorCode) {
       // Key released during ACTIVE -> commit the value
       this.commit();
       return;
@@ -302,17 +304,18 @@ export class VirtualSliderController {
   // -----------------------------------------------------------------------
 
   private armKey(e: KeyboardEvent): void {
-    const param = VIRTUAL_SLIDER_PARAMS[e.code];
+    const code = shortcutCode(e);
+    const param = VIRTUAL_SLIDER_PARAMS[code];
     if (!param) return;
 
     this.state = VirtualSliderState.ARMED;
-    this.activatorCode = e.code;
+    this.activatorCode = code;
     this.armedKeyEvent = e;
     this.activeParam = param;
     this.armedCumulativeDisplacement = 0;
 
     // Suppress the activator key in KeyboardManager
-    this.keyboardManager.suppressKey(e.code);
+    this.keyboardManager.suppressKey(code);
 
     // Prevent the default action for this key
     e.stopPropagation();
@@ -401,7 +404,7 @@ export class VirtualSliderController {
     e.stopPropagation();
     e.preventDefault();
 
-    const code = e.code;
+    const code = shortcutCode(e);
 
     // Check if this is a key we process
     if (!VIRTUAL_SLIDER_ACTIVE_KEYS.has(code) && code !== this.activatorCode) {

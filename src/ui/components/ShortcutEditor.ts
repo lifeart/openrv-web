@@ -15,6 +15,7 @@ import { showConfirm } from './shared/Modal';
 // ---------------------------------------------------------------------------
 
 import { Logger } from '../../utils/Logger';
+import { shortcutCode } from '../../utils/input/shortcutCode';
 
 const logger = new Logger('ShortcutEditor');
 export interface ShortcutEditorManager {
@@ -146,7 +147,9 @@ const MODIFIER_CODES = new Set([
 export function keyEventToCombo(e: KeyboardEvent): KeyCombination | null {
   if (MODIFIER_CODES.has(e.code)) return null;
 
-  const combo: KeyCombination = { code: e.code };
+  // Record the letter the user typed, not its QWERTY position, so the
+  // binding matches what KeyboardManager sees on any layout.
+  const combo: KeyCombination = { code: shortcutCode(e) };
   if (e.ctrlKey || e.metaKey) combo.ctrl = true;
   if (e.shiftKey) combo.shift = true;
   if (e.altKey) combo.alt = true;

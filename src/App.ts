@@ -268,6 +268,10 @@ export class App {
         this.activeContextManager.setContext(TAB_CONTEXT_MAP[tabId] ?? 'global');
       }),
     );
+    // tabChanged only fires on a change, so start in the initial tab's context
+    // (View -> 'viewer'); otherwise Shift+B selects blue instead of cycling the
+    // background until the user switches tabs.
+    this.activeContextManager.setContext(TAB_CONTEXT_MAP[this.tabBar.activeTab] ?? 'global');
 
     // Initialize keyboard manager
     this.keyboardManager = new KeyboardManager();

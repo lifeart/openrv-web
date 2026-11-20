@@ -168,6 +168,12 @@ describe('ShortcutEditor', () => {
       expect(combo).toEqual({ code: 'KeyS', ctrl: true, shift: true });
     });
 
+    it('records the letter typed on the active layout, not its QWERTY position', () => {
+      // AZERTY: the key labelled A is the QWERTY Q key
+      const event = new KeyboardEvent('keydown', { code: 'KeyQ', key: 'a' });
+      expect(keyEventToCombo(event)).toEqual({ code: 'KeyA' });
+    });
+
     it('returns null for modifier-only keys', () => {
       const event = new KeyboardEvent('keydown', { code: 'ShiftLeft' });
       expect(keyEventToCombo(event)).toBeNull();

@@ -2,6 +2,8 @@
 
 This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are organized by category. On macOS, the `Ctrl` key maps to `Cmd` automatically.
 
+Letter shortcuts follow your keyboard layout: on AZERTY, QWERTZ, Dvorak and other Latin layouts, `A` is the key labelled A wherever it sits. On non-Latin layouts (Cyrillic, Greek, ...) letters use the key's US QWERTY position. Digits and punctuation always use the physical key.
+
 ![Keyboard shortcuts reference](/assets/screenshots/21-keyboard-shortcuts.png)
 
 <!-- Auto-generated shortcut data available in docs/generated/keyboard-shortcuts.md -->
